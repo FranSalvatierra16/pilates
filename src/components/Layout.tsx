@@ -46,7 +46,7 @@ const Layout = ({ children }: LayoutProps) => {
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/dashboard" className="flex items-center hover:opacity-90 transition-opacity">
                   <img 
-                    src="/savia.png" 
+                    src="/fitgest.png" 
                     alt="FitGest" 
                     className="h-16 w-auto max-h-16 object-contain"
                   />

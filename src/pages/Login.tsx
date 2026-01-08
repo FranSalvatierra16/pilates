@@ -25,7 +25,7 @@ const Login = () => {
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <img 
-            src="/savia.png" 
+            src="/fitgest.png" 
             alt="FitGest" 
             className="h-20 w-auto mx-auto mb-4"
           />

@@ -229,7 +229,7 @@ Aprovechá ahora y prepará tu estudio para la temporada
 
 ### En Instagram/DM
 ```
-¡Hola! Gracias por tu interés en SAVIA.
+¡Hola! Gracias por tu interés en FitGest.
 
 Para estudios en Mar del Plata, ofrezco:
 
@@ -278,7 +278,7 @@ O podés optar por el pago anual de $200.000, que te ahorra $40.000 al año.
 
 ### 1. Enfoque en el Ahorro de Tiempo
 ```
-"Con SAVIA, ahorrás hasta 3 horas diarias en tareas administrativas.
+"Con FitGest, ahorrás hasta 3 horas diarias en tareas administrativas.
 Eso significa más tiempo para tus alumnos y tu negocio.
 
 Si tu hora vale $5.000, ahorrás $15.000 por día.
@@ -292,7 +292,7 @@ El sistema se paga solo en menos de 1 mes."
 "Mar del Plata tiene muchos estudios de Pilates y Yoga.
 Para destacarte, necesitás profesionalizar tu gestión.
 
-SAVIA te permite:
+FitGest te permite:
 - Mostrar profesionalismo a tus alumnos
 - Tener control total de tu negocio
 - Tomar decisiones basadas en datos reales
@@ -304,7 +304,7 @@ SAVIA te permite:
 "En temporada, tu estudio se llena de alumnos.
 ¿Cómo vas a gestionar todo sin un sistema?
 
-Con SAVIA:
+Con FitGest:
 - Control de acceso rápido y eficiente
 - Gestión de pagos automática
 - Calendario organizado

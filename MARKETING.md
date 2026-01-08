@@ -12,7 +12,7 @@
 ```
 🏋️‍♀️ ¿Cansado de manejar tu estudio con Excel y papel? 
 
-Te presento SAVIA - El sistema completo de gestión para estudios de Pilates, Yoga y Funcional.
+Te presento FitGest - El sistema completo de gestión para estudios de Pilates, Yoga y Funcional.
 
 ✨ Características principales:
 ✅ Gestión de alumnos completa
@@ -35,7 +35,7 @@ Te presento SAVIA - El sistema completo de gestión para estudios de Pilates, Yo
 - Control de acceso manual
 - No tenés estadísticas claras
 
-✅ AHORA con SAVIA:
+✅ AHORA con FitGest:
 - Todo en la nube, accesible desde cualquier dispositivo
 - Alertas automáticas de cuotas vencidas
 - Control de acceso con DNI
@@ -50,7 +50,7 @@ Te presento SAVIA - El sistema completo de gestión para estudios de Pilates, Yo
 ```
 🎥 MIRÁ CÓMO FUNCIONA:
 
-En menos de 2 minutos te muestro cómo SAVIA puede transformar la gestión de tu estudio.
+En menos de 2 minutos te muestro cómo FitGest puede transformar la gestión de tu estudio.
 
 ✨ Lo que vas a ver:
 - Cómo agregar un alumno
@@ -65,7 +65,7 @@ En menos de 2 minutos te muestro cómo SAVIA puede transformar la gestión de tu
 
 ### Post 4: Testimonial (cuando tengas clientes)
 ```
-💬 "Desde que uso SAVIA, ahorro 3 horas diarias en tareas administrativas. Ahora me puedo enfocar en lo que realmente me gusta: enseñar."
+💬 "Desde que uso FitGest, ahorro 3 horas diarias en tareas administrativas. Ahora me puedo enfocar en lo que realmente me gusta: enseñar."
 
 - [Nombre del cliente]
 - [Estudio de Pilates/Yoga]
@@ -79,7 +79,7 @@ En menos de 2 minutos te muestro cómo SAVIA puede transformar la gestión de tu
 ```
 💰 AHORRÁ TIEMPO Y DINERO
 
-Con SAVIA podés:
+Con FitGest podés:
 ⏰ Ahorrar hasta 3 horas diarias en tareas administrativas
 📊 Tener control total de tus ingresos y gastos
 👥 Gestionar todos tus alumnos desde un solo lugar
@@ -93,7 +93,7 @@ Con SAVIA podés:
 
 ### Post 6: Comparación
 ```
-📊 EXCEL vs SAVIA
+📊 EXCEL vs FitGest
 
 ❌ Excel:
 - Se puede perder
@@ -101,7 +101,7 @@ Con SAVIA podés:
 - No hay alertas automáticas
 - Difícil de compartir
 
-✅ SAVIA:
+✅ FitGest:
 - Todo en la nube
 - Funciona en cualquier dispositivo
 - Alertas automáticas
@@ -138,8 +138,8 @@ Por tiempo limitado, ofrezco:
 
 ## 🎬 Ideas para Reels
 
-1. **"3 cosas que odiás de gestionar tu estudio"** → Solución con SAVIA
-2. **"POV: Tenés que buscar quién pagó en 5 planillas diferentes"** → SAVIA lo resuelve
+1. **"3 cosas que odiás de gestionar tu estudio"** → Solución con FitGest
+2. **"POV: Tenés que buscar quién pagó en 5 planillas diferentes"** → FitGest lo resuelve
 3. **"Cómo agregar un alumno en 3 pasos"** → Tutorial rápido
 4. **"Antes vs Ahora"** → Comparación visual
 
@@ -171,7 +171,7 @@ Por tiempo limitado, ofrezco:
 
 ### Cuando pregunten por precio:
 ```
-¡Hola! Gracias por tu interés en SAVIA.
+¡Hola! Gracias por tu interés en FitGest.
 
 El sistema incluye:
 ✅ Gestión completa de alumnos
@@ -220,7 +220,7 @@ Saludos!
 
 ### Miércoles: Problema/Solución
 - Mostrar problemas comunes
-- Cómo SAVIA los resuelve
+- Cómo FitGest los resuelve
 
 ### Jueves: Demo/Producto
 - Mostrar el sistema funcionando

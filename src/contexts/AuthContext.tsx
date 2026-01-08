@@ -8,22 +8,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const CORRECT_USERNAME = 'Savia';
+const CORRECT_USERNAME = 'Prueba';
 const CORRECT_PASSWORD = '1234';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     // Verificar si hay sesión guardada
-    const saved = localStorage.getItem('savia_authenticated');
+    const saved = localStorage.getItem('fitgest_authenticated');
     return saved === 'true';
   });
 
   useEffect(() => {
     // Guardar estado de autenticación
     if (isAuthenticated) {
-      localStorage.setItem('savia_authenticated', 'true');
+      localStorage.setItem('fitgest_authenticated', 'true');
     } else {
-      localStorage.removeItem('savia_authenticated');
+      localStorage.removeItem('fitgest_authenticated');
     }
   }, [isAuthenticated]);
 
@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = () => {
     setIsAuthenticated(false);
-    localStorage.removeItem('savia_authenticated');
+    localStorage.removeItem('fitgest_authenticated');
   };
 
   return (

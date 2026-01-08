@@ -47,7 +47,7 @@ const Layout = ({ children }: LayoutProps) => {
                 <Link to="/dashboard" className="flex items-center hover:opacity-90 transition-opacity">
                   <img 
                     src="/savia.png" 
-                    alt="SAVIA Pilates" 
+                    alt="FitGest" 
                     className="h-16 w-auto max-h-16 object-contain"
                   />
                 </Link>

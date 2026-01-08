@@ -26,10 +26,10 @@ const Login = () => {
         <div className="text-center mb-8">
           <img 
             src="/savia.png" 
-            alt="SAVIA" 
+            alt="FitGest" 
             className="h-20 w-auto mx-auto mb-4"
           />
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">SAVIA</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">FitGest</h1>
           <p className="text-gray-600">Iniciar sesión</p>
         </div>
 

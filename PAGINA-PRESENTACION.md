@@ -17,7 +17,7 @@ Podés crear una página web simple (con Vercel o similar) que muestre:
    - Lista de problemas comunes
 
 3. **Solución**
-   - "SAVIA lo resuelve todo"
+   - "FitGest lo resuelve todo"
    - Características principales con íconos
 
 4. **Características Detalladas**
@@ -62,7 +62,7 @@ Podés crear una página web simple (con Vercel o similar) que muestre:
 <!-- Ejemplo de estructura HTML básica -->
 
 <h1>Gestioná tu Estudio de Pilates, Yoga o Funcional desde un Solo Lugar</h1>
-<p>Ahorrá tiempo, organizá mejor y crecé más con SAVIA</p>
+<p>Ahorrá tiempo, organizá mejor y crecé más con FitGest</p>
 
 <h2>¿Cansado de usar Excel y papel?</h2>
 <ul>
@@ -72,7 +72,7 @@ Podés crear una página web simple (con Vercel o similar) que muestre:
   <li>Sin estadísticas claras</li>
 </ul>
 
-<h2>SAVIA lo Resuelve Todo</h2>
+<h2>FitGest lo Resuelve Todo</h2>
 <ul>
   <li>✅ Gestión completa de alumnos</li>
   <li>✅ Control de acceso automático</li>

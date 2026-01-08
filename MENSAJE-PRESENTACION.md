@@ -3,7 +3,7 @@
 ## Versión Corta (para Instagram Bio o Stories)
 
 ```
-¡Hola! Soy Francisco Salvatierra, tengo 24 años y desarrollé SAVIA, un sistema completo de gestión para estudios de Pilates, Yoga y Funcional.
+¡Hola! Soy Francisco Salvatierra, tengo 24 años y desarrollé FitGest, un sistema completo de gestión para estudios de Pilates, Yoga y Funcional.
 
 ✨ Gestión de alumnos, control de acceso, calendario de clases, pagos y caja - todo en un solo lugar, accesible desde tu celular.
 
@@ -15,7 +15,7 @@ Si te interesa saber más, escribime por DM y te cuento cómo puede ayudar a tu 
 ## Versión Media (para Posts o DMs)
 
 ```
-¡Hola! Mi nombre es Francisco Salvatierra, tengo 24 años y desarrollé SAVIA, un sistema completo de gestión para estudios de Pilates, Yoga y Funcional.
+¡Hola! Mi nombre es Francisco Salvatierra, tengo 24 años y desarrollé FitGest, un sistema completo de gestión para estudios de Pilates, Yoga y Funcional.
 
 El sistema incluye:
 ✅ Gestión completa de alumnos
@@ -33,11 +33,11 @@ Si te interesa saber más o querés ver una demo, escribime por DM y te cuento c
 ## Versión Larga (para Presentación Completa)
 
 ```
-¡Hola! Mi nombre es Francisco Salvatierra, tengo 24 años y soy desarrollador de software. Desarrollé SAVIA, un sistema completo de gestión diseñado específicamente para estudios de Pilates, Yoga y entrenamiento funcional.
+¡Hola! Mi nombre es Francisco Salvatierra, tengo 24 años y soy desarrollador de software. Desarrollé FitGest, un sistema completo de gestión diseñado específicamente para estudios de Pilates, Yoga y entrenamiento funcional.
 
 El sistema nació de la necesidad de profesionalizar la gestión de estos estudios, reemplazando las planillas de Excel y el papel por una solución moderna, intuitiva y accesible desde cualquier dispositivo.
 
-SAVIA incluye:
+FitGest incluye:
 ✅ Gestión completa de alumnos con todos sus datos
 ✅ Control de acceso automático por DNI con alertas visuales
 ✅ Calendario de clases semanal con asignación de alumnos
@@ -47,7 +47,7 @@ SAVIA incluye:
 ✅ Todo accesible desde tu celular, tablet o computadora
 ✅ Datos seguros en la nube
 
-Si te interesa saber más, ver una demo o conocer los precios, escribime por DM y con gusto te cuento cómo SAVIA puede ayudar a profesionalizar y organizar tu estudio, ahorrándote tiempo y dándote control total de tu negocio 🚀
+Si te interesa saber más, ver una demo o conocer los precios, escribime por DM y con gusto te cuento cómo FitGest puede ayudar a profesionalizar y organizar tu estudio, ahorrándote tiempo y dándote control total de tu negocio 🚀
 
 #Pilates #Yoga #Funcional #Software #GestionEstudio #Emprendimiento #MarDelPlata
 ```
@@ -57,7 +57,7 @@ Si te interesa saber más, ver una demo o conocer los precios, escribime por DM 
 ```
 Hola, mi nombre es Francisco Salvatierra, tengo 24 años y soy desarrollador de software.
 
-Desarrollé SAVIA, un sistema completo de gestión para estudios de Pilates, Yoga y Funcional que incluye:
+Desarrollé FitGest, un sistema completo de gestión para estudios de Pilates, Yoga y Funcional que incluye:
 
 - Gestión de alumnos
 - Control de acceso automático
@@ -81,7 +81,7 @@ Soy Francisco Salvatierra
 24 años
 Desarrollador de software
 
-Desarrollé SAVIA 💻
+Desarrollé FitGest 💻
 Sistema de gestión para estudios de Pilates, Yoga y Funcional
 
 ✨ Gestión completa
@@ -96,7 +96,7 @@ Sistema de gestión para estudios de Pilates, Yoga y Funcional
 ```
 "¡Hola! Soy Francisco, tengo 24 años y desarrollé un sistema de gestión para estudios de Pilates, Yoga y Funcional.
 
-Se llama SAVIA y te permite gestionar alumnos, control de acceso, calendario de clases, pagos y caja - todo desde tu celular.
+Se llama FitGest y te permite gestionar alumnos, control de acceso, calendario de clases, pagos y caja - todo desde tu celular.
 
 Si tenés un estudio y te interesa, escribime y te cuento más 🚀"
 ```
@@ -105,7 +105,7 @@ Si tenés un estudio y te interesa, escribime y te cuento más 🚀"
 
 ```
 Francisco Salvatierra, 24 años
-Desarrollador de SAVIA - Sistema de gestión para estudios de Pilates, Yoga y Funcional
+Desarrollador de FitGest - Sistema de gestión para estudios de Pilates, Yoga y Funcional
 💬 Escribime por DM para más info
 ```
 

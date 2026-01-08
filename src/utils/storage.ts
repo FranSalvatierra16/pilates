@@ -1,13 +1,13 @@
 import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor } from '../types';
 
 const STORAGE_KEYS = {
-  alumnos: 'savia_alumnos',
-  actividades: 'savia_actividades',
-  pagos: 'savia_pagos',
-  turnos: 'savia_turnos',
-  gastos: 'savia_gastos',
-  asistencias: 'savia_asistencias',
-  profesores: 'savia_profesores',
+  alumnos: 'fitgest_alumnos',
+  actividades: 'fitgest_actividades',
+  pagos: 'fitgest_pagos',
+  turnos: 'fitgest_turnos',
+  gastos: 'fitgest_gastos',
+  asistencias: 'fitgest_asistencias',
+  profesores: 'fitgest_profesores',
 } as const;
 
 export const storage = {

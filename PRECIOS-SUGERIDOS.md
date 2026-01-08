@@ -86,7 +86,7 @@ Incluye:
 ```
 💰 INVERSIÓN
 
-SAVIA está disponible en diferentes planes:
+FitGest está disponible en diferentes planes:
 
 📦 PLAN BÁSICO
 - Pago único: $XXX
@@ -107,7 +107,7 @@ SAVIA está disponible en diferentes planes:
 ```
 ¡Hola! Gracias por tu interés.
 
-SAVIA está disponible en diferentes planes:
+FitGest está disponible en diferentes planes:
 
 📦 PLAN BÁSICO - $XXX
 ✅ Sistema completo

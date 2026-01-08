@@ -136,7 +136,7 @@ const Dashboard = () => {
         <div className="card">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Bienvenido</h2>
           <p className="text-gray-600 mb-4">
-            Sistema de gestión para SAVIA. Desde aquí puedes gestionar alumnos,
+            Sistema de gestión para FitGest. Desde aquí puedes gestionar alumnos,
             actividades, controlar accesos, registrar pagos, ver el estado de la caja y gestionar turnos.
           </p>
           <div className="bg-primary-50 p-4 rounded-lg">

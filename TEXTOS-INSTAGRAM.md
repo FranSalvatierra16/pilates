@@ -6,7 +6,7 @@
 ```
 🏋️‍♀️ ¿Cansado de manejar tu estudio con Excel y papel? 
 
-Te presento SAVIA - El sistema completo de gestión para estudios de Pilates, Yoga y Funcional.
+Te presento FitGest - El sistema completo de gestión para estudios de Pilates, Yoga y Funcional.
 
 ✨ Características principales:
 ✅ Gestión de alumnos completa
@@ -29,7 +29,7 @@ Te presento SAVIA - El sistema completo de gestión para estudios de Pilates, Yo
 - Control de acceso manual
 - No tenés estadísticas claras
 
-✅ AHORA con SAVIA:
+✅ AHORA con FitGest:
 - Todo en la nube, accesible desde cualquier dispositivo
 - Alertas automáticas de cuotas vencidas
 - Control de acceso con DNI
@@ -44,7 +44,7 @@ Te presento SAVIA - El sistema completo de gestión para estudios de Pilates, Yo
 ```
 💰 AHORRÁ TIEMPO Y DINERO
 
-Con SAVIA podés:
+Con FitGest podés:
 ⏰ Ahorrar hasta 3 horas diarias en tareas administrativas
 📊 Tener control total de tus ingresos y gastos
 👥 Gestionar todos tus alumnos desde un solo lugar
@@ -58,7 +58,7 @@ Con SAVIA podés:
 
 ### Post 4: Comparación
 ```
-📊 EXCEL vs SAVIA
+📊 EXCEL vs FitGest
 
 ❌ Excel:
 - Se puede perder
@@ -66,7 +66,7 @@ Con SAVIA podés:
 - No hay alertas automáticas
 - Difícil de compartir con tu equipo
 
-✅ SAVIA:
+✅ FitGest:
 - Todo en la nube (nunca se pierde)
 - Funciona perfecto en cualquier dispositivo
 - Alertas automáticas de cuotas vencidas
@@ -139,7 +139,7 @@ Por tiempo limitado, ofrezco:
 ### Story 2: Antes/Después
 ```
 "ANTES: 2 horas buscando quién pagó 😤
-AHORA: 2 segundos con SAVIA ⚡"
+AHORA: 2 segundos con FitGest ⚡"
 
 [Mostrá la búsqueda en el sistema]
 ```
@@ -148,7 +148,7 @@ AHORA: 2 segundos con SAVIA ⚡"
 ```
 "¿Cuántas horas perdés por semana en tareas administrativas?
 
-Comentá 👇 y te cuento cómo SAVIA te puede ayudar"
+Comentá 👇 y te cuento cómo FitGest te puede ayudar"
 ```
 
 ### Story 4: Demo
@@ -170,7 +170,7 @@ Solo ingresás el DNI y el sistema te dice si tiene acceso permitido o no 🚦"
 2. No saber quién tiene la cuota vencida
 3. Perder tiempo en tareas administrativas
 
-SAVIA lo resuelve todo ✨
+FitGest lo resuelve todo ✨
 
 #Pilates #Yoga #Software"
 ```
@@ -179,7 +179,7 @@ SAVIA lo resuelve todo ✨
 ```
 "POV: Tenés que buscar quién pagó en 5 planillas diferentes 😤
 
-Con SAVIA: Todo en un solo lugar, en 2 segundos ⚡
+Con FitGest: Todo en un solo lugar, en 2 segundos ⚡
 
 #Pilates #Yoga #Software #Productividad"
 ```
@@ -201,7 +201,7 @@ Con SAVIA: Todo en un solo lugar, en 2 segundos ⚡
 
 ### Respuesta 1: Cuando pregunten por precio
 ```
-¡Hola! Gracias por tu interés en SAVIA.
+¡Hola! Gracias por tu interés en FitGest.
 
 El sistema incluye:
 ✅ Gestión completa de alumnos
@@ -238,7 +238,7 @@ Saludos!
 
 ### Respuesta 3: Cuando pregunten qué incluye
 ```
-¡Hola! SAVIA incluye:
+¡Hola! FitGest incluye:
 
 📋 GESTIÓN DE ALUMNOS
 - Registro completo con todos los datos
@@ -300,7 +300,7 @@ Saludos!
 
 ### Opción 2: Con CTA
 ```
-🏋️‍♀️ SAVIA - Sistema de Gestión para Estudios
+🏋️‍♀️ FitGest - Sistema de Gestión para Estudios
 
 ✨ Gestión completa de alumnos, pagos y clases
 📱 Funciona en celular, tablet y PC

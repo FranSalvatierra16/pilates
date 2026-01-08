@@ -1,6 +1,6 @@
-# 🌿 SAVIA - Sistema de Gestión para Estudios de Pilates, Yoga y Funcional
+# 🌿 FitGest - Sistema de Gestión para Estudios de Pilates, Yoga y Funcional
 
-Sistema completo de gestión diseñado específicamente para estudios de Pilates, Yoga y entrenamiento funcional. Incluye gestión de alumnos, actividades, calendario de turnos, control de acceso, pagos y caja. Todo en un solo lugar, accesible desde cualquier dispositivo.
+Sistema completo de gestión diseñado específicamente para estudios de Pilates, Yoga y entrenamiento funcional. FitGest incluye gestión de alumnos, actividades, calendario de turnos, control de acceso, pagos y caja. Todo en un solo lugar, accesible desde cualquier dispositivo.
 
 ## ✨ Características
 

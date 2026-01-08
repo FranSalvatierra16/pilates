@@ -1,4 +1,4 @@
-# 🚀 Guía de Despliegue - SAVIA Pilates
+# 🚀 Guía de Despliegue - FitGest
 
 Esta guía te ayudará a subir tu aplicación a Vercel (hosting gratuito) y configurar Supabase (base de datos gratuita).
 
@@ -16,7 +16,7 @@ Esta guía te ayudará a subir tu aplicación a Vercel (hosting gratuito) y conf
 2. Click en "New Project"
 3. Elegí una organización o creá una nueva
 4. Configurá:
-   - **Name**: `savia-pilates` (o el nombre que prefieras)
+   - **Name**: `fitgest` (o el nombre que prefieras)
    - **Database Password**: Guardá esta contraseña en un lugar seguro
    - **Region**: Elegí la más cercana (ej: South America)
 5. Click en "Create new project"

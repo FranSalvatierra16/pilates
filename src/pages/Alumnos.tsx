@@ -27,6 +27,7 @@ const Alumnos = () => {
     monto: '',
     metodoPago: 'efectivo' as MetodoPago,
     fecha: new Date().toISOString().split('T')[0],
+    fechaVencimiento: '',
   });
 
   useEffect(() => {
@@ -155,10 +156,13 @@ const Alumnos = () => {
   const handlePagarCuota = (alumno: Alumno) => {
     setAlumnoParaPagar(alumno);
     const actividad = actividades.find(a => a.id === alumno.actividadId);
+    const fechaPago = new Date().toISOString().split('T')[0];
+    const fechaVencimientoCalculada = calcularFechaVencimiento(fechaPago);
     setFormDataPago({
       monto: actividad ? actividad.precio.toString() : '',
       metodoPago: 'efectivo',
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: fechaPago,
+      fechaVencimiento: fechaVencimientoCalculada,
     });
     setShowModalPago(true);
   };
@@ -170,6 +174,7 @@ const Alumnos = () => {
       monto: '',
       metodoPago: 'efectivo',
       fecha: new Date().toISOString().split('T')[0],
+      fechaVencimiento: '',
     });
   };
 
@@ -185,8 +190,8 @@ const Alumnos = () => {
     }
 
     try {
-      // Calcular nueva fecha de vencimiento (1 mes desde la fecha del pago)
-      const nuevaFechaVencimiento = calcularFechaVencimiento(formDataPago.fecha);
+      // Usar la fecha de vencimiento del formulario (puede ser editada o calculada automáticamente)
+      const nuevaFechaVencimiento = formDataPago.fechaVencimiento || calcularFechaVencimiento(formDataPago.fecha);
 
       // Crear el pago
       const nuevoPago: Pago = {
@@ -602,13 +607,36 @@ const Alumnos = () => {
                   type="date"
                   required
                   value={formDataPago.fecha}
-                  onChange={(e) => setFormDataPago({ ...formDataPago, fecha: e.target.value })}
+                  onChange={(e) => {
+                    const nuevaFecha = e.target.value;
+                    const nuevaFechaVencimiento = calcularFechaVencimiento(nuevaFecha);
+                    setFormDataPago({ 
+                      ...formDataPago, 
+                      fecha: nuevaFecha,
+                      fechaVencimiento: nuevaFechaVencimiento
+                    });
+                  }}
                   className="input-field"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Fecha de Vencimiento *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={formDataPago.fechaVencimiento}
+                  onChange={(e) => setFormDataPago({ ...formDataPago, fechaVencimiento: e.target.value })}
+                  className="input-field"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  💡 Se calcula automáticamente un mes después de la fecha de pago, pero podés editarla si necesitás.
+                </p>
+              </div>
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                 <p className="text-sm text-green-800">
-                  💡 <strong>Nota:</strong> Al registrar el pago, la fecha de vencimiento se actualizará automáticamente un mes después de la fecha del pago (ej: si pagás el 07/01, la cuota vence el 07/02).
+                  💡 <strong>Nota:</strong> La fecha de vencimiento se calcula automáticamente un mes después de la fecha del pago, pero podés editarla manualmente si lo necesitás.
                 </p>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

@@ -333,7 +333,7 @@ export const storageSupabase = {
         console.error('Error fetching turnos:', error);
         return [];
       }
-      return (data || []).filter(t => t.alumno_ids?.includes(alumnoId)).map(dbToTurno);
+      return (data || []).filter((t: any) => t.alumno_ids?.includes(alumnoId)).map(dbToTurno);
     },
   },
 };

@@ -7,6 +7,7 @@ export interface Alumno {
   email: string;
   fechaVencimientoCuota: string; // YYYY-MM-DD
   actividadId: string;
+  clasesAsistidas: number; // Contador de clases asistidas en el mes actual
   createdAt: string;
 }
 

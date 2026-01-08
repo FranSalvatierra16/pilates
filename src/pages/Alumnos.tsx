@@ -126,6 +126,7 @@ const Alumnos = () => {
           id: Date.now().toString(),
           ...formData,
           fechaVencimientoCuota: '', // Sin fecha hasta que se pague
+          clasesAsistidas: 0, // Iniciar contador en 0
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.alumnos.add(nuevoAlumno);
@@ -200,9 +201,10 @@ const Alumnos = () => {
       // Guardar el pago
       await storageHybrid.pagos.add(nuevoPago);
 
-      // Actualizar la fecha de vencimiento del alumno
+      // Actualizar la fecha de vencimiento del alumno y reiniciar contador de clases
       await storageHybrid.alumnos.update(alumnoParaPagar.id, {
         fechaVencimientoCuota: nuevaFechaVencimiento,
+        clasesAsistidas: 0, // Reiniciar contador al pagar
       });
 
       await loadAlumnos();
@@ -277,6 +279,9 @@ const Alumnos = () => {
                     Vencimiento
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Clases
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                     Fecha Registro
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -348,6 +353,14 @@ const Alumnos = () => {
                             </div>
                           </>
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-semibold text-primary-600">
+                          {alumno.clasesAsistidas || 0}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          este mes
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">

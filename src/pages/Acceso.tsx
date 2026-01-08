@@ -43,6 +43,23 @@ const Acceso = () => {
       setAlumno(encontrado);
       setMensaje('');
       
+      // Incrementar contador de clases si tiene acceso permitido
+      const tieneAcceso = !isCuotaVencida(encontrado.fechaVencimientoCuota);
+      if (tieneAcceso && encontrado.fechaVencimientoCuota) {
+        try {
+          await storageHybrid.alumnos.update(encontrado.id, {
+            clasesAsistidas: (encontrado.clasesAsistidas || 0) + 1,
+          });
+          // Recargar el alumno para mostrar el contador actualizado
+          const actualizado = await storageHybrid.alumnos.findByDni(dni.trim());
+          if (actualizado) {
+            setAlumno(actualizado);
+          }
+        } catch (error) {
+          console.error('Error incrementando contador de clases:', error);
+        }
+      }
+      
       // Cargar actividades si no están cargadas
       if (actividades.length === 0) {
         await loadActividades();
@@ -205,6 +222,12 @@ const Acceso = () => {
                   <p className="text-sm text-gray-500 mb-1">Precio Mensual</p>
                   <p className="text-lg font-semibold text-primary-600">
                     {actividad ? formatCurrency(actividad.precio) : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Clases Asistidas (Este Mes)</p>
+                  <p className="text-lg font-semibold text-primary-600">
+                    {alumno.clasesAsistidas || 0}
                   </p>
                 </div>
                 <div className="md:col-span-2">

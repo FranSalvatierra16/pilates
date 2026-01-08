@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Plus, X, Save, Calendar } from 'lucide-react';
 import { Alumno, Pago, MetodoPago } from '../types';
 import { storage } from '../utils/storage';
+import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, calcularFechaVencimiento } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
 const Pagos = () => {
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     alumnoId: '',
@@ -21,15 +23,34 @@ const Pagos = () => {
     loadAlumnos();
   }, []);
 
-  const loadPagos = () => {
-    const todosPagos = storage.pagos.getAll();
-    setPagos(todosPagos.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    ));
+  const loadPagos = async () => {
+    try {
+      setLoading(true);
+      const todosPagos = await storageHybrid.pagos.getAll();
+      setPagos(todosPagos.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ));
+    } catch (error) {
+      console.error('Error loading pagos:', error);
+      // Fallback a localStorage
+      const todosPagos = storage.pagos.getAll();
+      setPagos(todosPagos.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const loadAlumnos = () => {
-    setAlumnos(storage.alumnos.getAll());
+  const loadAlumnos = async () => {
+    try {
+      const data = await storageHybrid.alumnos.getAll();
+      setAlumnos(data);
+    } catch (error) {
+      console.error('Error loading alumnos:', error);
+      // Fallback a localStorage
+      setAlumnos(storage.alumnos.getAll());
+    }
   };
 
   const resetForm = () => {
@@ -51,7 +72,7 @@ const Pagos = () => {
     resetForm();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.alumnoId) {
@@ -71,31 +92,36 @@ const Pagos = () => {
       return;
     }
 
-    // Calcular nueva fecha de vencimiento (1 mes desde la fecha del pago)
-    const nuevaFechaVencimiento = calcularFechaVencimiento(formData.fecha);
+    try {
+      // Calcular nueva fecha de vencimiento (1 mes desde la fecha del pago)
+      const nuevaFechaVencimiento = calcularFechaVencimiento(formData.fecha);
 
-    // Crear el pago
-    const nuevoPago: Pago = {
-      id: Date.now().toString(),
-      alumnoId: formData.alumnoId,
-      monto: monto,
-      metodoPago: formData.metodoPago,
-      fecha: formData.fecha,
-      createdAt: new Date().toISOString(),
-    };
+      // Crear el pago
+      const nuevoPago: Pago = {
+        id: Date.now().toString(),
+        alumnoId: formData.alumnoId,
+        monto: monto,
+        metodoPago: formData.metodoPago,
+        fecha: formData.fecha,
+        createdAt: new Date().toISOString(),
+      };
 
-    // Guardar el pago
-    storage.pagos.add(nuevoPago);
+      // Guardar el pago y actualizar la fecha de vencimiento del alumno
+      await Promise.all([
+        storageHybrid.pagos.add(nuevoPago),
+        storageHybrid.alumnos.update(formData.alumnoId, {
+          fechaVencimientoCuota: nuevaFechaVencimiento,
+        })
+      ]);
 
-    // Actualizar la fecha de vencimiento del alumno
-    storage.alumnos.update(formData.alumnoId, {
-      fechaVencimientoCuota: nuevaFechaVencimiento,
-    });
-
-    loadPagos();
-    loadAlumnos();
-    handleCloseModal();
-    alert('Pago registrado exitosamente');
+      await loadPagos();
+      await loadAlumnos();
+      handleCloseModal();
+      alert('Pago registrado exitosamente');
+    } catch (error) {
+      console.error('Error saving pago:', error);
+      alert('Error al registrar el pago. Revisá la consola para más detalles.');
+    }
   };
 
   const getAlumnoNombre = (alumnoId: string) => {
@@ -170,7 +196,11 @@ const Pagos = () => {
       </div>
 
       {/* Lista de Pagos */}
-      {pagos.length === 0 ? (
+      {loading ? (
+        <div className="card text-center py-12">
+          <p className="text-gray-500">Cargando pagos...</p>
+        </div>
+      ) : pagos.length === 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500 mb-4">No hay pagos registrados aún</p>
           <button onClick={handleOpenModal} className="btn-primary">

@@ -4,7 +4,8 @@ import { supabase } from '../config/supabase';
 // Verificar si Supabase está configurado
 const useSupabase = () => {
   const url = import.meta.env.VITE_SUPABASE_URL;
-  return url && url.length > 0;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return url && url.length > 0 && key && key.length > 0;
 };
 
 // Helper para convertir de formato DB a formato app
@@ -43,7 +44,8 @@ const actividadToDb = (actividad: Actividad) => ({
   id: actividad.id,
   nombre: actividad.nombre,
   precio: actividad.precio,
-  created_at: actividad.createdAt,
+  // Si no hay createdAt, dejamos que Supabase use el DEFAULT NOW()
+  ...(actividad.createdAt ? { created_at: actividad.createdAt } : {}),
 });
 
 const dbToPago = (row: any): Pago => ({
@@ -160,12 +162,19 @@ export const storageSupabase = {
       return (data || []).map(dbToActividad);
     },
     add: async (actividad: Actividad): Promise<void> => {
-      if (!useSupabase()) return;
-      const { error } = await supabase.from('actividades').insert(actividadToDb(actividad));
+      if (!useSupabase() || !supabase) {
+        console.error('Supabase no está configurado correctamente');
+        throw new Error('Supabase no está configurado');
+      }
+      const dbData = actividadToDb(actividad);
+      console.log('Inserting actividad to Supabase:', dbData);
+      const { data, error } = await supabase.from('actividades').insert(dbData).select();
       if (error) {
         console.error('Error adding actividad:', error);
-        throw error;
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        throw new Error(`Error al guardar la actividad: ${error.message}. Código: ${error.code}. Revisá la consola para más detalles.`);
       }
+      console.log('Actividad insertada exitosamente:', data);
     },
     update: async (id: string, updates: Partial<Actividad>): Promise<void> => {
       if (!useSupabase()) return;

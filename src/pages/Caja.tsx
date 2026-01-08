@@ -180,10 +180,15 @@ const Caja = () => {
     }
   };
 
-  const handleEliminarGasto = (id: string) => {
+  const handleEliminarGasto = async (id: string) => {
     if (confirm('¿Estás seguro de que querés eliminar este gasto?')) {
-      storage.gastos.delete(id);
-      loadStats();
+      try {
+        await storageHybrid.gastos.delete(id);
+        await loadStats();
+      } catch (error) {
+        console.error('Error deleting gasto:', error);
+        alert('Error al eliminar el gasto. Revisá la consola para más detalles.');
+      }
     }
   };
 

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, X, Save } from 'lucide-react';
 import { Actividad } from '../types';
-import { storage } from '../utils/storage';
+import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 
 const Actividades = () => {
   const [actividades, setActividades] = useState<Actividad[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingActividad, setEditingActividad] = useState<Actividad | null>(null);
   const [formData, setFormData] = useState({
@@ -17,8 +18,17 @@ const Actividades = () => {
     loadActividades();
   }, []);
 
-  const loadActividades = () => {
-    setActividades(storage.actividades.getAll());
+  const loadActividades = async () => {
+    try {
+      setLoading(true);
+      const data = await storageHybrid.actividades.getAll();
+      setActividades(data);
+    } catch (error) {
+      console.error('Error loading actividades:', error);
+      alert('Error al cargar las actividades');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetForm = () => {
@@ -47,7 +57,7 @@ const Actividades = () => {
     resetForm();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const precio = parseFloat(formData.precio);
@@ -56,38 +66,48 @@ const Actividades = () => {
       return;
     }
 
-    if (editingActividad) {
-      storage.actividades.update(editingActividad.id, {
-        nombre: formData.nombre,
-        precio: precio,
-      });
-    } else {
-      const nuevaActividad: Actividad = {
-        id: Date.now().toString(),
-        nombre: formData.nombre,
-        precio: precio,
-        createdAt: new Date().toISOString(),
-      };
-      storage.actividades.add(nuevaActividad);
+    try {
+      if (editingActividad) {
+        await storageHybrid.actividades.update(editingActividad.id, {
+          nombre: formData.nombre,
+          precio: precio,
+        });
+      } else {
+        const nuevaActividad: Actividad = {
+          id: Date.now().toString(),
+          nombre: formData.nombre,
+          precio: precio,
+          createdAt: new Date().toISOString(),
+        };
+        await storageHybrid.actividades.add(nuevaActividad);
+      }
+      
+      await loadActividades();
+      handleCloseModal();
+    } catch (error) {
+      console.error('Error saving actividad:', error);
+      alert('Error al guardar la actividad. Revisá la consola para más detalles.');
     }
-    
-    loadActividades();
-    handleCloseModal();
   };
 
-  const handleDelete = (id: string) => {
-    // Verificar si hay alumnos usando esta actividad
-    const alumnos = storage.alumnos.getAll();
-    const alumnosConActividad = alumnos.filter(a => a.actividadId === id);
-    
-    if (alumnosConActividad.length > 0) {
-      alert(`No se puede eliminar esta actividad porque ${alumnosConActividad.length} alumno(s) la está(n) usando. Primero actualizá la actividad de esos alumnos.`);
-      return;
-    }
+  const handleDelete = async (id: string) => {
+    try {
+      // Verificar si hay alumnos usando esta actividad
+      const alumnos = await storageHybrid.alumnos.getAll();
+      const alumnosConActividad = alumnos.filter(a => a.actividadId === id);
+      
+      if (alumnosConActividad.length > 0) {
+        alert(`No se puede eliminar esta actividad porque ${alumnosConActividad.length} alumno(s) la está(n) usando. Primero actualizá la actividad de esos alumnos.`);
+        return;
+      }
 
-    if (confirm('¿Estás seguro de que querés eliminar esta actividad?')) {
-      storage.actividades.delete(id);
-      loadActividades();
+      if (confirm('¿Estás seguro de que querés eliminar esta actividad?')) {
+        await storageHybrid.actividades.delete(id);
+        await loadActividades();
+      }
+    } catch (error) {
+      console.error('Error deleting actividad:', error);
+      alert('Error al eliminar la actividad. Revisá la consola para más detalles.');
     }
   };
 
@@ -104,7 +124,11 @@ const Actividades = () => {
         </button>
       </div>
 
-      {actividades.length === 0 ? (
+      {loading ? (
+        <div className="card text-center py-12">
+          <p className="text-gray-500">Cargando actividades...</p>
+        </div>
+      ) : actividades.length === 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500 mb-4">No hay actividades registradas aún</p>
           <button onClick={() => handleOpenModal()} className="btn-primary">

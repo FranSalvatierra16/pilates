@@ -1,31 +1,69 @@
 import { useState } from 'react';
 import { Search, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Alumno, Actividad } from '../types';
 import { storage } from '../utils/storage';
+import { storageHybrid } from '../utils/storage-hybrid';
 import { isCuotaVencida, isCuotaVenceHoy, formatDate } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
 const Acceso = () => {
   const [dni, setDni] = useState('');
-  const [alumno, setAlumno] = useState<ReturnType<typeof storage.alumnos.findByDni> | null>(null);
+  const [alumno, setAlumno] = useState<Alumno | null>(null);
+  const [actividades, setActividades] = useState<Actividad[]>([]);
   const [mensaje, setMensaje] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSearch = () => {
+  const loadActividades = async () => {
+    try {
+      const data = await storageHybrid.actividades.getAll();
+      setActividades(data);
+    } catch (error) {
+      console.error('Error loading actividades:', error);
+      setActividades(storage.actividades.getAll());
+    }
+  };
+
+  const handleSearch = async () => {
     if (!dni.trim()) {
       setMensaje('Por favor ingresá un DNI');
       setAlumno(null);
       return;
     }
 
-    const encontrado = storage.alumnos.findByDni(dni.trim());
-    
-    if (!encontrado) {
-      setMensaje('Alumno no encontrado');
-      setAlumno(null);
-      return;
-    }
+    try {
+      setLoading(true);
+      const encontrado = await storageHybrid.alumnos.findByDni(dni.trim());
+      
+      if (!encontrado) {
+        setMensaje('Alumno no encontrado');
+        setAlumno(null);
+        return;
+      }
 
-    setAlumno(encontrado);
-    setMensaje('');
+      setAlumno(encontrado);
+      setMensaje('');
+      
+      // Cargar actividades si no están cargadas
+      if (actividades.length === 0) {
+        await loadActividades();
+      }
+    } catch (error) {
+      console.error('Error searching alumno:', error);
+      // Fallback a localStorage
+      const encontrado = storage.alumnos.findByDni(dni.trim());
+      if (!encontrado) {
+        setMensaje('Alumno no encontrado');
+        setAlumno(null);
+        return;
+      }
+      setAlumno(encontrado);
+      setMensaje('');
+      if (actividades.length === 0) {
+        setActividades(storage.actividades.getAll());
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -35,8 +73,8 @@ const Acceso = () => {
   };
 
   const getActividad = () => {
-    if (!alumno) return null;
-    return storage.actividades.getById(alumno.actividadId);
+    if (!alumno || !alumno.actividadId) return null;
+    return actividades.find(a => a.id === alumno.actividadId);
   };
 
   const isVencida = alumno ? isCuotaVencida(alumno.fechaVencimientoCuota) : false;
@@ -64,10 +102,11 @@ const Acceso = () => {
             />
             <button
               onClick={handleSearch}
-              className="btn-primary flex items-center gap-2"
+              disabled={loading}
+              className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Search className="w-5 h-5" />
-              Buscar
+              {loading ? 'Buscando...' : 'Buscar'}
             </button>
           </div>
         </div>

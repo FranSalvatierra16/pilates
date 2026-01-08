@@ -4,7 +4,17 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Log para debuggear (solo en desarrollo)
+if (import.meta.env.DEV) {
+  console.log('Supabase config:', {
+    url: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'NO CONFIGURADO',
+    key: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'NO CONFIGURADO',
+  });
+}
+
+export const supabase = supabaseUrl && supabaseAnonKey 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null as any; // Fallback si no está configurado
 
 // Tipos para las tablas
 export interface Database {

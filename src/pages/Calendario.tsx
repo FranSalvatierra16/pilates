@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move } from 'lucide-react';
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -27,8 +27,18 @@ const Calendario = () => {
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showEstadisticas, setShowEstadisticas] = useState(false);
+  const [showPopupAlumno, setShowPopupAlumno] = useState<{
+    alumno: Alumno;
+    turnoId: string;
+    diaSemana: number;
+    hora: string;
+    position: { x: number; y: number };
+  } | null>(null);
+  const [showMoverAlumno, setShowMoverAlumno] = useState(false);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
+  const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadTurnos();
@@ -158,11 +168,82 @@ const Calendario = () => {
       }
 
       await loadTurnos();
+      setShowPopupAlumno(null);
     } catch (error) {
       console.error('Error eliminando alumno del turno:', error);
       alert('Error al eliminar el alumno del turno. Por favor intentá nuevamente.');
     }
   };
+
+  const handleMoverAlumno = async () => {
+    if (!showPopupAlumno || !turnoDestino) return;
+
+    try {
+      // Eliminar del turno original
+      await handleEliminarAlumno(showPopupAlumno.turnoId, showPopupAlumno.alumno.id);
+      
+      // Agregar al turno destino
+      const turnoDestinoExistente = getTurnoDelDia(turnoDestino.diaSemana, turnoDestino.hora);
+      
+      if (turnoDestinoExistente) {
+        // Si el turno ya existe, agregar el alumno si no está
+        if (!turnoDestinoExistente.alumnoIds.includes(showPopupAlumno.alumno.id)) {
+          await storageHybrid.turnos.update(turnoDestinoExistente.id, {
+            alumnoIds: [...turnoDestinoExistente.alumnoIds, showPopupAlumno.alumno.id],
+          });
+        }
+      } else {
+        // Crear nuevo turno
+        const nuevoTurno: Turno = {
+          id: Date.now().toString(),
+          diaSemana: turnoDestino.diaSemana,
+          hora: turnoDestino.hora,
+          alumnoIds: [showPopupAlumno.alumno.id],
+          createdAt: new Date().toISOString(),
+        };
+        await storageHybrid.turnos.add(nuevoTurno);
+      }
+
+      await loadTurnos();
+      setShowPopupAlumno(null);
+      setShowMoverAlumno(false);
+      setTurnoDestino(null);
+    } catch (error) {
+      console.error('Error moviendo alumno:', error);
+      alert('Error al mover el alumno. Por favor intentá nuevamente.');
+    }
+  };
+
+  const handleAbrirPopupAlumno = (e: React.MouseEvent, alumno: Alumno, turno: Turno, diaSemana: number, hora: string) => {
+    e.stopPropagation();
+    setShowPopupAlumno({
+      alumno,
+      turnoId: turno.id,
+      diaSemana,
+      hora,
+      position: { x: e.clientX, y: e.clientY },
+    });
+    setShowMoverAlumno(false);
+    setTurnoDestino(null);
+  };
+
+  // Cerrar popup al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
+        setShowPopupAlumno(null);
+        setShowMoverAlumno(false);
+      }
+    };
+
+    if (showPopupAlumno) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showPopupAlumno]);
 
   const getEstadoAsistencia = (turnoId: string, alumnoId: string): 'asistio' | 'no_asistio' | null => {
     const asistencia = asistencias.find(
@@ -234,7 +315,7 @@ const Calendario = () => {
     };
   };
 
-  const renderAlumnoEnTurno = (alumno: Alumno, turno: Turno | undefined) => {
+  const renderAlumnoEnTurno = (alumno: Alumno, turno: Turno | undefined, diaSemana: number, hora: string) => {
     if (!turno) return null;
     
     const estadoAsistencia = getEstadoAsistencia(turno.id, alumno.id);
@@ -247,9 +328,10 @@ const Calendario = () => {
     return (
       <div
         key={alumno.id}
-        className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors`}
+        className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors cursor-pointer`}
+        onClick={(e) => handleAbrirPopupAlumno(e, alumno, turno, diaSemana, hora)}
       >
-        <span className="truncate flex-1">
+        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}`}>
           {alumno.nombre} {alumno.apellido}
         </span>
         <div className="flex items-center gap-1">
@@ -280,16 +362,6 @@ const Calendario = () => {
             title="Marcar como no asistió"
           >
             <XCircle className="w-3 h-3" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEliminarAlumno(turno.id, alumno.id);
-            }}
-            className="ml-1 opacity-0 group-hover/item:opacity-100 text-red-600 hover:text-red-800 transition-opacity"
-            title="Eliminar del turno"
-          >
-            <X className="w-3 h-3" />
           </button>
         </div>
       </div>
@@ -353,7 +425,7 @@ const Calendario = () => {
                     >
                       {alumnosTurno.length > 0 ? (
                         <div className="space-y-1 relative z-10">
-                          {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno))}
+                          {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                         </div>
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -394,7 +466,7 @@ const Calendario = () => {
                     >
                       {alumnosTurno.length > 0 ? (
                         <div className="space-y-1 relative z-10">
-                          {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno))}
+                          {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                         </div>
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -563,6 +635,124 @@ const Calendario = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Popup de información del alumno */}
+      {showPopupAlumno && (
+        <div
+          ref={popupRef}
+          className="fixed bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-[280px]"
+          style={{
+            left: `${Math.min(showPopupAlumno.position.x, window.innerWidth - 300)}px`,
+            top: `${Math.min(showPopupAlumno.position.y + 10, window.innerHeight - 200)}px`,
+          }}
+        >
+          <div className="mb-3">
+            <h3 className="font-bold text-gray-900 text-lg mb-1">
+              {showPopupAlumno.alumno.nombre} {showPopupAlumno.alumno.apellido}
+            </h3>
+            <p className="text-sm text-gray-600">DNI: {showPopupAlumno.alumno.dni}</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Turno actual: {DIAS_SEMANA[showPopupAlumno.diaSemana]} {showPopupAlumno.hora}
+            </p>
+          </div>
+
+          {!showMoverAlumno ? (
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  setShowMoverAlumno(true);
+                }}
+                className="w-full btn-secondary flex items-center justify-center gap-2 text-sm"
+              >
+                <Move className="w-4 h-4" />
+                Mover a otro turno
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm(`¿Estás seguro de que querés eliminar a ${showPopupAlumno.alumno.nombre} ${showPopupAlumno.alumno.apellido} de este turno?`)) {
+                    handleEliminarAlumno(showPopupAlumno.turnoId, showPopupAlumno.alumno.id);
+                  }
+                }}
+                className="w-full btn-danger flex items-center justify-center gap-2 text-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Eliminar del turno
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Seleccionar nuevo turno
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={turnoDestino?.diaSemana ?? ''}
+                    onChange={(e) => {
+                      const dia = parseInt(e.target.value);
+                      if (dia >= 0 && turnoDestino) {
+                        setTurnoDestino({ ...turnoDestino, diaSemana: dia });
+                      } else if (dia >= 0) {
+                        setTurnoDestino({ diaSemana: dia, hora: HORARIOS_MANANA[0] });
+                      }
+                    }}
+                    className="input-field text-sm"
+                  >
+                    <option value="">Día</option>
+                    {diasSemana.map((diaIndex) => (
+                      <option key={diaIndex} value={diaIndex}>
+                        {DIAS_SEMANA[diaIndex]}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={turnoDestino?.hora ?? ''}
+                    onChange={(e) => {
+                      const hora = e.target.value;
+                      if (hora && turnoDestino) {
+                        setTurnoDestino({ ...turnoDestino, hora });
+                      } else if (hora) {
+                        setTurnoDestino({ diaSemana: 0, hora });
+                      }
+                    }}
+                    className="input-field text-sm"
+                  >
+                    <option value="">Hora</option>
+                    {HORARIOS_MANANA.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                    {HORARIOS_TARDE.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowMoverAlumno(false);
+                    setTurnoDestino(null);
+                  }}
+                  className="flex-1 btn-secondary text-sm"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleMoverAlumno}
+                  disabled={!turnoDestino || !turnoDestino.hora || turnoDestino.diaSemana < 0}
+                  className="flex-1 btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Mover
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

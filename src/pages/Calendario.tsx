@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, UserPlus, Search } from 'lucide-react';
-import { Turno, Alumno, DIAS_SEMANA } from '../types';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw } from 'lucide-react';
+import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 
@@ -8,10 +8,22 @@ import { storageHybrid } from '../utils/storage-hybrid';
 const HORARIOS_MANANA = ['07:30', '08:30', '09:30', '10:30', '11:30', '12:30'];
 const HORARIOS_TARDE = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
 
+// Función para obtener el número de semana (YYYY-WW)
+const getSemanaActual = (): string => {
+  const hoy = new Date();
+  const año = hoy.getFullYear();
+  const inicioAño = new Date(año, 0, 1);
+  const dias = Math.floor((hoy.getTime() - inicioAño.getTime()) / (24 * 60 * 60 * 1000));
+  const semana = Math.ceil((dias + inicioAño.getDay() + 1) / 7);
+  return `${año}-${semana.toString().padStart(2, '0')}`;
+};
+
 const Calendario = () => {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
+  const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
+  const semanaActual = getSemanaActual();
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
@@ -20,7 +32,8 @@ const Calendario = () => {
   useEffect(() => {
     loadTurnos();
     loadAlumnos();
-  }, []);
+    loadAsistencias();
+  }, [semanaActual]);
 
   const loadTurnos = async () => {
     try {
@@ -43,6 +56,11 @@ const Calendario = () => {
       setAlumnos(alumnosLocal);
       setAlumnosFiltrados(alumnosLocal);
     }
+  };
+
+  const loadAsistencias = () => {
+    const asistenciasSemana = storage.asistencias.getBySemana(semanaActual);
+    setAsistencias(asistenciasSemana);
   };
 
   // Días de la semana: 0 = Lunes, 1 = Martes, ..., 5 = Sábado (sin domingo)
@@ -145,15 +163,199 @@ const Calendario = () => {
     }
   };
 
+  const getEstadoAsistencia = (turnoId: string, alumnoId: string): 'asistio' | 'no_asistio' | null => {
+    const asistencia = asistencias.find(
+      a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaActual
+    );
+    return asistencia?.estado || null;
+  };
+
+  const handleMarcarAsistencia = (turnoId: string, alumnoId: string, estado: 'asistio' | 'no_asistio') => {
+    const asistenciaExistente = asistencias.find(
+      a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaActual
+    );
+
+    if (asistenciaExistente) {
+      // Actualizar asistencia existente
+      if (asistenciaExistente.estado === estado) {
+        // Si ya está marcado con ese estado, desmarcarlo (volver a null)
+        storage.asistencias.update(asistenciaExistente.id, { estado: null });
+      } else {
+        // Cambiar el estado
+        storage.asistencias.update(asistenciaExistente.id, { estado });
+      }
+    } else {
+      // Crear nueva asistencia
+      const nuevaAsistencia: Asistencia = {
+        id: Date.now().toString(),
+        turnoId,
+        alumnoId,
+        estado,
+        semana: semanaActual,
+        createdAt: new Date().toISOString(),
+      };
+      storage.asistencias.add(nuevaAsistencia);
+    }
+
+    loadAsistencias();
+  };
+
+  const handleReiniciarSemana = () => {
+    if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados a gris.')) {
+      storage.asistencias.deleteBySemana(semanaActual);
+      loadAsistencias();
+    }
+  };
+
+  const calcularEstadisticas = (alumnoId: string): EstadisticasAsistencia => {
+    const turnosDelAlumno = turnos.filter(t => t.alumnoIds.includes(alumnoId));
+    const totalClases = turnosDelAlumno.length;
+    
+    let clasesAsistidas = 0;
+    let clasesNoAsistidas = 0;
+
+    turnosDelAlumno.forEach(turno => {
+      const asistencia = asistencias.find(
+        a => a.turnoId === turno.id && a.alumnoId === alumnoId && a.semana === semanaActual
+      );
+      if (asistencia?.estado === 'asistio') {
+        clasesAsistidas++;
+      } else if (asistencia?.estado === 'no_asistio') {
+        clasesNoAsistidas++;
+      }
+    });
+
+    return {
+      alumnoId,
+      totalClases,
+      clasesAsistidas,
+      clasesNoAsistidas,
+    };
+  };
+
+  const renderAlumnoEnTurno = (alumno: Alumno, turno: Turno | undefined) => {
+    if (!turno) return null;
+    
+    const estadoAsistencia = getEstadoAsistencia(turno.id, alumno.id);
+    const bgColor = estadoAsistencia === 'asistio' 
+      ? 'bg-green-100 text-green-900' 
+      : estadoAsistencia === 'no_asistio'
+      ? 'bg-red-100 text-red-900'
+      : 'bg-primary-100 text-primary-900';
+    
+    return (
+      <div
+        key={alumno.id}
+        className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors`}
+      >
+        <span className="truncate flex-1">
+          {alumno.nombre} {alumno.apellido}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleMarcarAsistencia(turno.id, alumno.id, 'asistio');
+            }}
+            className={`p-0.5 rounded transition-colors ${
+              estadoAsistencia === 'asistio'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-200 text-gray-600 hover:bg-green-300'
+            }`}
+            title="Marcar como asistió"
+          >
+            <Check className="w-3 h-3" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleMarcarAsistencia(turno.id, alumno.id, 'no_asistio');
+            }}
+            className={`p-0.5 rounded transition-colors ${
+              estadoAsistencia === 'no_asistio'
+                ? 'bg-red-600 text-white'
+                : 'bg-gray-200 text-gray-600 hover:bg-red-300'
+            }`}
+            title="Marcar como no asistió"
+          >
+            <XCircle className="w-3 h-3" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEliminarAlumno(turno.id, alumno.id);
+            }}
+            className="ml-1 opacity-0 group-hover/item:opacity-100 text-red-600 hover:text-red-800 transition-opacity"
+            title="Eliminar del turno"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
         <h1 className="text-3xl font-bold text-gray-900">Calendario de Turnos</h1>
-        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 inline-block">
-          <p className="text-sm text-blue-800">
-            💡 Los turnos se repiten cada semana. Los alumnos siempre van a los mismos días y horarios.
-          </p>
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={handleReiniciarSemana}
+            className="btn-secondary flex items-center gap-2"
+            title="Reiniciar asistencias de esta semana"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reiniciar Semana
+          </button>
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-800">
+              💡 Los turnos se repiten cada semana. Los alumnos siempre van a los mismos días y horarios.
+              Usá ✓ para marcar asistencia (verde) o ✗ para marcar inasistencia (rojo).
+            </p>
+          </div>
         </div>
+      </div>
+
+      {/* Estadísticas de asistencias */}
+      <div className="mb-6 card">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Estadísticas de Asistencia - Semana Actual</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {alumnos.map((alumno) => {
+            const stats = calcularEstadisticas(alumno.id);
+            if (stats.totalClases === 0) return null;
+            return (
+              <div key={alumno.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  {alumno.nombre} {alumno.apellido}
+                </h3>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Total clases:</span>
+                    <span className="font-semibold">{stats.totalClases}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-600">✓ Asistió:</span>
+                    <span className="font-semibold text-green-600">{stats.clasesAsistidas}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-red-600">✗ No asistió:</span>
+                    <span className="font-semibold text-red-600">{stats.clasesNoAsistidas}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-gray-300">
+                    <span className="text-gray-600">Sin marcar:</span>
+                    <span className="font-semibold text-gray-600">
+                      {stats.totalClases - stats.clasesAsistidas - stats.clasesNoAsistidas}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {alumnos.filter(a => calcularEstadisticas(a.id).totalClases > 0).length === 0 && (
+          <p className="text-gray-500 text-center py-4">No hay alumnos asignados a turnos aún</p>
+        )}
       </div>
 
       <div className="card overflow-x-auto p-0">
@@ -191,22 +393,7 @@ const Calendario = () => {
                     >
                       {alumnosTurno.length > 0 ? (
                         <div className="space-y-1 relative z-10">
-                          {alumnosTurno.map((alumno) => (
-                            <div
-                              key={alumno.id}
-                              className="bg-primary-100 text-primary-900 px-2 py-1 rounded text-xs flex items-center justify-between group/item hover:bg-primary-200"
-                            >
-                              <span className="truncate flex-1">
-                                {alumno.nombre} {alumno.apellido}
-                              </span>
-                              <button
-                                onClick={() => turno && handleEliminarAlumno(turno.id, alumno.id)}
-                                className="ml-1 opacity-0 group-hover/item:opacity-100 text-red-600 hover:text-red-800 transition-opacity"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))}
+                          {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno))}
                         </div>
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -247,22 +434,7 @@ const Calendario = () => {
                     >
                       {alumnosTurno.length > 0 ? (
                         <div className="space-y-1 relative z-10">
-                          {alumnosTurno.map((alumno) => (
-                            <div
-                              key={alumno.id}
-                              className="bg-primary-100 text-primary-900 px-2 py-1 rounded text-xs flex items-center justify-between group/item hover:bg-primary-200"
-                            >
-                              <span className="truncate flex-1">
-                                {alumno.nombre} {alumno.apellido}
-                              </span>
-                              <button
-                                onClick={() => turno && handleEliminarAlumno(turno.id, alumno.id)}
-                                className="ml-1 opacity-0 group-hover/item:opacity-100 text-red-600 hover:text-red-800 transition-opacity"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))}
+                          {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno))}
                         </div>
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">

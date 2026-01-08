@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia } from '../types';
 
 const STORAGE_KEYS = {
   alumnos: 'savia_alumnos',
@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   pagos: 'savia_pagos',
   turnos: 'savia_turnos',
   gastos: 'savia_gastos',
+  asistencias: 'savia_asistencias',
 } as const;
 
 export const storage = {
@@ -147,6 +148,45 @@ export const storage = {
     delete: (id: string): void => {
       const gastos = storage.gastos.getAll().filter(g => g.id !== id);
       storage.gastos.save(gastos);
+    },
+  },
+  
+  asistencias: {
+    getAll: (): Asistencia[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.asistencias);
+      return data ? JSON.parse(data) : [];
+    },
+    save: (asistencias: Asistencia[]): void => {
+      localStorage.setItem(STORAGE_KEYS.asistencias, JSON.stringify(asistencias));
+    },
+    add: (asistencia: Asistencia): void => {
+      const asistencias = storage.asistencias.getAll();
+      asistencias.push(asistencia);
+      storage.asistencias.save(asistencias);
+    },
+    update: (id: string, updates: Partial<Asistencia>): void => {
+      const asistencias = storage.asistencias.getAll();
+      const index = asistencias.findIndex(a => a.id === id);
+      if (index !== -1) {
+        asistencias[index] = { ...asistencias[index], ...updates };
+        storage.asistencias.save(asistencias);
+      }
+    },
+    delete: (id: string): void => {
+      const asistencias = storage.asistencias.getAll().filter(a => a.id !== id);
+      storage.asistencias.save(asistencias);
+    },
+    findByTurnoYAlumno: (turnoId: string, alumnoId: string, semana: string): Asistencia | undefined => {
+      return storage.asistencias.getAll().find(
+        a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semana
+      );
+    },
+    getBySemana: (semana: string): Asistencia[] => {
+      return storage.asistencias.getAll().filter(a => a.semana === semana);
+    },
+    deleteBySemana: (semana: string): void => {
+      const asistencias = storage.asistencias.getAll().filter(a => a.semana !== semana);
+      storage.asistencias.save(asistencias);
     },
   },
 };

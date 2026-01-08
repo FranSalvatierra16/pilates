@@ -46,6 +46,22 @@ export interface Turno {
   createdAt: string;
 }
 
+export interface Asistencia {
+  id: string;
+  turnoId: string;
+  alumnoId: string;
+  estado: 'asistio' | 'no_asistio' | null; // null = sin marcar (gris)
+  semana: string; // YYYY-WW (año-semana) para identificar la semana
+  createdAt: string;
+}
+
+export interface EstadisticasAsistencia {
+  alumnoId: string;
+  totalClases: number; // Total de clases a las que está asignado
+  clasesAsistidas: number; // Clases a las que asistió
+  clasesNoAsistidas: number; // Clases a las que no asistió
+}
+
 // Nombres de días de la semana (sin domingo)
 export const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 

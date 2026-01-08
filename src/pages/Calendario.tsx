@@ -255,14 +255,13 @@ const Calendario = () => {
           });
         }
       } else {
-        // Crear nuevo turno
-        const turnoOriginal = turnos.find(t => t.id === showPopupAlumno.turnoId);
+        // Crear nuevo turno (sin copiar título ni profesor del turno original)
         const nuevoTurno: Turno = {
           id: Date.now().toString(),
           diaSemana: turnoDestino.diaSemana,
           hora: turnoDestino.hora,
-          titulo: turnoOriginal?.titulo || '',
-          profesorId: turnoOriginal?.profesorId || '',
+          titulo: '',
+          profesorId: '',
           alumnoIds: [showPopupAlumno.alumno.id],
           createdAt: new Date().toISOString(),
         };

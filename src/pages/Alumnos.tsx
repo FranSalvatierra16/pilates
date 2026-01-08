@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, X, Save, CreditCard } from 'lucide-react';
-import { Alumno, Pago, MetodoPago } from '../types';
+import { Alumno, Pago, MetodoPago, Actividad } from '../types';
 import { storage } from '../utils/storage';
+import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
 const Alumnos = () => {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
-  const [actividades, setActividades] = useState(storage.actividades.getAll());
+  const [actividades, setActividades] = useState<Actividad[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showModalPago, setShowModalPago] = useState(false);
   const [editingAlumno, setEditingAlumno] = useState<Alumno | null>(null);
@@ -28,17 +30,38 @@ const Alumnos = () => {
   });
 
   useEffect(() => {
-    loadAlumnos();
-    loadActividades();
+    loadData();
   }, []);
 
-  const loadAlumnos = () => {
-    setAlumnos(storage.alumnos.getAll());
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [alumnosData, actividadesData] = await Promise.all([
+        storageHybrid.alumnos.getAll(),
+        storageHybrid.actividades.getAll(),
+      ]);
+      setAlumnos(alumnosData);
+      setActividades(actividadesData);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      // Fallback a localStorage
+      setAlumnos(storage.alumnos.getAll());
+      setActividades(storage.actividades.getAll());
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const loadActividades = () => {
-    setActividades(storage.actividades.getAll());
+  const loadAlumnos = async () => {
+    try {
+      const data = await storageHybrid.alumnos.getAll();
+      setAlumnos(data);
+    } catch (error) {
+      console.error('Error loading alumnos:', error);
+      setAlumnos(storage.alumnos.getAll());
+    }
   };
+
 
   const resetForm = () => {
     setFormData({
@@ -86,35 +109,45 @@ const Alumnos = () => {
     resetForm();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingAlumno) {
-      // Si es edición, usar la fecha que se ingresó o calcularla
-      const fechaVencimiento = formData.fechaVencimientoCuota || calcularFechaVencimiento(new Date().toISOString().split('T')[0]);
-      storage.alumnos.update(editingAlumno.id, {
-        ...formData,
-        fechaVencimientoCuota: fechaVencimiento,
-      });
-    } else {
-      // Crear nuevo alumno sin fecha de vencimiento (pendiente de pago)
-      const nuevoAlumno: Alumno = {
-        id: Date.now().toString(),
-        ...formData,
-        fechaVencimientoCuota: '', // Sin fecha hasta que se pague
-        createdAt: new Date().toISOString(),
-      };
-      storage.alumnos.add(nuevoAlumno);
+    try {
+      if (editingAlumno) {
+        // Si es edición, usar la fecha que se ingresó o calcularla
+        const fechaVencimiento = formData.fechaVencimientoCuota || calcularFechaVencimiento(new Date().toISOString().split('T')[0]);
+        await storageHybrid.alumnos.update(editingAlumno.id, {
+          ...formData,
+          fechaVencimientoCuota: fechaVencimiento,
+        });
+      } else {
+        // Crear nuevo alumno sin fecha de vencimiento (pendiente de pago)
+        const nuevoAlumno: Alumno = {
+          id: Date.now().toString(),
+          ...formData,
+          fechaVencimientoCuota: '', // Sin fecha hasta que se pague
+          createdAt: new Date().toISOString(),
+        };
+        await storageHybrid.alumnos.add(nuevoAlumno);
+      }
+      
+      await loadAlumnos();
+      handleCloseModal();
+    } catch (error) {
+      console.error('Error saving alumno:', error);
+      alert('Error al guardar el alumno. Por favor intentá nuevamente.');
     }
-    
-    loadAlumnos();
-    handleCloseModal();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('¿Estás seguro de que querés eliminar este alumno?')) {
-      storage.alumnos.delete(id);
-      loadAlumnos();
+      try {
+        await storageHybrid.alumnos.delete(id);
+        await loadAlumnos();
+      } catch (error) {
+        console.error('Error deleting alumno:', error);
+        alert('Error al eliminar el alumno. Por favor intentá nuevamente.');
+      }
     }
   };
 
@@ -139,7 +172,7 @@ const Alumnos = () => {
     });
   };
 
-  const handleSubmitPago = (e: React.FormEvent) => {
+  const handleSubmitPago = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!alumnoParaPagar) return;
@@ -150,30 +183,35 @@ const Alumnos = () => {
       return;
     }
 
-    // Calcular nueva fecha de vencimiento (1 mes desde la fecha del pago)
-    const nuevaFechaVencimiento = calcularFechaVencimiento(formDataPago.fecha);
+    try {
+      // Calcular nueva fecha de vencimiento (1 mes desde la fecha del pago)
+      const nuevaFechaVencimiento = calcularFechaVencimiento(formDataPago.fecha);
 
-    // Crear el pago
-    const nuevoPago: Pago = {
-      id: Date.now().toString(),
-      alumnoId: alumnoParaPagar.id,
-      monto: monto,
-      metodoPago: formDataPago.metodoPago,
-      fecha: formDataPago.fecha,
-      createdAt: new Date().toISOString(),
-    };
+      // Crear el pago
+      const nuevoPago: Pago = {
+        id: Date.now().toString(),
+        alumnoId: alumnoParaPagar.id,
+        monto: monto,
+        metodoPago: formDataPago.metodoPago,
+        fecha: formDataPago.fecha,
+        createdAt: new Date().toISOString(),
+      };
 
-    // Guardar el pago
-    storage.pagos.add(nuevoPago);
+      // Guardar el pago
+      await storageHybrid.pagos.add(nuevoPago);
 
-    // Actualizar la fecha de vencimiento del alumno
-    storage.alumnos.update(alumnoParaPagar.id, {
-      fechaVencimientoCuota: nuevaFechaVencimiento,
-    });
+      // Actualizar la fecha de vencimiento del alumno
+      await storageHybrid.alumnos.update(alumnoParaPagar.id, {
+        fechaVencimientoCuota: nuevaFechaVencimiento,
+      });
 
-    loadAlumnos();
-    handleCerrarModalPago();
-    alert('Pago registrado exitosamente. La fecha de vencimiento se actualizó automáticamente.');
+      await loadAlumnos();
+      handleCerrarModalPago();
+      alert('Pago registrado exitosamente. La fecha de vencimiento se actualizó automáticamente.');
+    } catch (error) {
+      console.error('Error saving pago:', error);
+      alert('Error al registrar el pago. Por favor intentá nuevamente.');
+    }
   };
 
   const getActividadNombre = (actividadId: string) => {
@@ -185,6 +223,17 @@ const Alumnos = () => {
     const actividad = actividades.find(a => a.id === actividadId);
     return actividad ? actividad.precio : 0;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

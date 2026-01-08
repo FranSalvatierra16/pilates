@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { RefreshCw, DollarSign, CreditCard, Wallet, TrendingUp, Calendar, Plus, X, Save, Trash2 } from 'lucide-react';
 import { storage } from '../utils/storage';
+import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { formatDate } from '../utils/date';
-import { Gasto, MetodoPago } from '../types';
+import { Gasto, MetodoPago, Pago } from '../types';
 
 const Caja = () => {
   const [stats, setStats] = useState({
@@ -18,8 +19,9 @@ const Caja = () => {
     pagosMes: 0,
   });
 
-  const [pagos, setPagos] = useState(storage.pagos.getAll());
-  const [gastos, setGastos] = useState<Gasto[]>(storage.gastos.getAll());
+  const [pagos, setPagos] = useState<Pago[]>([]);
+  const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModalGasto, setShowModalGasto] = useState(false);
   const [formDataGasto, setFormDataGasto] = useState({
     descripcion: '',
@@ -32,14 +34,17 @@ const Caja = () => {
     loadStats();
   }, []);
 
-  const loadStats = () => {
-    const todosPagos = storage.pagos.getAll();
-    const todosGastos = storage.gastos.getAll();
-    setPagos(todosPagos);
-    setGastos(todosGastos);
+  const loadStats = async () => {
+    try {
+      const [todosPagos, todosGastos] = await Promise.all([
+        storageHybrid.pagos.getAll(),
+        storageHybrid.gastos.getAll(),
+      ]);
+      setPagos(todosPagos);
+      setGastos(todosGastos);
 
-    // Calcular ingresos
-    const efectivo = todosPagos
+      // Calcular ingresos
+      const efectivo = todosPagos
       .filter(p => p.metodoPago === 'efectivo')
       .reduce((sum, p) => sum + p.monto, 0);
 
@@ -93,6 +98,32 @@ const Caja = () => {
       pagosHoy,
       pagosMes,
     });
+    } catch (error) {
+      console.error('Error loading stats:', error);
+      // Fallback a localStorage
+      const todosPagos = storage.pagos.getAll();
+      const todosGastos = storage.gastos.getAll();
+      setPagos(todosPagos);
+      setGastos(todosGastos);
+      // Recalcular stats con localStorage
+      const efectivo = todosPagos.filter(p => p.metodoPago === 'efectivo').reduce((sum, p) => sum + p.monto, 0);
+      const transferencia = todosPagos.filter(p => p.metodoPago === 'transferencia').reduce((sum, p) => sum + p.monto, 0);
+      const gastosEfvo = todosGastos.filter(g => g.metodoPago === 'efectivo').reduce((sum, g) => sum + g.monto, 0);
+      const gastosTransf = todosGastos.filter(g => g.metodoPago === 'transferencia').reduce((sum, g) => sum + g.monto, 0);
+      setStats({
+        totalEfectivo: efectivo,
+        totalTransferencia: transferencia,
+        totalGeneral: efectivo + transferencia,
+        gastosEfectivo: gastosEfvo,
+        gastosTransferencia: gastosTransf,
+        totalGastos: gastosEfvo + gastosTransf,
+        totalNeto: (efectivo - gastosEfvo) + (transferencia - gastosTransf),
+        pagosHoy: 0,
+        pagosMes: 0,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenModalGasto = () => {
@@ -115,7 +146,7 @@ const Caja = () => {
     });
   };
 
-  const handleSubmitGasto = (e: React.FormEvent) => {
+  const handleSubmitGasto = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const monto = parseFloat(formDataGasto.monto);
@@ -129,19 +160,24 @@ const Caja = () => {
       return;
     }
 
-    const nuevoGasto: Gasto = {
-      id: Date.now().toString(),
-      descripcion: formDataGasto.descripcion.trim(),
-      monto: monto,
-      metodoPago: formDataGasto.metodoPago,
-      fecha: formDataGasto.fecha,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const nuevoGasto: Gasto = {
+        id: Date.now().toString(),
+        descripcion: formDataGasto.descripcion.trim(),
+        monto: monto,
+        metodoPago: formDataGasto.metodoPago,
+        fecha: formDataGasto.fecha,
+        createdAt: new Date().toISOString(),
+      };
 
-    storage.gastos.add(nuevoGasto);
-    loadStats();
-    handleCerrarModalGasto();
-    alert('Gasto registrado exitosamente');
+      await storageHybrid.gastos.add(nuevoGasto);
+      await loadStats();
+      handleCerrarModalGasto();
+      alert('Gasto registrado exitosamente');
+    } catch (error) {
+      console.error('Error saving gasto:', error);
+      alert('Error al registrar el gasto. Por favor intentá nuevamente.');
+    }
   };
 
   const handleEliminarGasto = (id: string) => {
@@ -159,10 +195,35 @@ const Caja = () => {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
 
-  const getAlumnoNombre = (alumnoId: string) => {
-    const alumno = storage.alumnos.getAll().find(a => a.id === alumnoId);
+  const [alumnos, setAlumnos] = useState<any[]>([]);
+  
+  useEffect(() => {
+    const loadAlumnos = async () => {
+      try {
+        const data = await storageHybrid.alumnos.getAll();
+        setAlumnos(data);
+      } catch (error) {
+        setAlumnos(storage.alumnos.getAll());
+      }
+    };
+    loadAlumnos();
+  }, []);
+
+  const getAlumnoNombre = (alumnoId: string): string => {
+    const alumno = alumnos.find(a => a.id === alumnoId);
     return alumno ? `${alumno.nombre} ${alumno.apellido}` : 'Desconocido';
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

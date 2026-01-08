@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor } from '../types';
 
 const STORAGE_KEYS = {
   alumnos: 'savia_alumnos',
@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   turnos: 'savia_turnos',
   gastos: 'savia_gastos',
   asistencias: 'savia_asistencias',
+  profesores: 'savia_profesores',
 } as const;
 
 export const storage = {
@@ -187,6 +188,36 @@ export const storage = {
     deleteBySemana: (semana: string): void => {
       const asistencias = storage.asistencias.getAll().filter(a => a.semana !== semana);
       storage.asistencias.save(asistencias);
+    },
+  },
+  
+  profesores: {
+    getAll: (): Profesor[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.profesores);
+      return data ? JSON.parse(data) : [];
+    },
+    save: (profesores: Profesor[]): void => {
+      localStorage.setItem(STORAGE_KEYS.profesores, JSON.stringify(profesores));
+    },
+    add: (profesor: Profesor): void => {
+      const profesores = storage.profesores.getAll();
+      profesores.push(profesor);
+      storage.profesores.save(profesores);
+    },
+    update: (id: string, updates: Partial<Profesor>): void => {
+      const profesores = storage.profesores.getAll();
+      const index = profesores.findIndex(p => p.id === id);
+      if (index !== -1) {
+        profesores[index] = { ...profesores[index], ...updates };
+        storage.profesores.save(profesores);
+      }
+    },
+    delete: (id: string): void => {
+      const profesores = storage.profesores.getAll().filter(p => p.id !== id);
+      storage.profesores.save(profesores);
+    },
+    getById: (id: string): Profesor | undefined => {
+      return storage.profesores.getAll().find(p => p.id === id);
     },
   },
 };

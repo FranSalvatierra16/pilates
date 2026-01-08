@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move } from 'lucide-react';
-import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia } from '../types';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Edit, Save } from 'lucide-react';
+import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 
@@ -22,10 +22,12 @@ const Calendario = () => {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
+  const [profesores, setProfesores] = useState<Profesor[]>([]);
   const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
   const semanaActual = getSemanaActual();
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showModalEditarTurno, setShowModalEditarTurno] = useState(false);
   const [showEstadisticas, setShowEstadisticas] = useState(false);
   const [showPopupAlumno, setShowPopupAlumno] = useState<{
     alumno: Alumno;
@@ -36,13 +38,19 @@ const Calendario = () => {
   } | null>(null);
   const [showMoverAlumno, setShowMoverAlumno] = useState(false);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
+  const [turnoParaEditar, setTurnoParaEditar] = useState<Turno | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
+  const [formDataTurno, setFormDataTurno] = useState({
+    titulo: '',
+    profesorId: '',
+  });
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadTurnos();
     loadAlumnos();
+    loadProfesores();
     loadAsistencias();
   }, [semanaActual]);
 
@@ -69,6 +77,11 @@ const Calendario = () => {
     }
   };
 
+  const loadProfesores = () => {
+    const data = storage.profesores.getAll();
+    setProfesores(data);
+  };
+
   const loadAsistencias = () => {
     const asistenciasSemana = storage.asistencias.getBySemana(semanaActual);
     setAsistencias(asistenciasSemana);
@@ -89,11 +102,32 @@ const Calendario = () => {
   };
 
   const handleAgregarAlumno = (diaSemana: number, hora: string) => {
+    const turnoExistente = getTurnoDelDia(diaSemana, hora);
     setTurnoSeleccionado({ diaSemana, hora });
     setAlumnoSeleccionado('');
     setFiltroBusqueda('');
     setAlumnosFiltrados(alumnos);
+    if (turnoExistente) {
+      setFormDataTurno({
+        titulo: turnoExistente.titulo || '',
+        profesorId: turnoExistente.profesorId || '',
+      });
+    } else {
+      setFormDataTurno({
+        titulo: '',
+        profesorId: '',
+      });
+    }
     setShowModal(true);
+  };
+
+  const handleEditarTurno = (turno: Turno) => {
+    setTurnoParaEditar(turno);
+    setFormDataTurno({
+      titulo: turno.titulo || '',
+      profesorId: turno.profesorId || '',
+    });
+    setShowModalEditarTurno(true);
   };
 
   const handleCerrarModal = () => {
@@ -101,6 +135,7 @@ const Calendario = () => {
     setTurnoSeleccionado(null);
     setAlumnoSeleccionado('');
     setFiltroBusqueda('');
+    setFormDataTurno({ titulo: '', profesorId: '' });
   };
 
   useEffect(() => {
@@ -126,11 +161,19 @@ const Calendario = () => {
       const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
 
       if (turnoExistente) {
-        // Si el turno ya existe, agregar el alumno si no está
+        // Si el turno ya existe, agregar el alumno si no está y actualizar título/profesor
+        const updates: Partial<Turno> = {};
         if (!turnoExistente.alumnoIds.includes(alumnoSeleccionado)) {
-          await storageHybrid.turnos.update(turnoExistente.id, {
-            alumnoIds: [...turnoExistente.alumnoIds, alumnoSeleccionado],
-          });
+          updates.alumnoIds = [...turnoExistente.alumnoIds, alumnoSeleccionado];
+        }
+        if (formDataTurno.titulo !== turnoExistente.titulo) {
+          updates.titulo = formDataTurno.titulo;
+        }
+        if (formDataTurno.profesorId !== turnoExistente.profesorId) {
+          updates.profesorId = formDataTurno.profesorId;
+        }
+        if (Object.keys(updates).length > 0) {
+          await storageHybrid.turnos.update(turnoExistente.id, updates);
         }
       } else {
         // Crear nuevo turno
@@ -138,6 +181,8 @@ const Calendario = () => {
           id: Date.now().toString(),
           diaSemana: turnoSeleccionado.diaSemana,
           hora: turnoSeleccionado.hora,
+          titulo: formDataTurno.titulo,
+          profesorId: formDataTurno.profesorId,
           alumnoIds: [alumnoSeleccionado],
           createdAt: new Date().toISOString(),
         };
@@ -149,6 +194,23 @@ const Calendario = () => {
     } catch (error) {
       console.error('Error guardando turno:', error);
       alert('Error al guardar el turno. Por favor intentá nuevamente.');
+    }
+  };
+
+  const handleGuardarEdicionTurno = async () => {
+    if (!turnoParaEditar) return;
+
+    try {
+      await storageHybrid.turnos.update(turnoParaEditar.id, {
+        titulo: formDataTurno.titulo,
+        profesorId: formDataTurno.profesorId,
+      });
+      await loadTurnos();
+      setShowModalEditarTurno(false);
+      setTurnoParaEditar(null);
+    } catch (error) {
+      console.error('Error actualizando turno:', error);
+      alert('Error al actualizar el turno. Por favor intentá nuevamente.');
     }
   };
 
@@ -194,10 +256,13 @@ const Calendario = () => {
         }
       } else {
         // Crear nuevo turno
+        const turnoOriginal = turnos.find(t => t.id === showPopupAlumno.turnoId);
         const nuevoTurno: Turno = {
           id: Date.now().toString(),
           diaSemana: turnoDestino.diaSemana,
           hora: turnoDestino.hora,
+          titulo: turnoOriginal?.titulo || '',
+          profesorId: turnoOriginal?.profesorId || '',
           alumnoIds: [showPopupAlumno.alumno.id],
           createdAt: new Date().toISOString(),
         };
@@ -418,11 +483,38 @@ const Calendario = () => {
                 {diasSemana.map((diaIndex) => {
                   const turno = getTurnoDelDia(diaIndex, hora);
                   const alumnosTurno = getAlumnosDelTurno(turno);
+                  const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                   return (
                     <div
                       key={`${diaIndex}-${hora}`}
                       className="p-2 min-h-[80px] border-r border-gray-200 last:border-r-0 relative group hover:bg-gray-50"
                     >
+                      {/* Título y Profesor */}
+                      {(turno?.titulo || profesor) && (
+                        <div className="mb-2 pb-2 border-b border-gray-200">
+                          {turno?.titulo && (
+                            <div className="text-xs font-semibold text-gray-700 mb-1">
+                              {turno.titulo}
+                            </div>
+                          )}
+                          {profesor && (
+                            <div className="text-xs text-gray-600">
+                              Prof: {profesor.nombre} {profesor.apellido}
+                            </div>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (turno) handleEditarTurno(turno);
+                            }}
+                            className="mt-1 text-xs text-primary-600 hover:text-primary-800 flex items-center gap-1"
+                            title="Editar título y profesor"
+                          >
+                            <Edit className="w-3 h-3" />
+                            Editar
+                          </button>
+                        </div>
+                      )}
                       {alumnosTurno.length > 0 ? (
                         <div className="space-y-1 relative z-10">
                           {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
@@ -459,11 +551,38 @@ const Calendario = () => {
                 {diasSemana.map((diaIndex) => {
                   const turno = getTurnoDelDia(diaIndex, hora);
                   const alumnosTurno = getAlumnosDelTurno(turno);
+                  const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                   return (
                     <div
                       key={`${diaIndex}-${hora}`}
                       className="p-2 min-h-[80px] border-r border-gray-200 last:border-r-0 relative group hover:bg-gray-50"
                     >
+                      {/* Título y Profesor */}
+                      {(turno?.titulo || profesor) && (
+                        <div className="mb-2 pb-2 border-b border-gray-200">
+                          {turno?.titulo && (
+                            <div className="text-xs font-semibold text-gray-700 mb-1">
+                              {turno.titulo}
+                            </div>
+                          )}
+                          {profesor && (
+                            <div className="text-xs text-gray-600">
+                              Prof: {profesor.nombre} {profesor.apellido}
+                            </div>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (turno) handleEditarTurno(turno);
+                            }}
+                            className="mt-1 text-xs text-primary-600 hover:text-primary-800 flex items-center gap-1"
+                            title="Editar título y profesor"
+                          >
+                            <Edit className="w-3 h-3" />
+                            Editar
+                          </button>
+                        </div>
+                      )}
                       {alumnosTurno.length > 0 ? (
                         <div className="space-y-1 relative z-10">
                           {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
@@ -570,6 +689,35 @@ const Calendario = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Título de la Clase
+                </label>
+                <input
+                  type="text"
+                  value={formDataTurno.titulo}
+                  onChange={(e) => setFormDataTurno({ ...formDataTurno, titulo: e.target.value })}
+                  className="input-field"
+                  placeholder="Ej: Pilates Mat, Pilates con Máquinas, etc."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Profesor
+                </label>
+                <select
+                  value={formDataTurno.profesorId}
+                  onChange={(e) => setFormDataTurno({ ...formDataTurno, profesorId: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">Seleccionar profesor</option>
+                  {profesores.map((profesor) => (
+                    <option key={profesor.id} value={profesor.id}>
+                      {profesor.nombre} {profesor.apellido}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Buscar Alumno
                 </label>
                 <div className="relative mb-3">
@@ -631,6 +779,85 @@ const Calendario = () => {
                 >
                   <UserPlus className="w-4 h-4" />
                   Agregar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para editar título y profesor del turno */}
+      {showModalEditarTurno && turnoParaEditar && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">
+                Editar Turno
+              </h2>
+              <button
+                onClick={() => {
+                  setShowModalEditarTurno(false);
+                  setTurnoParaEditar(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  <strong>Día:</strong> {DIAS_SEMANA[turnoParaEditar.diaSemana]}
+                </p>
+                <p className="text-sm text-gray-600 mb-4">
+                  <strong>Hora:</strong> {turnoParaEditar.hora}
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Título de la Clase
+                </label>
+                <input
+                  type="text"
+                  value={formDataTurno.titulo}
+                  onChange={(e) => setFormDataTurno({ ...formDataTurno, titulo: e.target.value })}
+                  className="input-field"
+                  placeholder="Ej: Pilates Mat, Pilates con Máquinas, etc."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Profesor
+                </label>
+                <select
+                  value={formDataTurno.profesorId}
+                  onChange={(e) => setFormDataTurno({ ...formDataTurno, profesorId: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">Seleccionar profesor</option>
+                  {profesores.map((profesor) => (
+                    <option key={profesor.id} value={profesor.id}>
+                      {profesor.nombre} {profesor.apellido}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={() => {
+                    setShowModalEditarTurno(false);
+                    setTurnoParaEditar(null);
+                  }}
+                  className="btn-secondary"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleGuardarEdicionTurno}
+                  className="btn-primary flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  Guardar
                 </button>
               </div>
             </div>

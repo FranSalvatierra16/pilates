@@ -90,6 +90,8 @@ const dbToTurno = (row: any): Turno => ({
   id: row.id,
   diaSemana: row.dia_semana,
   hora: row.hora,
+  titulo: row.titulo || '',
+  profesorId: row.profesor_id || '',
   alumnoIds: row.alumno_ids || [],
   createdAt: row.created_at,
 });
@@ -98,6 +100,8 @@ const turnoToDb = (turno: Turno) => ({
   id: turno.id,
   dia_semana: turno.diaSemana,
   hora: turno.hora,
+  titulo: turno.titulo || null,
+  profesor_id: turno.profesorId || null,
   alumno_ids: turno.alumnoIds,
   created_at: turno.createdAt,
 });
@@ -299,6 +303,8 @@ export const storageSupabase = {
       const dbUpdates: any = {};
       if (updates.diaSemana !== undefined) dbUpdates.dia_semana = updates.diaSemana;
       if (updates.hora) dbUpdates.hora = updates.hora;
+      if (updates.titulo !== undefined) dbUpdates.titulo = updates.titulo || null;
+      if (updates.profesorId !== undefined) dbUpdates.profesor_id = updates.profesorId || null;
       if (updates.alumnoIds) dbUpdates.alumno_ids = updates.alumnoIds;
       const { error } = await supabase.from('turnos').update(dbUpdates).eq('id', id);
       if (error) {

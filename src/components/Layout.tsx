@@ -8,7 +8,8 @@ import {
   CreditCard, 
   Wallet,
   Calendar,
-  LogOut
+  LogOut,
+  GraduationCap
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -29,6 +30,7 @@ const Layout = ({ children }: LayoutProps) => {
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/calendario', label: 'Calendario', icon: Calendar },
     { path: '/alumnos', label: 'Alumnos', icon: Users },
+    { path: '/profesores', label: 'Profesores', icon: GraduationCap },
     { path: '/actividades', label: 'Actividades', icon: Activity },
     { path: '/acceso', label: 'Control de Acceso', icon: DoorOpen },
     { path: '/pagos', label: 'Pagos', icon: CreditCard },

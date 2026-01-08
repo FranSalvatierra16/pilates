@@ -38,10 +38,19 @@ export interface Gasto {
   createdAt: string;
 }
 
+export interface Profesor {
+  id: string;
+  nombre: string;
+  apellido: string;
+  createdAt: string;
+}
+
 export interface Turno {
   id: string;
   diaSemana: number; // 0 = Lunes, 1 = Martes, ..., 6 = Domingo
   hora: string; // HH:MM (ej: "07:30")
+  titulo: string; // Título de la clase
+  profesorId: string; // ID del profesor que da la clase
   alumnoIds: string[]; // Array de IDs de alumnos asignados
   createdAt: string;
 }

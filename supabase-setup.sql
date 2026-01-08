@@ -42,11 +42,21 @@ CREATE TABLE IF NOT EXISTS gastos (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Tabla de Profesores
+CREATE TABLE IF NOT EXISTS profesores (
+  id TEXT PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  apellido TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Tabla de Turnos
 CREATE TABLE IF NOT EXISTS turnos (
   id TEXT PRIMARY KEY,
   dia_semana INTEGER NOT NULL CHECK (dia_semana >= 0 AND dia_semana <= 5),
   hora TEXT NOT NULL,
+  titulo TEXT,
+  profesor_id TEXT REFERENCES profesores(id),
   alumno_ids TEXT[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -57,6 +67,7 @@ CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha);
 CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 CREATE INDEX IF NOT EXISTS idx_turnos_dia_hora ON turnos(dia_semana, hora);
+CREATE INDEX IF NOT EXISTS idx_turnos_profesor_id ON turnos(profesor_id);
 
 -- Habilitar Row Level Security (RLS) - opcional, para producción
 -- ALTER TABLE alumnos ENABLE ROW LEVEL SECURITY;

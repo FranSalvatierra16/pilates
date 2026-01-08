@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Calendario from './pages/Calendario';
 import Alumnos from './pages/Alumnos';
+import Profesores from './pages/Profesores';
 import Actividades from './pages/Actividades';
 import Acceso from './pages/Acceso';
 import Pagos from './pages/Pagos';
@@ -62,6 +63,16 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Alumnos />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profesores"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Profesores />
                 </Layout>
               </ProtectedRoute>
             }

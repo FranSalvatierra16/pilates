@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -26,6 +26,7 @@ const Calendario = () => {
   const semanaActual = getSemanaActual();
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showEstadisticas, setShowEstadisticas] = useState(false);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
 
@@ -317,47 +318,6 @@ const Calendario = () => {
         </div>
       </div>
 
-      {/* Estadísticas de asistencias */}
-      <div className="mb-6 card">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Estadísticas de Asistencia - Semana Actual</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {alumnos.map((alumno) => {
-            const stats = calcularEstadisticas(alumno.id);
-            if (stats.totalClases === 0) return null;
-            return (
-              <div key={alumno.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h3 className="font-semibold text-gray-900 mb-2">
-                  {alumno.nombre} {alumno.apellido}
-                </h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Total clases:</span>
-                    <span className="font-semibold">{stats.totalClases}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-green-600">✓ Asistió:</span>
-                    <span className="font-semibold text-green-600">{stats.clasesAsistidas}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-red-600">✗ No asistió:</span>
-                    <span className="font-semibold text-red-600">{stats.clasesNoAsistidas}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-gray-300">
-                    <span className="text-gray-600">Sin marcar:</span>
-                    <span className="font-semibold text-gray-600">
-                      {stats.totalClases - stats.clasesAsistidas - stats.clasesNoAsistidas}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {alumnos.filter(a => calcularEstadisticas(a.id).totalClases > 0).length === 0 && (
-          <p className="text-gray-500 text-center py-4">No hay alumnos asignados a turnos aún</p>
-        )}
-      </div>
-
       <div className="card overflow-x-auto p-0">
         <div className="min-w-full">
           {/* Header con días de la semana */}
@@ -455,6 +415,62 @@ const Calendario = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Estadísticas de asistencias - Colapsable */}
+      <div className="mt-6">
+        <button
+          onClick={() => setShowEstadisticas(!showEstadisticas)}
+          className="w-full btn-secondary flex items-center justify-between mb-4"
+        >
+          <span className="font-semibold">Estadísticas de Asistencia - Semana Actual</span>
+          {showEstadisticas ? (
+            <ChevronUp className="w-5 h-5" />
+          ) : (
+            <ChevronDown className="w-5 h-5" />
+          )}
+        </button>
+        
+        {showEstadisticas && (
+          <div className="card">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {alumnos.map((alumno) => {
+                const stats = calcularEstadisticas(alumno.id);
+                if (stats.totalClases === 0) return null;
+                return (
+                  <div key={alumno.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h3 className="font-semibold text-gray-900 mb-2">
+                      {alumno.nombre} {alumno.apellido}
+                    </h3>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Total clases:</span>
+                        <span className="font-semibold">{stats.totalClases}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-green-600">✓ Asistió:</span>
+                        <span className="font-semibold text-green-600">{stats.clasesAsistidas}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-red-600">✗ No asistió:</span>
+                        <span className="font-semibold text-red-600">{stats.clasesNoAsistidas}</span>
+                      </div>
+                      <div className="flex justify-between pt-2 border-t border-gray-300">
+                        <span className="text-gray-600">Sin marcar:</span>
+                        <span className="font-semibold text-gray-600">
+                          {stats.totalClases - stats.clasesAsistidas - stats.clasesNoAsistidas}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {alumnos.filter(a => calcularEstadisticas(a.id).totalClases > 0).length === 0 && (
+              <p className="text-gray-500 text-center py-4">No hay alumnos asignados a turnos aún</p>
+            )}
+          </div>
+        )}
       </div>
 
       {showModal && turnoSeleccionado && (

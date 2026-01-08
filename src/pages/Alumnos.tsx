@@ -8,6 +8,8 @@ import { formatCurrency } from '../utils/format';
 
 const Alumnos = () => {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+  const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
+  const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [actividades, setActividades] = useState<Actividad[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -34,6 +36,22 @@ const Alumnos = () => {
     loadData();
   }, []);
 
+  useEffect(() => {
+    // Filtrar alumnos cuando cambia el filtro de búsqueda
+    if (!filtroBusqueda.trim()) {
+      setAlumnosFiltrados(alumnos);
+    } else {
+      const busqueda = filtroBusqueda.toLowerCase().trim();
+      const filtrados = alumnos.filter(alumno => 
+        alumno.nombre.toLowerCase().includes(busqueda) ||
+        alumno.apellido.toLowerCase().includes(busqueda) ||
+        alumno.dni.includes(busqueda) ||
+        `${alumno.nombre} ${alumno.apellido}`.toLowerCase().includes(busqueda)
+      );
+      setAlumnosFiltrados(filtrados);
+    }
+  }, [filtroBusqueda, alumnos]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -42,11 +60,14 @@ const Alumnos = () => {
         storageHybrid.actividades.getAll(),
       ]);
       setAlumnos(alumnosData);
+      setAlumnosFiltrados(alumnosData);
       setActividades(actividadesData);
     } catch (error) {
       console.error('Error loading data:', error);
       // Fallback a localStorage
-      setAlumnos(storage.alumnos.getAll());
+      const alumnosLocal = storage.alumnos.getAll();
+      setAlumnos(alumnosLocal);
+      setAlumnosFiltrados(alumnosLocal);
       setActividades(storage.actividades.getAll());
     } finally {
       setLoading(false);
@@ -57,9 +78,12 @@ const Alumnos = () => {
     try {
       const data = await storageHybrid.alumnos.getAll();
       setAlumnos(data);
+      setAlumnosFiltrados(data);
     } catch (error) {
       console.error('Error loading alumnos:', error);
-      setAlumnos(storage.alumnos.getAll());
+      const alumnosLocal = storage.alumnos.getAll();
+      setAlumnos(alumnosLocal);
+      setAlumnosFiltrados(alumnosLocal);
     }
   };
 
@@ -255,7 +279,42 @@ const Alumnos = () => {
         </button>
       </div>
 
-      {alumnos.length === 0 ? (
+      {/* Campo de búsqueda */}
+      <div className="mb-6">
+        <div className="card">
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={filtroBusqueda}
+              onChange={(e) => setFiltroBusqueda(e.target.value)}
+              placeholder="Buscar por nombre, apellido o DNI..."
+              className="input-field flex-1"
+            />
+            {filtroBusqueda && (
+              <button
+                onClick={() => setFiltroBusqueda('')}
+                className="btn-secondary"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+          {filtroBusqueda && (
+            <p className="text-sm text-gray-500 mt-2">
+              Mostrando {alumnosFiltrados.length} de {alumnos.length} alumnos
+            </p>
+          )}
+        </div>
+      </div>
+
+      {alumnosFiltrados.length === 0 && alumnos.length > 0 ? (
+        <div className="card text-center py-12">
+          <p className="text-gray-500 mb-4">No se encontraron alumnos con ese criterio de búsqueda</p>
+          <button onClick={() => setFiltroBusqueda('')} className="btn-secondary">
+            Limpiar búsqueda
+          </button>
+        </div>
+      ) : alumnos.length === 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500 mb-4">No hay alumnos registrados aún</p>
           <button onClick={() => handleOpenModal()} className="btn-primary">
@@ -295,7 +354,7 @@ const Alumnos = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {alumnos.map((alumno) => {
+                {alumnosFiltrados.map((alumno) => {
                   const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
                   const vencida = tieneFechaVencimiento ? isCuotaVencida(alumno.fechaVencimientoCuota) : false;
                   const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;

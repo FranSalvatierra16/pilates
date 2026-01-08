@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, UserPlus } from 'lucide-react';
+import { Plus, X, UserPlus, Search } from 'lucide-react';
 import { Turno, Alumno, DIAS_SEMANA } from '../types';
 import { storage } from '../utils/storage';
+import { storageHybrid } from '../utils/storage-hybrid';
 
 // Horarios disponibles: 7:30-12:30 cada hora, y 16:00-21:00 cada hora
 const HORARIOS_MANANA = ['07:30', '08:30', '09:30', '10:30', '11:30', '12:30'];
@@ -10,6 +11,8 @@ const HORARIOS_TARDE = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
 const Calendario = () => {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+  const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
+  const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
@@ -19,12 +22,27 @@ const Calendario = () => {
     loadAlumnos();
   }, []);
 
-  const loadTurnos = () => {
-    setTurnos(storage.turnos.getAll());
+  const loadTurnos = async () => {
+    try {
+      const data = await storageHybrid.turnos.getAll();
+      setTurnos(data);
+    } catch (error) {
+      console.error('Error loading turnos:', error);
+      setTurnos(storage.turnos.getAll());
+    }
   };
 
-  const loadAlumnos = () => {
-    setAlumnos(storage.alumnos.getAll());
+  const loadAlumnos = async () => {
+    try {
+      const data = await storageHybrid.alumnos.getAll();
+      setAlumnos(data);
+      setAlumnosFiltrados(data);
+    } catch (error) {
+      console.error('Error loading alumnos:', error);
+      const alumnosLocal = storage.alumnos.getAll();
+      setAlumnos(alumnosLocal);
+      setAlumnosFiltrados(alumnosLocal);
+    }
   };
 
   // Días de la semana: 0 = Lunes, 1 = Martes, ..., 5 = Sábado (sin domingo)
@@ -44,6 +62,8 @@ const Calendario = () => {
   const handleAgregarAlumno = (diaSemana: number, hora: string) => {
     setTurnoSeleccionado({ diaSemana, hora });
     setAlumnoSeleccionado('');
+    setFiltroBusqueda('');
+    setAlumnosFiltrados(alumnos);
     setShowModal(true);
   };
 
@@ -51,51 +71,78 @@ const Calendario = () => {
     setShowModal(false);
     setTurnoSeleccionado(null);
     setAlumnoSeleccionado('');
+    setFiltroBusqueda('');
   };
 
-  const handleGuardarAlumno = () => {
+  useEffect(() => {
+    // Filtrar alumnos cuando cambia el filtro de búsqueda
+    if (!filtroBusqueda.trim()) {
+      setAlumnosFiltrados(alumnos);
+    } else {
+      const busqueda = filtroBusqueda.toLowerCase().trim();
+      const filtrados = alumnos.filter(alumno => 
+        alumno.nombre.toLowerCase().includes(busqueda) ||
+        alumno.apellido.toLowerCase().includes(busqueda) ||
+        alumno.dni.includes(busqueda) ||
+        `${alumno.nombre} ${alumno.apellido}`.toLowerCase().includes(busqueda)
+      );
+      setAlumnosFiltrados(filtrados);
+    }
+  }, [filtroBusqueda, alumnos]);
+
+  const handleGuardarAlumno = async () => {
     if (!turnoSeleccionado || !alumnoSeleccionado) return;
 
-    const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
+    try {
+      const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
 
-    if (turnoExistente) {
-      // Si el turno ya existe, agregar el alumno si no está
-      if (!turnoExistente.alumnoIds.includes(alumnoSeleccionado)) {
-        storage.turnos.update(turnoExistente.id, {
-          alumnoIds: [...turnoExistente.alumnoIds, alumnoSeleccionado],
-        });
+      if (turnoExistente) {
+        // Si el turno ya existe, agregar el alumno si no está
+        if (!turnoExistente.alumnoIds.includes(alumnoSeleccionado)) {
+          await storageHybrid.turnos.update(turnoExistente.id, {
+            alumnoIds: [...turnoExistente.alumnoIds, alumnoSeleccionado],
+          });
+        }
+      } else {
+        // Crear nuevo turno
+        const nuevoTurno: Turno = {
+          id: Date.now().toString(),
+          diaSemana: turnoSeleccionado.diaSemana,
+          hora: turnoSeleccionado.hora,
+          alumnoIds: [alumnoSeleccionado],
+          createdAt: new Date().toISOString(),
+        };
+        await storageHybrid.turnos.add(nuevoTurno);
       }
-    } else {
-      // Crear nuevo turno
-      const nuevoTurno: Turno = {
-        id: Date.now().toString(),
-        diaSemana: turnoSeleccionado.diaSemana,
-        hora: turnoSeleccionado.hora,
-        alumnoIds: [alumnoSeleccionado],
-        createdAt: new Date().toISOString(),
-      };
-      storage.turnos.add(nuevoTurno);
-    }
 
-    loadTurnos();
-    handleCerrarModal();
+      await loadTurnos();
+      handleCerrarModal();
+    } catch (error) {
+      console.error('Error guardando turno:', error);
+      alert('Error al guardar el turno. Por favor intentá nuevamente.');
+    }
   };
 
-  const handleEliminarAlumno = (turnoId: string, alumnoId: string) => {
+  const handleEliminarAlumno = async (turnoId: string, alumnoId: string) => {
     const turno = turnos.find(t => t.id === turnoId);
     if (!turno) return;
 
-    const nuevosAlumnoIds = turno.alumnoIds.filter(id => id !== alumnoId);
-    
-    if (nuevosAlumnoIds.length === 0) {
-      // Si no quedan alumnos, eliminar el turno
-      storage.turnos.delete(turnoId);
-    } else {
-      // Actualizar con los alumnos restantes
-      storage.turnos.update(turnoId, { alumnoIds: nuevosAlumnoIds });
-    }
+    try {
+      const nuevosAlumnoIds = turno.alumnoIds.filter(id => id !== alumnoId);
+      
+      if (nuevosAlumnoIds.length === 0) {
+        // Si no quedan alumnos, eliminar el turno
+        await storageHybrid.turnos.delete(turnoId);
+      } else {
+        // Actualizar con los alumnos restantes
+        await storageHybrid.turnos.update(turnoId, { alumnoIds: nuevosAlumnoIds });
+      }
 
-    loadTurnos();
+      await loadTurnos();
+    } catch (error) {
+      console.error('Error eliminando alumno del turno:', error);
+      alert('Error al eliminar el alumno del turno. Por favor intentá nuevamente.');
+    }
   };
 
   return (
@@ -263,15 +310,29 @@ const Calendario = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Buscar Alumno
+                </label>
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    value={filtroBusqueda}
+                    onChange={(e) => setFiltroBusqueda(e.target.value)}
+                    placeholder="Buscar por nombre, apellido o DNI..."
+                    className="input-field pl-10"
+                  />
+                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Seleccionar Alumno *
                 </label>
                 <select
                   value={alumnoSeleccionado}
                   onChange={(e) => setAlumnoSeleccionado(e.target.value)}
                   className="input-field"
+                  size={Math.min(alumnosFiltrados.length + 1, 8)}
                 >
                   <option value="">Seleccionar alumno</option>
-                  {alumnos.map((alumno) => {
+                  {alumnosFiltrados.map((alumno) => {
                     const turno = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
                     const yaAsignado = turno?.alumnoIds.includes(alumno.id);
                     return (
@@ -280,11 +341,21 @@ const Calendario = () => {
                         value={alumno.id}
                         disabled={yaAsignado}
                       >
-                        {alumno.nombre} {alumno.apellido} {yaAsignado ? '(Ya asignado)' : ''}
+                        {alumno.nombre} {alumno.apellido} - DNI: {alumno.dni} {yaAsignado ? '(Ya asignado)' : ''}
                       </option>
                     );
                   })}
                 </select>
+                {filtroBusqueda && alumnosFiltrados.length === 0 && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    No se encontraron alumnos con ese criterio de búsqueda
+                  </p>
+                )}
+                {filtroBusqueda && alumnosFiltrados.length > 0 && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    Mostrando {alumnosFiltrados.length} de {alumnos.length} alumnos
+                  </p>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button

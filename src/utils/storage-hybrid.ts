@@ -5,7 +5,8 @@ import { storageSupabase } from './storage-supabase';
 // Verificar si Supabase está configurado
 const useSupabase = () => {
   const url = import.meta.env.VITE_SUPABASE_URL;
-  return url && url.length > 0;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return url && url.length > 0 && key && key.length > 0;
 };
 
 // Storage híbrido: usa Supabase si está configurado, sino localStorage

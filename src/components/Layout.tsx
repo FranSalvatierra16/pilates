@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   LayoutDashboard, 
   Users, 
@@ -6,7 +7,8 @@ import {
   DoorOpen, 
   CreditCard, 
   Wallet,
-  Calendar 
+  Calendar,
+  LogOut
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -15,6 +17,13 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -61,6 +70,15 @@ const Layout = ({ children }: LayoutProps) => {
                   );
                 })}
               </div>
+            </div>
+            <div className="flex items-center">
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Salir</span>
+              </button>
             </div>
           </div>
         </div>

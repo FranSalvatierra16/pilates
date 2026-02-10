@@ -71,6 +71,18 @@ export interface EstadisticasAsistencia {
   clasesNoAsistidas: number; // Clases a las que no asistió
 }
 
+// Registro desde link público (formulario IG); luego se agrega como alumno
+export interface RegistroLink {
+  id: string;
+  nombre: string;
+  apellido: string;
+  dni: string;
+  telefono: string;
+  email: string;
+  actividadId: string;
+  createdAt: string;
+}
+
 // Nombres de días de la semana (sin domingo)
 export const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 

@@ -82,6 +82,20 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);
 
+-- Registros desde link público (IG, etc.): se cargan acá y después se agregan como alumnos
+CREATE TABLE IF NOT EXISTS registros_link (
+  id TEXT PRIMARY KEY,
+  nombre TEXT NOT NULL,
+  apellido TEXT NOT NULL,
+  dni TEXT NOT NULL,
+  telefono TEXT NOT NULL,
+  email TEXT NOT NULL,
+  actividad_id TEXT REFERENCES actividades(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_registros_link_created_at ON registros_link(created_at DESC);
+
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_alumnos_dni ON alumnos(dni);
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);

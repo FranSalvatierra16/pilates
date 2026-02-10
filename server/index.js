@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
@@ -202,6 +203,89 @@ app.get('/api/alumnos/findByDni', async (req, res) => {
       clasesAsistidas: r.clases_asistidas ?? 0,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Registros por link público (formulario IG, sin login) ---
+app.post('/api/registro-link', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const b = req.body;
+    const id = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO registros_link (id, nombre, apellido, dni, telefono, email, actividad_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        id,
+        (b.nombre || '').trim(),
+        (b.apellido || '').trim(),
+        (b.dni || '').trim(),
+        (b.telefono || '').trim(),
+        (b.email || '').trim(),
+        b.actividadId || null,
+      ]
+    );
+    res.status(201).json({ ok: true, id });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/registro-link', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { rows } = await db.query('SELECT * FROM registros_link ORDER BY created_at DESC');
+    res.json(rows.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      apellido: r.apellido,
+      dni: r.dni,
+      telefono: r.telefono,
+      email: r.email,
+      actividadId: r.actividad_id ?? '',
+      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+    })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/registro-link/:id/agregar', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { id } = req.params;
+    const { rows } = await db.query('SELECT * FROM registros_link WHERE id = $1', [id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Registro no encontrado' });
+    const r = rows[0];
+    const alumnoId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await db.query(
+      `INSERT INTO alumnos (id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, 0, $8)`,
+      [alumnoId, r.nombre, r.apellido, r.dni, r.telefono, r.email, r.actividad_id, now]
+    );
+    await db.query('DELETE FROM registros_link WHERE id = $1', [id]);
+    res.json({ ok: true, alumnoId });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/registro-link/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    await db.query('DELETE FROM registros_link WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

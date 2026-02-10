@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, RegistroLink } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -28,6 +28,22 @@ export const storageApi = {
       const data = await request<Alumno | null>(`/api/alumnos/findByDni?dni=${encodeURIComponent(dni)}`);
       return data ?? undefined;
     },
+  },
+  registroLink: {
+    getAll: (): Promise<RegistroLink[]> => request<RegistroLink[]>('/api/registro-link'),
+    submit: (data: {
+      nombre: string;
+      apellido: string;
+      dni: string;
+      telefono: string;
+      email: string;
+      actividadId?: string;
+    }): Promise<{ ok: boolean; id: string }> =>
+      request('/api/registro-link', { method: 'POST', body: JSON.stringify(data) }),
+    agregarAlumno: (id: string): Promise<{ ok: boolean; alumnoId: string }> =>
+      request(`/api/registro-link/${id}/agregar`, { method: 'POST' }),
+    delete: (id: string): Promise<void> =>
+      request(`/api/registro-link/${id}`, { method: 'DELETE' }),
   },
   actividades: {
     getAll: (): Promise<Actividad[]> => request<Actividad[]>('/api/actividades'),

@@ -2,9 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import RegistroLink from './pages/RegistroLink';
 import Dashboard from './pages/Dashboard';
 import Calendario from './pages/Calendario';
 import Alumnos from './pages/Alumnos';
+import RegistrosPorLink from './pages/RegistrosPorLink';
 import Profesores from './pages/Profesores';
 import Actividades from './pages/Actividades';
 import Acceso from './pages/Acceso';
@@ -27,6 +29,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/registro" element={<RegistroLink />} />
           <Route
             path="/"
             element={
@@ -63,6 +66,16 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Alumnos />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/registros-link"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <RegistrosPorLink />
                 </Layout>
               </ProtectedRoute>
             }

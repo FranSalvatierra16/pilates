@@ -8,7 +8,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const useApi = () => import.meta.env.VITE_USE_API === 'true';
+const useApi = () => {
+  if (import.meta.env.VITE_USE_API === 'false') return false;
+  if (import.meta.env.VITE_USE_API === 'true') return true;
+  return import.meta.env.PROD;
+};
 const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {

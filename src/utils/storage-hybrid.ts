@@ -3,7 +3,12 @@ import { storage } from './storage';
 import { storageSupabase } from './storage-supabase';
 import { storageApi } from './storage-api';
 
-const useApi = () => import.meta.env.VITE_USE_API === 'true';
+// En producción usamos la API por defecto (así funciona aunque Docker no reciba VITE_USE_API)
+const useApi = () => {
+  if (import.meta.env.VITE_USE_API === 'false') return false;
+  if (import.meta.env.VITE_USE_API === 'true') return true;
+  return import.meta.env.PROD;
+};
 
 const useSupabase = () => {
   if (useApi()) return false;

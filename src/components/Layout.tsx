@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -9,8 +10,17 @@ import {
   Wallet,
   Calendar,
   LogOut,
-  GraduationCap
+  GraduationCap,
+  Database,
+  AlertCircle
 } from 'lucide-react';
+
+const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+const useApi = () => {
+  if (import.meta.env.VITE_USE_API === 'false') return false;
+  if (import.meta.env.VITE_USE_API === 'true') return true;
+  return import.meta.env.PROD;
+};
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -20,6 +30,18 @@ const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+
+  useEffect(() => {
+    if (!useApi()) {
+      setDbStatus('disconnected');
+      return;
+    }
+    fetch(getApiBase() + '/api/health')
+      .then((r) => r.json())
+      .then((d) => setDbStatus(d.db ? 'connected' : 'disconnected'))
+      .catch(() => setDbStatus('disconnected'));
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -117,6 +139,34 @@ const Layout = ({ children }: LayoutProps) => {
           {children}
         </div>
       </main>
+
+      {!useApi() && (
+        <div className="fixed bottom-2 left-2 right-2 sm:left-auto sm:right-4 sm:max-w-xs text-center text-xs text-amber-800 bg-amber-100/95 px-3 py-2 rounded-lg shadow">
+          ⚠️ Modo local: los datos solo se guardan en este navegador. En Railway agregá VITE_USE_API=true y hacé un nuevo deploy.
+        </div>
+      )}
+
+      {useApi() && dbStatus !== 'checking' && (
+        <div
+          className={`fixed bottom-2 left-2 right-2 sm:left-auto sm:right-4 sm:max-w-xs flex items-center gap-2 px-3 py-2 rounded-lg shadow text-xs ${
+            dbStatus === 'connected'
+              ? 'text-green-800 bg-green-100/95'
+              : 'text-red-800 bg-red-100/95'
+          }`}
+        >
+          {dbStatus === 'connected' ? (
+            <>
+              <Database className="w-4 h-4 flex-shrink-0" />
+              <span>Base de datos conectada. Los datos se sincronizan en todos los dispositivos.</span>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>Sin conexión a la base de datos. Revisá DATABASE_URL en Railway y los logs del servidor.</span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };

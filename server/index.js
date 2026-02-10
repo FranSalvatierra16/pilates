@@ -711,8 +711,11 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Health
-app.get('/api/health', (req, res) => res.json({ ok: true, db: !!pool }));
+// Health (comprueba si hay DATABASE_URL y conexión)
+app.get('/api/health', async (req, res) => {
+  const db = await getPool();
+  res.json({ ok: true, db: !!db });
+});
 
 // Servir frontend estático (después de build)
 const distPath = join(__dirname, '..', 'dist');
@@ -731,6 +734,7 @@ if (existsSync(distPath)) {
 function main() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en 0.0.0.0:${PORT}`);
+    console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'definida' : 'NO DEFINIDA');
     initSchema().catch((err) => console.error('Error al inicializar esquema:', err.message));
   });
   server.on('error', (err) => {

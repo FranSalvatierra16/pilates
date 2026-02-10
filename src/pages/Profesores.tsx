@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, X, Save } from 'lucide-react';
 import { Profesor } from '../types';
-import { storage } from '../utils/storage';
+import { storageHybrid } from '../utils/storage-hybrid';
 
 const Profesores = () => {
   const [profesores, setProfesores] = useState<Profesor[]>([]);
@@ -20,8 +20,7 @@ const Profesores = () => {
   const loadProfesores = async () => {
     try {
       setLoading(true);
-      // Por ahora usamos localStorage, después se puede migrar a Supabase
-      const data = storage.profesores.getAll();
+      const data = await storageHybrid.profesores.getAll();
       setProfesores(data);
     } catch (error) {
       console.error('Error loading profesores:', error);
@@ -61,7 +60,7 @@ const Profesores = () => {
     
     try {
       if (editingProfesor) {
-        storage.profesores.update(editingProfesor.id, {
+        await storageHybrid.profesores.update(editingProfesor.id, {
           nombre: formData.nombre,
           apellido: formData.apellido,
         });
@@ -72,9 +71,9 @@ const Profesores = () => {
           apellido: formData.apellido,
           createdAt: new Date().toISOString(),
         };
-        storage.profesores.add(nuevoProfesor);
+        await storageHybrid.profesores.add(nuevoProfesor);
       }
-      
+
       await loadProfesores();
       handleCloseModal();
     } catch (error) {
@@ -86,7 +85,7 @@ const Profesores = () => {
   const handleDelete = async (id: string) => {
     if (confirm('¿Estás seguro de que querés eliminar este profesor?')) {
       try {
-        storage.profesores.delete(id);
+        await storageHybrid.profesores.delete(id);
         await loadProfesores();
       } catch (error) {
         console.error('Error deleting profesor:', error);

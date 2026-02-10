@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Activity, DollarSign, AlertTriangle } from 'lucide-react';
-import { storage } from '../utils/storage';
+import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { isCuotaVencida } from '../utils/date';
 
@@ -14,26 +14,30 @@ const Dashboard = () => {
   });
 
   useEffect(() => {
-    const alumnos = storage.alumnos.getAll();
-    const actividades = storage.actividades.getAll();
-    const pagos = storage.pagos.getAll();
-    
-    const cuotasVencidas = alumnos.filter(a => isCuotaVencida(a.fechaVencimientoCuota));
-    
-    const totalEfectivo = pagos
-      .filter(p => p.metodoPago === 'efectivo')
-      .reduce((sum, p) => sum + p.monto, 0);
-    
-    const totalTransferencia = pagos
-      .filter(p => p.metodoPago === 'transferencia')
-      .reduce((sum, p) => sum + p.monto, 0);
-    
-    setStats({
-      totalAlumnos: alumnos.length,
-      totalActividades: actividades.length,
-      cuotasVencidas: cuotasVencidas.length,
-      totalCaja: totalEfectivo + totalTransferencia,
-    });
+    (async () => {
+      const [alumnos, actividades, pagos] = await Promise.all([
+        storageHybrid.alumnos.getAll(),
+        storageHybrid.actividades.getAll(),
+        storageHybrid.pagos.getAll(),
+      ]);
+
+      const cuotasVencidas = alumnos.filter(a => isCuotaVencida(a.fechaVencimientoCuota));
+
+      const totalEfectivo = pagos
+        .filter(p => p.metodoPago === 'efectivo')
+        .reduce((sum, p) => sum + p.monto, 0);
+
+      const totalTransferencia = pagos
+        .filter(p => p.metodoPago === 'transferencia')
+        .reduce((sum, p) => sum + p.monto, 0);
+
+      setStats({
+        totalAlumnos: alumnos.length,
+        totalActividades: actividades.length,
+        cuotasVencidas: cuotasVencidas.length,
+        totalCaja: totalEfectivo + totalTransferencia,
+      });
+    })();
   }, []);
 
   const cards = [

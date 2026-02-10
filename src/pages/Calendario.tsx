@@ -48,10 +48,12 @@ const Calendario = () => {
   const popupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    loadTurnos();
-    loadAlumnos();
-    loadProfesores();
-    loadAsistencias();
+    (async () => {
+      await loadTurnos();
+      await loadAlumnos();
+      await loadProfesores();
+      await loadAsistencias();
+    })();
   }, [semanaActual]);
 
   const loadTurnos = async () => {
@@ -77,13 +79,13 @@ const Calendario = () => {
     }
   };
 
-  const loadProfesores = () => {
-    const data = storage.profesores.getAll();
+  const loadProfesores = async () => {
+    const data = await storageHybrid.profesores.getAll();
     setProfesores(data);
   };
 
-  const loadAsistencias = () => {
-    const asistenciasSemana = storage.asistencias.getBySemana(semanaActual);
+  const loadAsistencias = async () => {
+    const asistenciasSemana = await storageHybrid.asistencias.getBySemana(semanaActual);
     setAsistencias(asistenciasSemana);
   };
 
@@ -321,22 +323,18 @@ const Calendario = () => {
     return asistencia?.estado || null;
   };
 
-  const handleMarcarAsistencia = (turnoId: string, alumnoId: string, estado: 'asistio' | 'no_asistio') => {
+  const handleMarcarAsistencia = async (turnoId: string, alumnoId: string, estado: 'asistio' | 'no_asistio') => {
     const asistenciaExistente = asistencias.find(
       a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaActual
     );
 
     if (asistenciaExistente) {
-      // Actualizar asistencia existente
       if (asistenciaExistente.estado === estado) {
-        // Si ya está marcado con ese estado, desmarcarlo (volver a null)
-        storage.asistencias.update(asistenciaExistente.id, { estado: null });
+        await storageHybrid.asistencias.update(asistenciaExistente.id, { estado: null });
       } else {
-        // Cambiar el estado
-        storage.asistencias.update(asistenciaExistente.id, { estado });
+        await storageHybrid.asistencias.update(asistenciaExistente.id, { estado });
       }
     } else {
-      // Crear nueva asistencia
       const nuevaAsistencia: Asistencia = {
         id: Date.now().toString(),
         turnoId,
@@ -345,16 +343,16 @@ const Calendario = () => {
         semana: semanaActual,
         createdAt: new Date().toISOString(),
       };
-      storage.asistencias.add(nuevaAsistencia);
+      await storageHybrid.asistencias.add(nuevaAsistencia);
     }
 
-    loadAsistencias();
+    await loadAsistencias();
   };
 
-  const handleReiniciarSemana = () => {
+  const handleReiniciarSemana = async () => {
     if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados a gris.')) {
-      storage.asistencias.deleteBySemana(semanaActual);
-      loadAsistencias();
+      await storageHybrid.asistencias.deleteBySemana(semanaActual);
+      await loadAsistencias();
     }
   };
 

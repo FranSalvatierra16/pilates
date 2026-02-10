@@ -1,0 +1,9 @@
+# Configuración para desplegar en Railway
+# https://docs.railway.com/config-as-code/reference
+
+[build]
+builder = "RAILPACK"
+buildCommand = "npm run build"
+
+[deploy]
+startCommand = "npm run start"

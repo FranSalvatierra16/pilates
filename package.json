@@ -5,9 +5,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "serve dist -s -l ${PORT:-3000}"
   },
   "dependencies": {
+    "serve": "^14.2.4",
     "@supabase/supabase-js": "^2.90.0",
     "date-fns": "^2.30.0",
     "lucide-react": "^0.294.0",

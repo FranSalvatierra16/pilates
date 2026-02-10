@@ -9,7 +9,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const CORRECT_USERNAME = 'Savia';
-const CORRECT_PASSWORD = '1234';
+const CORRECT_PASSWORD = '2286';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {

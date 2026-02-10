@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
+import bcrypt from 'bcryptjs';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -31,6 +32,17 @@ async function getPool() {
   return pool;
 }
 
+async function seedUsuarioInicial(db) {
+  const { rows } = await db.query('SELECT id FROM usuarios WHERE usuario = $1', ['Savia']);
+  if (rows.length > 0) return;
+  const claveHash = await bcrypt.hash('2286', 10);
+  await db.query(
+    'INSERT INTO usuarios (id, usuario, clave_hash) VALUES ($1, $2, $3)',
+    ['savia-default', 'Savia', claveHash]
+  );
+  console.log('Usuario inicial Savia creado.');
+}
+
 async function initSchema() {
   const db = await getPool();
   if (!db) return;
@@ -38,6 +50,7 @@ async function initSchema() {
     const schemaPath = join(__dirname, 'schema.sql');
     const schema = readFileSync(schemaPath, 'utf8');
     await db.query(schema);
+    await seedUsuarioInicial(db);
     console.log('Esquema de base de datos listo.');
   } catch (err) {
     console.error('Error al inicializar esquema:', err.message);
@@ -651,6 +664,24 @@ app.delete('/api/asistencias/by-semana/:semana', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Auth login (contra la BDD)
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ ok: false, error: 'Base de datos no configurada' });
+    const { usuario, password } = req.body || {};
+    if (!usuario || !password) return res.status(400).json({ ok: false, error: 'Faltan usuario o contraseña' });
+    const { rows } = await db.query('SELECT id, clave_hash FROM usuarios WHERE usuario = $1', [usuario.trim()]);
+    if (rows.length === 0) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
+    const valid = await bcrypt.compare(password, rows[0].clave_hash);
+    if (!valid) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 

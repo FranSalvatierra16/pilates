@@ -9,11 +9,12 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (login(username, password)) {
+    const ok = await login(username, password);
+    if (ok) {
       navigate('/dashboard');
     } else {
       setError('Usuario o contraseña incorrectos');

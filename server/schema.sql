@@ -72,6 +72,16 @@ CREATE TABLE IF NOT EXISTS asistencias (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Usuarios (login)
+CREATE TABLE IF NOT EXISTS usuarios (
+  id TEXT PRIMARY KEY,
+  usuario TEXT NOT NULL UNIQUE,
+  clave_hash TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);
+
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_alumnos_dni ON alumnos(dni);
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);

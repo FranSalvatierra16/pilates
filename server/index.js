@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -663,16 +663,22 @@ app.get('/api/health', (req, res) => res.json({ ok: true, db: !!pool }));
 
 // Servir frontend estático (después de build)
 const distPath = join(__dirname, '..', 'dist');
-app.use(express.static(distPath));
-app.get('*', (req, res) => {
-  res.sendFile(join(distPath, 'index.html'));
-});
+if (existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(join(distPath, 'index.html'), (err) => {
+      if (err) res.status(500).send('Error cargando la aplicación.');
+    });
+  });
+} else {
+  app.get('*', (req, res) => res.send('Frontend no generado. Ejecutá "npm run build" antes de iniciar.'));
+}
 
-// Arranque
+// Arranque: escuchar en 0.0.0.0 para que Railway pueda conectar
 async function main() {
   await initSchema();
-  app.listen(PORT, () => {
-    console.log(`Servidor en http://localhost:${PORT}`);
+  app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`Servidor en http://0.0.0.0:${PORT}`);
   });
 }
 

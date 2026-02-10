@@ -668,15 +668,12 @@ if (existsSync(distPath)) {
   app.get('*', (req, res) => res.send('Frontend no generado. Ejecutá "npm run build" antes de iniciar.'));
 }
 
-// Arranque: escuchar en 0.0.0.0 para que Railway pueda conectar
-async function main() {
-  await initSchema();
+// Arranque: escuchar ANTES de initSchema para que Railway reciba el health check de inmediato
+function main() {
   app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Servidor en http://0.0.0.0:${PORT}`);
+    initSchema().catch((err) => console.error('Error al inicializar esquema:', err.message));
   });
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main();

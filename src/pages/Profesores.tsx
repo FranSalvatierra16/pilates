@@ -76,9 +76,11 @@ const Profesores = () => {
 
       await loadProfesores();
       handleCloseModal();
+      alert(editingProfesor ? 'Profesor actualizado correctamente.' : 'Profesor guardado correctamente. Se sincroniza en todos los dispositivos.');
     } catch (error) {
       console.error('Error saving profesor:', error);
-      alert('Error al guardar el profesor. Por favor intentá nuevamente.');
+      const msg = error instanceof Error ? error.message : 'Error de conexión';
+      alert(`Error al guardar el profesor: ${msg}. Revisá la conexión e intentá de nuevo.`);
     }
   };
 

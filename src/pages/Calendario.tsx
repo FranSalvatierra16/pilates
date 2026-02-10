@@ -4,8 +4,8 @@ import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profeso
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 
-// Horarios disponibles: 7:30-12:30 cada hora, y 16:00-21:00 cada hora
-const HORARIOS_MANANA = ['07:30', '08:30', '09:30', '10:30', '11:30', '12:30'];
+// Horarios disponibles: 7:00-12:00 cada hora, y 16:00-21:00 cada hora
+const HORARIOS_MANANA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
 const HORARIOS_TARDE = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
 
 // Función para obtener el número de semana (YYYY-WW)
@@ -475,7 +475,7 @@ const Calendario = () => {
           {/* Horarios mañana */}
           <div className="border-b border-gray-300">
             <div className="bg-gray-50 px-3 py-2 font-semibold text-gray-700 text-sm">
-              Mañana (7:30 - 12:30)
+              Mañana (7:00 - 12:00)
             </div>
             {HORARIOS_MANANA.map((hora) => (
               <div key={hora} className="grid grid-cols-8 border-b border-gray-200 hover:bg-gray-50">

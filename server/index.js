@@ -25,7 +25,7 @@ app.use('/api', (req, res, next) => {
 // Asegurar que las tablas existan antes de responder (evita "a veces vacío" en distintos dispositivos)
 app.use('/api', async (req, res, next) => {
   if (req.path === '/health') return next();
-  if (!process.env.DATABASE_URL) return next();
+  if (!getDatabaseUrl()) return next();
   try {
     await ensureSchemaReady();
     next();
@@ -38,11 +38,20 @@ app.use('/api', async (req, res, next) => {
 let pool = null;
 let schemaReady = null;
 
+function getDatabaseUrl() {
+  return (
+    process.env.DATABASE_URL ||
+    process.env.DATABASE_PUBLIC_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_CONNECTION_STRING
+  );
+}
+
 async function getPool() {
   if (pool) return pool;
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = getDatabaseUrl();
   if (!databaseUrl) {
-    console.warn('DATABASE_URL no definida. La API no tendrá base de datos.');
+    console.warn('Ninguna variable de base de datos definida (DATABASE_URL, DATABASE_PUBLIC_URL, POSTGRES_URL). Revisá Railway → Variables.');
     return null;
   }
   pool = new pg.Pool({
@@ -734,7 +743,7 @@ if (existsSync(distPath)) {
 function main() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en 0.0.0.0:${PORT}`);
-    console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'definida' : 'NO DEFINIDA');
+    console.log('Base de datos:', getDatabaseUrl() ? 'URL definida' : 'NO DEFINIDA (agregá DATABASE_URL en Railway)');
     initSchema().catch((err) => console.error('Error al inicializar esquema:', err.message));
   });
   server.on('error', (err) => {

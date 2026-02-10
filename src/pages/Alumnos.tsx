@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit, Trash2, X, Save, CreditCard } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad } from '../types';
 import { storage } from '../utils/storage';
@@ -11,6 +11,7 @@ const Alumnos = () => {
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [filtroVencimiento, setFiltroVencimiento] = useState<'todos' | 'mes-vencido' | 'vence-hoy'>('todos');
+  const [ordenarPorVencimientoCercano, setOrdenarPorVencimientoCercano] = useState(false);
   const [actividades, setActividades] = useState<Actividad[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -61,6 +62,19 @@ const Alumnos = () => {
     }
     setAlumnosFiltrados(filtrados);
   }, [filtroBusqueda, filtroVencimiento, alumnos]);
+
+  // Ordenar por vencimiento más cercano y ocultar vencidos (solo cuando el botón está activo)
+  const alumnosAMostrar = useMemo(() => {
+    if (!ordenarPorVencimientoCercano) return alumnosFiltrados;
+    const sinVencidos = alumnosFiltrados.filter(
+      (a) => !a.fechaVencimientoCuota || a.fechaVencimientoCuota === '' || !isCuotaVencida(a.fechaVencimientoCuota)
+    );
+    return [...sinVencidos].sort((a, b) => {
+      const fa = a.fechaVencimientoCuota && a.fechaVencimientoCuota !== '' ? a.fechaVencimientoCuota : '9999-12-31';
+      const fb = b.fechaVencimientoCuota && b.fechaVencimientoCuota !== '' ? b.fechaVencimientoCuota : '9999-12-31';
+      return fa.localeCompare(fb);
+    });
+  }, [alumnosFiltrados, ordenarPorVencimientoCercano]);
 
   const loadData = async () => {
     setLoading(true);
@@ -344,22 +358,35 @@ const Alumnos = () => {
             >
               Se vencen hoy
             </button>
+            <button
+              type="button"
+              onClick={() => setOrdenarPorVencimientoCercano((v) => !v)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                ordenarPorVencimientoCercano
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title="Ordenar por vencimiento más cercano (los vencidos no se muestran)"
+            >
+              Por vencimiento cercano
+            </button>
           </div>
-          {(filtroBusqueda || filtroVencimiento !== 'todos') && (
+          {(filtroBusqueda || filtroVencimiento !== 'todos' || ordenarPorVencimientoCercano) && (
             <p className="text-sm text-gray-500 mt-2">
-              Mostrando {alumnosFiltrados.length} de {alumnos.length} alumnos
+              Mostrando {alumnosAMostrar.length} de {alumnos.length} alumnos
+              {ordenarPorVencimientoCercano && alumnosAMostrar.length < alumnosFiltrados.length && ' (sin vencidos)'}
             </p>
           )}
         </div>
       </div>
 
-      {alumnosFiltrados.length === 0 && alumnos.length > 0 ? (
+      {alumnosAMostrar.length === 0 && alumnos.length > 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500 mb-4">
             No hay alumnos que coincidan con el filtro{filtroVencimiento !== 'todos' ? ' de vencimiento' : ''}.
           </p>
           <button
-            onClick={() => { setFiltroBusqueda(''); setFiltroVencimiento('todos'); }}
+            onClick={() => { setFiltroBusqueda(''); setFiltroVencimiento('todos'); setOrdenarPorVencimientoCercano(false); }}
             className="btn-secondary"
           >
             Ver todos
@@ -405,7 +432,7 @@ const Alumnos = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {alumnosFiltrados.map((alumno) => {
+                {alumnosAMostrar.map((alumno) => {
                   const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
                   const vencida = tieneFechaVencimiento ? isCuotaVencida(alumno.fechaVencimientoCuota) : false;
                   const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;

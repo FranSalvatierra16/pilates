@@ -10,6 +10,7 @@ const Alumnos = () => {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
+  const [filtroVencimiento, setFiltroVencimiento] = useState<'todos' | 'mes-vencido' | 'vence-hoy'>('todos');
   const [actividades, setActividades] = useState<Actividad[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -37,20 +38,29 @@ const Alumnos = () => {
   }, []);
 
   useEffect(() => {
-    // Filtrar alumnos cuando cambia el filtro de búsqueda
-    if (!filtroBusqueda.trim()) {
-      setAlumnosFiltrados(alumnos);
-    } else {
+    // Filtrar por búsqueda
+    let filtrados = alumnos;
+    if (filtroBusqueda.trim()) {
       const busqueda = filtroBusqueda.toLowerCase().trim();
-      const filtrados = alumnos.filter(alumno => 
+      filtrados = alumnos.filter(alumno =>
         alumno.nombre.toLowerCase().includes(busqueda) ||
         alumno.apellido.toLowerCase().includes(busqueda) ||
         alumno.dni.includes(busqueda) ||
         `${alumno.nombre} ${alumno.apellido}`.toLowerCase().includes(busqueda)
       );
-      setAlumnosFiltrados(filtrados);
     }
-  }, [filtroBusqueda, alumnos]);
+    // Filtrar por vencimiento
+    if (filtroVencimiento === 'mes-vencido') {
+      filtrados = filtrados.filter(alumno =>
+        alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '' && isCuotaVencida(alumno.fechaVencimientoCuota)
+      );
+    } else if (filtroVencimiento === 'vence-hoy') {
+      filtrados = filtrados.filter(alumno =>
+        alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '' && isCuotaVenceHoy(alumno.fechaVencimientoCuota)
+      );
+    }
+    setAlumnosFiltrados(filtrados);
+  }, [filtroBusqueda, filtroVencimiento, alumnos]);
 
   const loadData = async () => {
     setLoading(true);
@@ -279,16 +289,16 @@ const Alumnos = () => {
         </button>
       </div>
 
-      {/* Campo de búsqueda */}
+      {/* Búsqueda y filtros por vencimiento */}
       <div className="mb-6">
         <div className="card">
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
             <input
               type="text"
               value={filtroBusqueda}
               onChange={(e) => setFiltroBusqueda(e.target.value)}
               placeholder="Buscar por nombre, apellido o DNI..."
-              className="input-field flex-1"
+              className="input-field flex-1 min-w-[200px]"
             />
             {filtroBusqueda && (
               <button
@@ -299,7 +309,43 @@ const Alumnos = () => {
               </button>
             )}
           </div>
-          {filtroBusqueda && (
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">
+            <span className="text-sm text-gray-500 self-center mr-1">Vencimiento:</span>
+            <button
+              type="button"
+              onClick={() => setFiltroVencimiento('todos')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroVencimiento === 'todos'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroVencimiento('mes-vencido')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroVencimiento === 'mes-vencido'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Mes vencido
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroVencimiento('vence-hoy')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroVencimiento === 'vence-hoy'
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Se vencen hoy
+            </button>
+          </div>
+          {(filtroBusqueda || filtroVencimiento !== 'todos') && (
             <p className="text-sm text-gray-500 mt-2">
               Mostrando {alumnosFiltrados.length} de {alumnos.length} alumnos
             </p>
@@ -309,9 +355,14 @@ const Alumnos = () => {
 
       {alumnosFiltrados.length === 0 && alumnos.length > 0 ? (
         <div className="card text-center py-12">
-          <p className="text-gray-500 mb-4">No se encontraron alumnos con ese criterio de búsqueda</p>
-          <button onClick={() => setFiltroBusqueda('')} className="btn-secondary">
-            Limpiar búsqueda
+          <p className="text-gray-500 mb-4">
+            No hay alumnos que coincidan con el filtro{filtroVencimiento !== 'todos' ? ' de vencimiento' : ''}.
+          </p>
+          <button
+            onClick={() => { setFiltroBusqueda(''); setFiltroVencimiento('todos'); }}
+            className="btn-secondary"
+          >
+            Ver todos
           </button>
         </div>
       ) : alumnos.length === 0 ? (

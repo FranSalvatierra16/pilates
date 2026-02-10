@@ -38,8 +38,8 @@ const Layout = ({ children }: LayoutProps) => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50">
-      <nav className="bg-white shadow-lg border-b border-primary-200">
+    <div className="min-h-screen">
+      <nav className="bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
@@ -113,7 +113,9 @@ const Layout = ({ children }: LayoutProps) => {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
+        <div className="relative">
+          {children}
+        </div>
       </main>
     </div>
   );

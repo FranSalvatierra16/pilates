@@ -4,7 +4,12 @@
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply text-gray-900 antialiased;
+    background-image: url('/saviaFondo.png');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    min-height: 100vh;
   }
 }
 
@@ -26,7 +31,7 @@
   }
   
   .card {
-    @apply bg-white rounded-xl shadow-lg p-6;
+    @apply bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-6;
   }
 }
 

@@ -7,8 +7,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.PORT) || 3000;
+console.log('PORT desde env:', process.env.PORT, '-> escuchando en', PORT);
+
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -668,11 +670,15 @@ if (existsSync(distPath)) {
   app.get('*', (req, res) => res.send('Frontend no generado. Ejecutá "npm run build" antes de iniciar.'));
 }
 
-// Arranque: escuchar ANTES de initSchema para que Railway reciba el health check de inmediato
+// Arranque: escuchar en 0.0.0.0 para que el proxy de Railway pueda conectar
 function main() {
-  app.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`Servidor en http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor escuchando en 0.0.0.0:${PORT}`);
     initSchema().catch((err) => console.error('Error al inicializar esquema:', err.message));
+  });
+  server.on('error', (err) => {
+    console.error('Error al iniciar servidor:', err);
+    process.exit(1);
   });
 }
 

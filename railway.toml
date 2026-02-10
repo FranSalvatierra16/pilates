@@ -2,8 +2,7 @@
 # https://docs.railway.com/config-as-code/reference
 
 [build]
-builder = "RAILPACK"
-buildCommand = "npm run build"
+builder = "DOCKERFILE"
 
 [deploy]
 startCommand = "node server/index.js"

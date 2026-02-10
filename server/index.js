@@ -16,7 +16,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Evitar que el navegador cachee respuestas de la API (mismo dato en todos los dispositivos)
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  next();
+});
+
+// Asegurar que las tablas existan antes de responder (evita "a veces vacío" en distintos dispositivos)
+app.use('/api', async (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (!process.env.DATABASE_URL) return next();
+  try {
+    await ensureSchemaReady();
+    next();
+  } catch (err) {
+    console.error('Schema no listo:', err.message);
+    res.status(503).json({ error: 'Base de datos en preparación. Reintentá en unos segundos.' });
+  }
+});
+
 let pool = null;
+let schemaReady = null;
 
 async function getPool() {
   if (pool) return pool;
@@ -30,6 +50,11 @@ async function getPool() {
     ssl: databaseUrl.includes('railway') ? { rejectUnauthorized: false } : undefined,
   });
   return pool;
+}
+
+function ensureSchemaReady() {
+  if (!schemaReady) schemaReady = initSchema();
+  return schemaReady;
 }
 
 async function seedUsuarioInicial(db) {
@@ -54,6 +79,7 @@ async function initSchema() {
     console.log('Esquema de base de datos listo.');
   } catch (err) {
     console.error('Error al inicializar esquema:', err.message);
+    throw err;
   }
 }
 

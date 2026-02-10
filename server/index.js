@@ -35,13 +35,7 @@ async function initSchema() {
   try {
     const schemaPath = join(__dirname, 'schema.sql');
     const schema = readFileSync(schemaPath, 'utf8');
-    const statements = schema
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith('--'));
-    for (const stmt of statements) {
-      await db.query(stmt + ';');
-    }
+    await db.query(schema);
     console.log('Esquema de base de datos listo.');
   } catch (err) {
     console.error('Error al inicializar esquema:', err.message);

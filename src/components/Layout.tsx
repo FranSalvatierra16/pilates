@@ -12,8 +12,7 @@ import {
   LogOut,
   GraduationCap,
   Database,
-  AlertCircle,
-  Link2
+  AlertCircle
 } from 'lucide-react';
 
 const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');

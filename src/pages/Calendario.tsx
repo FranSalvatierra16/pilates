@@ -858,6 +858,12 @@ const Calendario = () => {
             <p className="text-xs text-gray-500 mt-1">
               Turno actual: {DIAS_SEMANA[showPopupAlumno.diaSemana]} {showPopupAlumno.hora}
             </p>
+            {(showPopupAlumno.alumno.descripcion ?? '').trim() ? (
+              <div className="mt-2 pt-2 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-500 mb-0.5">Notas</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{showPopupAlumno.alumno.descripcion}</p>
+              </div>
+            ) : null}
           </div>
 
           {!showMoverAlumno ? (

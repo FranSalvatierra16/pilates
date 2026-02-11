@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -16,6 +16,9 @@ const Alumnos = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showModalPago, setShowModalPago] = useState(false);
+  const [showModalDescripcion, setShowModalDescripcion] = useState(false);
+  const [alumnoDescripcion, setAlumnoDescripcion] = useState<Alumno | null>(null);
+  const [textoDescripcion, setTextoDescripcion] = useState('');
   const [editingAlumno, setEditingAlumno] = useState<Alumno | null>(null);
   const [alumnoParaPagar, setAlumnoParaPagar] = useState<Alumno | null>(null);
   const [formData, setFormData] = useState({
@@ -279,6 +282,26 @@ const Alumnos = () => {
     return actividad ? actividad.precio : 0;
   };
 
+  const handleOpenDescripcion = (alumno: Alumno) => {
+    setAlumnoDescripcion(alumno);
+    setTextoDescripcion(alumno.descripcion ?? '');
+    setShowModalDescripcion(true);
+  };
+
+  const handleGuardarDescripcion = async () => {
+    if (!alumnoDescripcion) return;
+    try {
+      await storageHybrid.alumnos.update(alumnoDescripcion.id, { descripcion: textoDescripcion });
+      setAlumnos(prev => prev.map(a => a.id === alumnoDescripcion.id ? { ...a, descripcion: textoDescripcion } : a));
+      setAlumnosFiltrados(prev => prev.map(a => a.id === alumnoDescripcion.id ? { ...a, descripcion: textoDescripcion } : a));
+      setShowModalDescripcion(false);
+      setAlumnoDescripcion(null);
+    } catch (e) {
+      console.error(e);
+      alert('Error al guardar la descripción.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -516,7 +539,14 @@ const Alumnos = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
+                          <button
+                            onClick={() => handleOpenDescripcion(alumno)}
+                            className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="Descripción / Notas"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handlePagarCuota(alumno)}
                             className="text-green-600 hover:text-green-900"
@@ -790,6 +820,49 @@ const Alumnos = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Descripción / Notas */}
+      {showModalDescripcion && alumnoDescripcion && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-amber-500" />
+                Descripción / Notas — {alumnoDescripcion.nombre} {alumnoDescripcion.apellido}
+              </h2>
+              <button
+                type="button"
+                onClick={() => { setShowModalDescripcion(false); setAlumnoDescripcion(null); }}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto">
+              <textarea
+                value={textoDescripcion}
+                onChange={(e) => setTextoDescripcion(e.target.value)}
+                placeholder="Agregá notas, observaciones, preferencias..."
+                className="input-field min-h-[120px] resize-y"
+                rows={5}
+              />
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => { setShowModalDescripcion(false); setAlumnoDescripcion(null); }}
+                className="btn-secondary"
+              >
+                Cerrar
+              </button>
+              <button type="button" onClick={handleGuardarDescripcion} className="btn-primary flex items-center gap-2">
+                <Save className="w-4 h-4" />
+                Guardar
+              </button>
+            </div>
           </div>
         </div>
       )}

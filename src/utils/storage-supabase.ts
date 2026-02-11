@@ -19,6 +19,7 @@ const dbToAlumno = (row: any): Alumno => ({
   fechaVencimientoCuota: row.fecha_vencimiento_cuota || '',
   actividadId: row.actividad_id,
   clasesAsistidas: row.clases_asistidas || 0,
+  descripcion: row.descripcion || '',
   createdAt: row.created_at,
 });
 
@@ -32,6 +33,7 @@ const alumnoToDb = (alumno: Alumno) => ({
   fecha_vencimiento_cuota: alumno.fechaVencimientoCuota || null,
   actividad_id: alumno.actividadId,
   clases_asistidas: alumno.clasesAsistidas || 0,
+  descripcion: alumno.descripcion || null,
   created_at: alumno.createdAt,
 });
 
@@ -136,6 +138,7 @@ export const storageSupabase = {
       if (updates.fechaVencimientoCuota !== undefined) dbUpdates.fecha_vencimiento_cuota = updates.fechaVencimientoCuota || null;
       if (updates.actividadId) dbUpdates.actividad_id = updates.actividadId;
       if (updates.clasesAsistidas !== undefined) dbUpdates.clases_asistidas = updates.clasesAsistidas;
+      if (updates.descripcion !== undefined) dbUpdates.descripcion = updates.descripcion || null;
       const { error } = await supabase.from('alumnos').update(dbUpdates).eq('id', id);
       if (error) {
         console.error('Error updating alumno:', error);

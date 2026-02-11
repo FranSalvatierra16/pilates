@@ -20,8 +20,12 @@ CREATE TABLE IF NOT EXISTS alumnos (
   fecha_vencimiento_cuota DATE,
   actividad_id TEXT REFERENCES actividades(id),
   clases_asistidas INTEGER DEFAULT 0,
+  descripcion TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Permitir agregar columna en bases existentes
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS descripcion TEXT;
 
 -- Pagos
 CREATE TABLE IF NOT EXISTS pagos (

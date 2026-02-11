@@ -109,6 +109,7 @@ app.get('/api/alumnos', async (req, res) => {
       fechaVencimientoCuota: r.fecha_vencimiento_cuota ? r.fecha_vencimiento_cuota.toISOString().slice(0, 10) : '',
       actividadId: r.actividad_id,
       clasesAsistidas: r.clases_asistidas ?? 0,
+      descripcion: r.descripcion ?? '',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     }));
     res.json(data);
@@ -124,8 +125,8 @@ app.post('/api/alumnos', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     await db.query(
-      `INSERT INTO alumnos (id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      `INSERT INTO alumnos (id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, descripcion, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         b.id,
         b.nombre,
@@ -136,6 +137,7 @@ app.post('/api/alumnos', async (req, res) => {
         b.fechaVencimientoCuota || null,
         b.actividadId || null,
         b.clasesAsistidas ?? 0,
+        b.descripcion ?? null,
         b.createdAt || new Date().toISOString(),
       ]
     );
@@ -162,6 +164,7 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.fechaVencimientoCuota !== undefined) { updates.push(`fecha_vencimiento_cuota = $${i++}`); values.push(b.fechaVencimientoCuota || null); }
     if (b.actividadId !== undefined) { updates.push(`actividad_id = $${i++}`); values.push(b.actividadId || null); }
     if (b.clasesAsistidas !== undefined) { updates.push(`clases_asistidas = $${i++}`); values.push(b.clasesAsistidas); }
+    if (b.descripcion !== undefined) { updates.push(`descripcion = $${i++}`); values.push(b.descripcion || null); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id);
     await db.query(`UPDATE alumnos SET ${updates.join(', ')} WHERE id = $${i}`, values);
@@ -201,6 +204,7 @@ app.get('/api/alumnos/findByDni', async (req, res) => {
       fechaVencimientoCuota: r.fecha_vencimiento_cuota ? r.fecha_vencimiento_cuota.toISOString().slice(0, 10) : '',
       actividadId: r.actividad_id,
       clasesAsistidas: r.clases_asistidas ?? 0,
+      descripcion: r.descripcion ?? '',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     });
   } catch (e) {

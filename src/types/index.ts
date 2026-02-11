@@ -8,6 +8,7 @@ export interface Alumno {
   fechaVencimientoCuota: string; // YYYY-MM-DD
   actividadId: string;
   clasesAsistidas: number; // Contador de clases asistidas en el mes actual
+  descripcion?: string; // Notas o info adicional del alumno (editable)
   createdAt: string;
 }
 

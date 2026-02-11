@@ -808,6 +808,104 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Seed de prueba (10 actividades, 100 alumnos, turnos) — para ejecutar en Railway
+const SEED_ACTIVIDADES = [
+  { nombre: 'Pilates Mat', precio: 25000 },
+  { nombre: 'Pilates Reformer', precio: 32000 },
+  { nombre: 'Pilates con Aro', precio: 28000 },
+  { nombre: 'Estiramiento', precio: 18000 },
+  { nombre: 'Pilates Suelo', precio: 22000 },
+  { nombre: 'Pilates Integrativo', precio: 30000 },
+  { nombre: 'Pilates Prenatal', precio: 28000 },
+  { nombre: 'Pilates para Adultos Mayores', precio: 20000 },
+  { nombre: 'Pilates Avanzado', precio: 35000 },
+  { nombre: 'Pilates Inicial', precio: 20000 },
+];
+const SEED_NOMBRES = ['Francisco', 'María', 'Juan', 'Ana', 'Carlos', 'Lucía', 'Martín', 'Sofía', 'Diego', 'Valentina', 'Javier', 'Camila', 'Luis', 'Victoria', 'Pablo', 'Emma', 'Andrés', 'Miguel', 'Ricardo', 'Fernando', 'Gonzalo', 'Emilio', 'Alejandro', 'Daniel', 'Gabriel', 'Héctor', 'Ignacio', 'Nicolás'];
+const SEED_APELLIDOS = ['García', 'Rodríguez', 'Martínez', 'López', 'González', 'Pérez', 'Fernández', 'Gómez', 'Díaz', 'Torres', 'Ruiz', 'Hernández', 'Sánchez', 'Romero', 'Flores', 'Acosta', 'Benítez', 'Silva', 'Mendoza', 'Castro', 'Vargas', 'Ríos', 'Suárez', 'Molina', 'Ortiz', 'Núñez', 'Cabrera', 'Ramos', 'Vega', 'Luna'];
+const SEED_HORARIOS = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
+
+function seedRandomItem(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+function seedRandomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+app.post('/api/seed-demo', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const client = await db.connect();
+    try {
+      const actividadIds = [];
+      for (let i = 0; i < SEED_ACTIVIDADES.length; i++) {
+        const id = `act-demo-${i + 1}`;
+        await client.query(
+          'INSERT INTO actividades (id, nombre, precio) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET nombre = $2, precio = $3',
+          [id, SEED_ACTIVIDADES[i].nombre, SEED_ACTIVIDADES[i].precio]
+        );
+        actividadIds.push(id);
+      }
+      let { rows: profs } = await client.query('SELECT id FROM profesores LIMIT 2');
+      const profesorIds = profs.map((r) => r.id);
+      if (profesorIds.length < 2) {
+        const [nombres, apellidos] = [['Laura', 'Pedro'], ['Pilates', 'Instructor']];
+        for (let i = profesorIds.length; i < 2; i++) {
+          const id = `prof-demo-${i + 1}`;
+          await client.query('INSERT INTO profesores (id, nombre, apellido) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING', [id, nombres[i], apellidos[i]]);
+          profesorIds.push(id);
+        }
+      }
+      for (let i = 0; i < 100; i++) {
+        const id = crypto.randomUUID();
+        const dni = `90${String(i).padStart(6, '0')}`;
+        const nombre = seedRandomItem(SEED_NOMBRES);
+        const apellido = seedRandomItem(SEED_APELLIDOS);
+        const telefono = `223${String(seedRandomInt(1000000, 9999999))}`;
+        const email = `demo${i}+${nombre.toLowerCase()}@prueba.com`;
+        const actividadId = seedRandomItem(actividadIds);
+        const f = new Date();
+        f.setDate(f.getDate() + seedRandomInt(-10, 30));
+        const fechaVencStr = f.toISOString().slice(0, 10);
+        await client.query(
+          'INSERT INTO alumnos (id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NOW()) ON CONFLICT (dni) DO NOTHING',
+          [id, nombre, apellido, dni, telefono, email, fechaVencStr, actividadId]
+        );
+      }
+      const { rows: alumnosRows } = await client.query("SELECT id FROM alumnos WHERE dni LIKE '90%'");
+      const idsParaTurnos = alumnosRows.map((r) => r.id);
+      let turnosCreados = 0;
+      for (let dia = 0; dia < 6; dia++) {
+        for (const hora of SEED_HORARIOS) {
+          const turnoId = crypto.randomUUID();
+          const profesorId = seedRandomItem(profesorIds);
+          const cantidad = idsParaTurnos.length === 0 ? 0 : seedRandomInt(3, Math.min(10, idsParaTurnos.length));
+          const shuffled = [...idsParaTurnos].sort(() => Math.random() - 0.5);
+          const asignados = cantidad === 0 ? [] : shuffled.slice(0, cantidad);
+          await client.query(
+            'INSERT INTO turnos (id, dia_semana, hora, titulo, profesor_id, alumno_ids, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) ON CONFLICT (id) DO NOTHING',
+            [turnoId, dia, hora, `Clase ${hora}`, profesorId, asignados]
+          );
+          turnosCreados++;
+        }
+      }
+      res.json({
+        ok: true,
+        actividades: actividadIds.length,
+        alumnos: idsParaTurnos.length,
+        turnos: turnosCreados,
+        mensaje: 'Seed de prueba listo. Recargá la app.',
+      });
+    } finally {
+      client.release();
+    }
+  } catch (e) {
+    console.error('Error seed-demo:', e);
+    res.status(500).json({ error: e.message, ok: false });
+  }
+});
+
 // Health (comprueba si hay DATABASE_URL y conexión)
 app.get('/api/health', async (req, res) => {
   const db = await getPool();

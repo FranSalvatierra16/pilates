@@ -53,7 +53,7 @@ const Layout = ({ children }: LayoutProps) => {
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/calendario', label: 'Calendario', icon: Calendar },
     { path: '/alumnos', label: 'Alumnos', icon: Users },
-    { path: '/registros-link', label: 'Registros por link', icon: Link2 },
+    // { path: '/registros-link', label: 'Registros por link', icon: Link2 },
     { path: '/profesores', label: 'Profesores', icon: GraduationCap },
     { path: '/actividades', label: 'Actividades', icon: Activity },
     { path: '/acceso', label: 'Control de Acceso', icon: DoorOpen },

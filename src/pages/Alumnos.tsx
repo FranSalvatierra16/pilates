@@ -29,6 +29,7 @@ const Alumnos = () => {
     email: '',
     fechaVencimientoCuota: '',
     actividadId: '',
+    descripcion: '',
   });
   const [formDataPago, setFormDataPago] = useState({
     monto: '',
@@ -124,6 +125,7 @@ const Alumnos = () => {
       email: '',
       fechaVencimientoCuota: '',
       actividadId: '',
+      descripcion: '',
     });
     setEditingAlumno(null);
   };
@@ -139,6 +141,7 @@ const Alumnos = () => {
         email: alumno.email,
         fechaVencimientoCuota: alumno.fechaVencimientoCuota,
         actividadId: alumno.actividadId,
+        descripcion: alumno.descripcion ?? '',
       });
     } else {
       // Para nuevo alumno, dejar sin fecha de vencimiento (pendiente de pago)
@@ -150,6 +153,7 @@ const Alumnos = () => {
         email: '',
         fechaVencimientoCuota: '', // Sin fecha hasta que se pague
         actividadId: '',
+        descripcion: '',
       });
       setEditingAlumno(null);
     }
@@ -171,6 +175,7 @@ const Alumnos = () => {
         await storageHybrid.alumnos.update(editingAlumno.id, {
           ...formData,
           fechaVencimientoCuota: fechaVencimiento,
+          descripcion: formData.descripcion ?? '',
         });
       } else {
         // Crear nuevo alumno sin fecha de vencimiento (pendiente de pago)
@@ -179,6 +184,7 @@ const Alumnos = () => {
           ...formData,
           fechaVencimientoCuota: '', // Sin fecha hasta que se pague
           clasesAsistidas: 0, // Iniciar contador en 0
+          descripcion: formData.descripcion ?? '',
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.alumnos.add(nuevoAlumno);
@@ -541,18 +547,18 @@ const Alumnos = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2 items-center">
                           <button
+                            onClick={() => handlePagarCuota(alumno)}
+                            className="text-green-600 hover:text-green-900 p-1 rounded"
+                            title="Pagar cuota"
+                          >
+                            <CreditCard className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => handleOpenDescripcion(alumno)}
                             className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`}
                             title="Descripción / Notas"
                           >
                             <FileText className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handlePagarCuota(alumno)}
-                            className="text-green-600 hover:text-green-900"
-                            title="Pagar cuota"
-                          >
-                            <CreditCard className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleOpenModal(alumno)}
@@ -691,6 +697,18 @@ const Alumnos = () => {
                       💡 La fecha de vencimiento se establecerá automáticamente cuando registres el primer pago desde el botón de pago.
                     </p>
                   )}
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Descripción / Notas (opcional)
+                  </label>
+                  <textarea
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                    placeholder="Notas, observaciones, preferencias..."
+                    className="input-field min-h-[80px] resize-y"
+                    rows={3}
+                  />
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">

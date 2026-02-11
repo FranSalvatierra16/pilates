@@ -681,6 +681,18 @@ const Alumnos = () => {
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Descripción / Notas (opcional)
+                  </label>
+                  <textarea
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                    placeholder="Notas, observaciones, preferencias..."
+                    className="input-field min-h-[80px] resize-y"
+                    rows={3}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Fecha Vencimiento Cuota {editingAlumno ? '*' : '(Se establecerá al pagar)'}
                   </label>
                   <input
@@ -697,18 +709,6 @@ const Alumnos = () => {
                       💡 La fecha de vencimiento se establecerá automáticamente cuando registres el primer pago desde el botón de pago.
                     </p>
                   )}
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Descripción / Notas (opcional)
-                  </label>
-                  <textarea
-                    value={formData.descripcion}
-                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                    placeholder="Notas, observaciones, preferencias..."
-                    className="input-field min-h-[80px] resize-y"
-                    rows={3}
-                  />
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
@@ -860,12 +860,16 @@ const Alumnos = () => {
               </button>
             </div>
             <div className="p-4 flex-1 overflow-y-auto">
+              <p className="text-sm text-gray-500 mb-2">
+                Podés editar las notas acá y guardar. No hace falta abrir &quot;Editar&quot;.
+              </p>
               <textarea
                 value={textoDescripcion}
                 onChange={(e) => setTextoDescripcion(e.target.value)}
                 placeholder="Agregá notas, observaciones, preferencias..."
                 className="input-field min-h-[120px] resize-y"
                 rows={5}
+                autoFocus
               />
             </div>
             <div className="flex justify-end gap-2 p-4 border-t border-gray-200">

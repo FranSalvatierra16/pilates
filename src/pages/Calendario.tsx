@@ -395,42 +395,12 @@ const Calendario = () => {
     return (
       <div
         key={alumno.id}
-        className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors cursor-pointer`}
+        className={`${bgColor} px-2 py-1 rounded text-xs flex items-center group/item hover:opacity-90 transition-colors cursor-pointer`}
         onClick={(e) => handleAbrirPopupAlumno(e, alumno, turno, diaSemana, hora)}
       >
-        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}`}>
+        <span className="truncate" title={`${alumno.nombre} ${alumno.apellido}`}>
           {alumno.nombre} {alumno.apellido}
         </span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleMarcarAsistencia(turno.id, alumno.id, 'asistio');
-            }}
-            className={`p-0.5 rounded transition-colors ${
-              estadoAsistencia === 'asistio'
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-200 text-gray-600 hover:bg-green-300'
-            }`}
-            title="Marcar como asistió"
-          >
-            <Check className="w-4 h-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleMarcarAsistencia(turno.id, alumno.id, 'no_asistio');
-            }}
-            className={`p-0.5 rounded transition-colors ${
-              estadoAsistencia === 'no_asistio'
-                ? 'bg-red-600 text-white'
-                : 'bg-gray-200 text-gray-600 hover:bg-red-300'
-            }`}
-            title="Marcar como no asistió"
-          >
-            <XCircle className="w-4 h-4" />
-          </button>
-        </div>
       </div>
     );
   };

@@ -530,10 +530,10 @@ const Calendario = () => {
                         <GraduationCap className="w-4 h-4" />
                       </button>
                       
-                      {/* Título y Profesor */}
-                      {(turno?.titulo || profesor) && (
+                      {/* Título, Profesor y Cupo */}
+                      {turno && (
                         <div className="mb-2 pb-2 border-b border-gray-200">
-                          {turno?.titulo && (
+                          {turno.titulo && (
                             <div className="text-xs font-semibold text-gray-700 mb-1">
                               {turno.titulo}
                             </div>
@@ -543,6 +543,10 @@ const Calendario = () => {
                               Prof: {profesor.nombre} {profesor.apellido}
                             </div>
                           )}
+                          <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                            <Users className="w-3.5 h-3.5" />
+                            {alumnosTurno.length}/{turno.cupo ?? CUPO_DEFAULT}
+                          </div>
                         </div>
                       )}
                       {alumnosTurno.length > 0 ? (
@@ -554,13 +558,20 @@ const Calendario = () => {
                           <Plus className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       )}
-                      <button
-                        onClick={() => handleAgregarAlumno(diaIndex, hora)}
-                        className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20"
-                        title="Agregar alumno"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                      {(() => {
+                        const cupo = turno?.cupo ?? CUPO_DEFAULT;
+                        const lleno = alumnosTurno.length >= cupo;
+                        return (
+                          <button
+                            onClick={() => !lleno && handleAgregarAlumno(diaIndex, hora)}
+                            disabled={lleno}
+                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={lleno ? 'Clase llena' : 'Agregar alumno'}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        );
+                      })()}
                     </div>
                   );
                 })}

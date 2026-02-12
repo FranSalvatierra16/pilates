@@ -2,8 +2,13 @@ import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, RegistroLi
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
+let authToken: string | null = null;
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
+
 function getAuthHeaders(): Record<string, string> {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('savia_token') : null;
+  const token = authToken ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('savia_token') : null);
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
 }

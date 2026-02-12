@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { setAuthToken } from '../utils/storage-api';
 
 const TOKEN_KEY = 'savia_token';
 const ROLE_KEY = 'savia_role';
@@ -52,11 +53,15 @@ function loadStored(): AuthState {
   };
 }
 
+const initialState = loadStored();
+if (initialState.token) setAuthToken(initialState.token);
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<AuthState>(loadStored);
+  const [state, setState] = useState<AuthState>(initialState);
 
   useEffect(() => {
     if (state.isAuthenticated && state.role) {
+      setAuthToken(state.token);
       if (state.token) localStorage.setItem(TOKEN_KEY, state.token);
       else localStorage.removeItem(TOKEN_KEY);
       localStorage.setItem(ROLE_KEY, state.role);
@@ -67,6 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (state.fotoPerfil) localStorage.setItem(FOTO_PERFIL_KEY, state.fotoPerfil);
       else localStorage.removeItem(FOTO_PERFIL_KEY);
     } else {
+      setAuthToken(null);
       [TOKEN_KEY, ROLE_KEY, SUCURSAL_ID_KEY, SUCURSAL_NOMBRE_KEY, FOTO_PERFIL_KEY].forEach((k) => localStorage.removeItem(k));
     }
   }, [state.isAuthenticated, state.token, state.role, state.sucursalId, state.sucursalNombre, state.fotoPerfil]);
@@ -82,6 +88,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok && data.token && data.role) {
           const role = data.role as Role;
+          setAuthToken(data.token);
           localStorage.setItem(TOKEN_KEY, data.token);
           localStorage.setItem(ROLE_KEY, role);
           if (data.sucursalId) localStorage.setItem(SUCURSAL_ID_KEY, data.sucursalId);

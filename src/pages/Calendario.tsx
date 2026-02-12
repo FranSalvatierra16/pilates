@@ -669,7 +669,7 @@ const Calendario = () => {
           }}
           className="btn-secondary flex items-center gap-2"
         >
-          <Users className="w-5 h-5" />
+          {/* <Users className="w-5 h-5" />
           Recortar al cupo
         </button>
         <button
@@ -679,7 +679,7 @@ const Calendario = () => {
             setShowModalAumentarCupo(true);
           }}
           className="btn-primary flex items-center gap-2"
-        >
+        > */}
           <Users className="w-5 h-5" />
           Aumentar cupo
         </button>

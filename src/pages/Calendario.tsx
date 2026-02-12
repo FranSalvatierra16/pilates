@@ -3,6 +3,7 @@ import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, Chev
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
+import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy } from '../utils/date';
 
 // Horarios disponibles: 7:00-12:00 cada hora, y 16:00-21:00 cada hora
 const HORARIOS_MANANA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
@@ -386,11 +387,16 @@ const Calendario = () => {
     if (!turno) return null;
     
     const estadoAsistencia = getEstadoAsistencia(turno.id, alumno.id);
-    const bgColor = estadoAsistencia === 'asistio' 
+    let bgColor = estadoAsistencia === 'asistio' 
       ? 'bg-green-100 text-green-900' 
       : estadoAsistencia === 'no_asistio'
       ? 'bg-red-100 text-red-900'
       : 'bg-primary-100 text-primary-900';
+    const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
+    const vencido = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
+    const porVencer = tieneFecha && !vencido && (isCuotaVenceHoy(alumno.fechaVencimientoCuota) || isCuotaPorVencer(alumno.fechaVencimientoCuota, 3));
+    if (vencido) bgColor = 'bg-red-200 text-red-900 border-l-4 border-red-600';
+    else if (porVencer) bgColor = 'bg-amber-100 text-amber-900 border-l-4 border-amber-500';
     
     return (
       <div
@@ -398,7 +404,7 @@ const Calendario = () => {
         className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors cursor-pointer`}
         onClick={(e) => handleAbrirPopupAlumno(e, alumno, turno, diaSemana, hora)}
       >
-        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}`}>
+        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}>
           {alumno.nombre} {alumno.apellido}
         </span>
         <div className="flex items-center gap-1">
@@ -857,6 +863,18 @@ const Calendario = () => {
             <p className="text-sm text-gray-600">DNI: {showPopupAlumno.alumno.dni}</p>
             <p className="text-xs text-gray-500 mt-1">
               Turno actual: {DIAS_SEMANA[showPopupAlumno.diaSemana]} {showPopupAlumno.hora}
+            </p>
+            <p className="text-xs font-medium mt-1">
+              Fecha de vencimiento:{' '}
+              {(showPopupAlumno.alumno.fechaVencimientoCuota ?? '').trim() ? (
+                <span className={isCuotaVencida(showPopupAlumno.alumno.fechaVencimientoCuota) ? 'text-red-600' : isCuotaVenceHoy(showPopupAlumno.alumno.fechaVencimientoCuota) || isCuotaPorVencer(showPopupAlumno.alumno.fechaVencimientoCuota, 3) ? 'text-amber-600' : 'text-gray-700'}>
+                  {formatDate(showPopupAlumno.alumno.fechaVencimientoCuota)}
+                  {isCuotaVencida(showPopupAlumno.alumno.fechaVencimientoCuota) && ' (vencida)'}
+                  {(isCuotaVenceHoy(showPopupAlumno.alumno.fechaVencimientoCuota) || isCuotaPorVencer(showPopupAlumno.alumno.fechaVencimientoCuota, 3)) && !isCuotaVencida(showPopupAlumno.alumno.fechaVencimientoCuota) && ' (próximos días)'}
+                </span>
+              ) : (
+                <span className="text-gray-500">Sin fecha / pendiente de pago</span>
+              )}
             </p>
             {(showPopupAlumno.alumno.descripcion ?? '').trim() ? (
               <div className="mt-2 pt-2 border-t border-gray-100">

@@ -54,21 +54,19 @@ export default function AdminSucursalEditar() {
     e.preventDefault();
     if (!id) return;
     setError('');
-    const updates: { nombreLugar?: string; usuario?: string; password?: string; fotoPerfil?: string | null } = {};
-    if (nombreLugar.trim() !== sucursal?.nombreLugar) updates.nombreLugar = nombreLugar.trim();
-    if (usuario.trim() !== sucursal?.usuario) updates.usuario = usuario.trim();
-    if (password) updates.password = password;
-    if (fotoPreview !== (sucursal?.fotoPerfil ?? null)) updates.fotoPerfil = fotoPreview;
-    if (Object.keys(updates).length === 0) {
-      navigate('/admin');
-      return;
-    }
+    const updates: { nombreLugar?: string; usuario?: string; password?: string; fotoPerfil?: string | null } = {
+      nombreLugar: nombreLugar.trim(),
+      usuario: usuario.trim(),
+    };
+    if (password.trim()) updates.password = password.trim();
+    if (fotoPreview !== undefined) updates.fotoPerfil = fotoPreview;
     setLoading(true);
     try {
       await storageApi.admin.updateSucursal(id, updates);
       navigate('/admin');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al guardar');
+      const msg = err instanceof Error ? err.message : 'Error al guardar';
+      setError(msg);
     } finally {
       setLoading(false);
     }

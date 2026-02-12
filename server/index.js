@@ -876,12 +876,19 @@ app.post('/api/auth/login', async (req, res) => {
     const { usuario, password } = req.body || {};
     if (!usuario || !password) return res.status(400).json({ ok: false, error: 'Faltan usuario o contraseña' });
     const u = usuario.trim();
+    const isAdminUser = u === 'adminF';
     const { rows: adminRows } = await db.query('SELECT id, clave_hash FROM admin WHERE usuario = $1', [u]);
     if (adminRows.length > 0) {
       const valid = await bcrypt.compare(password, adminRows[0].clave_hash);
       if (!valid) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
       const token = jwt.sign({ role: 'admin', sub: adminRows[0].id }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({ ok: true, token, role: 'admin' });
+    }
+    if (isAdminUser) {
+      return res.status(401).json({
+        ok: false,
+        error: 'Cuenta admin no configurada en la base de datos. Ejecutá en el proyecto: npm run db:schema (con DATABASE_URL en .env o en Railway).',
+      });
     }
     const { rows: sucRows } = await db.query('SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil FROM sucursales WHERE usuario = $1', [u]);
     if (sucRows.length === 0) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });

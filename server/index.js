@@ -84,11 +84,11 @@ function ensureSchemaReady() {
 }
 
 async function seedAdminAndSucursal(db) {
-  const { rows: adminRows } = await db.query('SELECT id FROM admin WHERE usuario = $1', ['admin']);
+  const { rows: adminRows } = await db.query('SELECT id FROM admin WHERE usuario = $1', ['adminF']);
   if (adminRows.length === 0) {
-    const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Admin123', 10);
-    await db.query('INSERT INTO admin (id, usuario, clave_hash) VALUES ($1, $2, $3)', [crypto.randomUUID(), 'admin', hash]);
-    console.log('Cuenta admin creada (usuario: admin).');
+    const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD || '2401', 10);
+    await db.query('INSERT INTO admin (id, usuario, clave_hash) VALUES ($1, $2, $3)', [crypto.randomUUID(), 'adminF', hash]);
+    console.log('Cuenta admin creada (usuario: adminF).');
   }
   const { rows: sucRows } = await db.query('SELECT id FROM sucursales WHERE usuario = $1', ['Savia']);
   let saviaId = sucRows.length > 0 ? sucRows[0].id : null;

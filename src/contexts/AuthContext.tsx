@@ -29,7 +29,16 @@ const useApi = () => {
 };
 const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
-function loadStored() {
+type AuthState = {
+  isAuthenticated: boolean;
+  role: Role | null;
+  token: string | null;
+  sucursalId: string | null;
+  sucursalNombre: string | null;
+  fotoPerfil: string | null;
+};
+
+function loadStored(): AuthState {
   const token = localStorage.getItem(TOKEN_KEY);
   const role = localStorage.getItem(ROLE_KEY) as Role | null;
   if (!token || !role) return { isAuthenticated: false, role: null, token: null, sucursalId: null, sucursalNombre: null, fotoPerfil: null };
@@ -44,12 +53,13 @@ function loadStored() {
 }
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState(loadStored);
+  const [state, setState] = useState<AuthState>(loadStored);
 
   useEffect(() => {
-    if (state.isAuthenticated && state.token) {
-      localStorage.setItem(TOKEN_KEY, state.token);
-      localStorage.setItem(ROLE_KEY, state.role!);
+    if (state.isAuthenticated && state.role) {
+      if (state.token) localStorage.setItem(TOKEN_KEY, state.token);
+      else localStorage.removeItem(TOKEN_KEY);
+      localStorage.setItem(ROLE_KEY, state.role);
       if (state.sucursalId) localStorage.setItem(SUCURSAL_ID_KEY, state.sucursalId);
       else localStorage.removeItem(SUCURSAL_ID_KEY);
       if (state.sucursalNombre) localStorage.setItem(SUCURSAL_NOMBRE_KEY, state.sucursalNombre);

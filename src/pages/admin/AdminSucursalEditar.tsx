@@ -11,7 +11,6 @@ export default function AdminSucursalEditar() {
   const [nombreLugar, setNombreLugar] = useState('');
   const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
-  const [fotoFile, setFotoFile] = useState<File | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -38,7 +37,6 @@ export default function AdminSucursalEditar() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) {
-      setFotoFile(null);
       setFotoPreview(null);
       return;
     }
@@ -46,7 +44,6 @@ export default function AdminSucursalEditar() {
       setError('Elegí una imagen (JPG, PNG, etc.)');
       return;
     }
-    setFotoFile(file);
     setError('');
     const reader = new FileReader();
     reader.onload = () => setFotoPreview(reader.result as string);

@@ -115,6 +115,8 @@ export const storageApi = {
     },
     getByAlumnoId: (alumnoId: string): Promise<Turno[]> =>
       request<Turno[]>(`/api/turnos/by-alumno/${alumnoId}`),
+    ajustarCupo: (): Promise<{ turnosActualizados: number; alumnosEliminados: number }> =>
+      request('/api/turnos/ajustar-cupo', { method: 'POST' }),
   },
   asistencias: {
     getAll: (): Promise<Asistencia[]> => request<Asistencia[]>('/api/asistencias'),

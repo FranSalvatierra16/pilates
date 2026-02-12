@@ -153,6 +153,23 @@ export const storageHybrid = {
       if (b) return await b.turnos.getByAlumnoId(alumnoId);
       return storage.turnos.getByAlumnoId(alumnoId);
     },
+    ajustarCupo: async (): Promise<{ turnosActualizados: number; alumnosEliminados: number }> => {
+      const b = backend();
+      if (b) return await b.turnos.ajustarCupo();
+      const todos = storage.turnos.getAll();
+      let turnosActualizados = 0;
+      let alumnosEliminados = 0;
+      const cupo = 6;
+      for (const t of todos) {
+        const max = (t as Turno & { cupo?: number }).cupo ?? cupo;
+        if (t.alumnoIds.length > max) {
+          storage.turnos.update(t.id, { alumnoIds: t.alumnoIds.slice(0, max) });
+          turnosActualizados++;
+          alumnosEliminados += t.alumnoIds.length - max;
+        }
+      }
+      return { turnosActualizados, alumnosEliminados };
+    },
   },
 
   profesores: {

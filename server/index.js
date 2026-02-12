@@ -707,6 +707,31 @@ app.delete('/api/turnos/:id', async (req, res) => {
   }
 });
 
+app.post('/api/turnos/ajustar-cupo', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { rows } = await db.query('SELECT id, alumno_ids, cupo FROM turnos WHERE sucursal_id = $1', [sid]);
+    let turnosActualizados = 0;
+    let alumnosEliminados = 0;
+    for (const r of rows) {
+      const ids = r.alumno_ids || [];
+      const cupo = r.cupo != null ? Math.max(1, Number(r.cupo)) : 6;
+      if (ids.length > cupo) {
+        const nuevosIds = ids.slice(0, cupo);
+        await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [nuevosIds, r.id, sid]);
+        turnosActualizados++;
+        alumnosEliminados += ids.length - cupo;
+      }
+    }
+    res.json({ ok: true, turnosActualizados, alumnosEliminados });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/turnos/by-dia/:diaSemana', async (req, res) => {
   try {
     const db = await getPool();

@@ -650,8 +650,28 @@ const Calendario = () => {
         </div>
       </div>
 
-      {/* Botón Aumentar cupo - abajo del calendario */}
-      <div className="mt-6 flex justify-end">
+      {/* Botones cupo - abajo del calendario */}
+      <div className="mt-6 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          onClick={async () => {
+            if (!confirm('¿Recortar todas las clases al cupo configurado? Se quitarán alumnos de las clases que tengan más del cupo (los últimos de la lista).')) return;
+            try {
+              const { turnosActualizados, alumnosEliminados } = await storageHybrid.turnos.ajustarCupo();
+              await loadTurnos();
+              alert(turnosActualizados === 0
+                ? 'Todas las clases ya respetan el cupo.'
+                : `Listo: ${turnosActualizados} clase(s) ajustadas. Se quitaron ${alumnosEliminados} alumno(s) en total.`);
+            } catch (e) {
+              console.error(e);
+              alert('Error al ajustar. Reintentá.');
+            }
+          }}
+          className="btn-secondary flex items-center gap-2"
+        >
+          <Users className="w-5 h-5" />
+          Recortar al cupo
+        </button>
         <button
           type="button"
           onClick={() => {

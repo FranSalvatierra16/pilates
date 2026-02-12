@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap, Users } from 'lucide-react';
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -41,10 +41,14 @@ const Calendario = () => {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [turnoParaEditar, setTurnoParaEditar] = useState<Turno | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
+  const CUPO_DEFAULT = 6;
   const [formDataTurno, setFormDataTurno] = useState({
     titulo: '',
     profesorId: '',
+    cupo: CUPO_DEFAULT,
   });
+  const [showModalAumentarCupo, setShowModalAumentarCupo] = useState(false);
+  const [cupoGlobal, setCupoGlobal] = useState(CUPO_DEFAULT);
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
@@ -119,9 +123,9 @@ const Calendario = () => {
       setFormDataTurno({
         titulo: turno.titulo || '',
         profesorId: turno.profesorId || '',
+        cupo: turno.cupo ?? CUPO_DEFAULT,
       });
     } else {
-      // Si no existe el turno, crear uno nuevo vacío
       setTurnoParaEditar({
         id: Date.now().toString(),
         diaSemana,
@@ -129,11 +133,13 @@ const Calendario = () => {
         titulo: '',
         profesorId: '',
         alumnoIds: [],
+        cupo: CUPO_DEFAULT,
         createdAt: new Date().toISOString(),
       });
       setFormDataTurno({
         titulo: '',
         profesorId: '',
+        cupo: CUPO_DEFAULT,
       });
     }
     setShowModalEditarTurno(true);
@@ -167,16 +173,19 @@ const Calendario = () => {
 
     try {
       const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
+      const cupo = turnoExistente?.cupo ?? CUPO_DEFAULT;
 
       if (turnoExistente) {
-        // Si el turno ya existe, agregar el alumno si no está
+        if (turnoExistente.alumnoIds.length >= cupo) {
+          alert('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (titulo/profesor) o desde "Aumentar cupo".');
+          return;
+        }
         if (!turnoExistente.alumnoIds.includes(alumnoSeleccionado)) {
           await storageHybrid.turnos.update(turnoExistente.id, {
             alumnoIds: [...turnoExistente.alumnoIds, alumnoSeleccionado],
           });
         }
       } else {
-        // Crear nuevo turno (solo con el alumno, sin título ni profesor)
         const nuevoTurno: Turno = {
           id: Date.now().toString(),
           diaSemana: turnoSeleccionado.diaSemana,
@@ -184,6 +193,7 @@ const Calendario = () => {
           titulo: '',
           profesorId: '',
           alumnoIds: [alumnoSeleccionado],
+          cupo: CUPO_DEFAULT,
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.turnos.add(nuevoTurno);
@@ -204,17 +214,17 @@ const Calendario = () => {
       const turnoExistente = getTurnoDelDia(turnoParaEditar.diaSemana, turnoParaEditar.hora);
       
       if (turnoExistente) {
-        // Actualizar turno existente
         await storageHybrid.turnos.update(turnoExistente.id, {
           titulo: formDataTurno.titulo,
           profesorId: formDataTurno.profesorId,
+          cupo: formDataTurno.cupo,
         });
       } else {
-        // Crear nuevo turno solo con título y profesor (sin alumnos)
         await storageHybrid.turnos.add({
           ...turnoParaEditar,
           titulo: formDataTurno.titulo,
           profesorId: formDataTurno.profesorId,
+          cupo: formDataTurno.cupo,
         });
       }
       
@@ -354,6 +364,20 @@ const Calendario = () => {
     if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados a gris.')) {
       await storageHybrid.asistencias.deleteBySemana(semanaActual);
       await loadAsistencias();
+    }
+  };
+
+  const handleAumentarCupo = async () => {
+    const valor = Math.max(1, Math.floor(Number(cupoGlobal)) || CUPO_DEFAULT);
+    try {
+      for (const t of turnos) {
+        await storageHybrid.turnos.update(t.id, { cupo: valor });
+      }
+      await loadTurnos();
+      setShowModalAumentarCupo(false);
+    } catch (e) {
+      console.error(e);
+      alert('Error al actualizar el cupo. Reintentá.');
     }
   };
 
@@ -575,10 +599,10 @@ const Calendario = () => {
                         <GraduationCap className="w-4 h-4" />
                       </button>
                       
-                      {/* Título y Profesor */}
-                      {(turno?.titulo || profesor) && (
+                      {/* Título, Profesor y Cupo */}
+                      {turno && (
                         <div className="mb-2 pb-2 border-b border-gray-200">
-                          {turno?.titulo && (
+                          {turno.titulo && (
                             <div className="text-xs font-semibold text-gray-700 mb-1">
                               {turno.titulo}
                             </div>
@@ -588,6 +612,10 @@ const Calendario = () => {
                               Prof: {profesor.nombre} {profesor.apellido}
                             </div>
                           )}
+                          <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                            <Users className="w-3.5 h-3.5" />
+                            {alumnosTurno.length}/{turno.cupo ?? CUPO_DEFAULT}
+                          </div>
                         </div>
                       )}
                       {alumnosTurno.length > 0 ? (
@@ -599,13 +627,20 @@ const Calendario = () => {
                           <Plus className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       )}
-                      <button
-                        onClick={() => handleAgregarAlumno(diaIndex, hora)}
-                        className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20"
-                        title="Agregar alumno"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                      {(() => {
+                        const cupo = turno?.cupo ?? CUPO_DEFAULT;
+                        const lleno = alumnosTurno.length >= cupo;
+                        return (
+                          <button
+                            onClick={() => !lleno && handleAgregarAlumno(diaIndex, hora)}
+                            disabled={lleno}
+                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={lleno ? 'Clase llena' : 'Agregar alumno'}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -613,6 +648,21 @@ const Calendario = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Botón Aumentar cupo - abajo del calendario */}
+      <div className="mt-6 flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setCupoGlobal(CUPO_DEFAULT);
+            setShowModalAumentarCupo(true);
+          }}
+          className="btn-primary flex items-center gap-2"
+        >
+          <Users className="w-5 h-5" />
+          Aumentar cupo
+        </button>
       </div>
 
       {/* Estadísticas de asistencias - Colapsable */}
@@ -820,6 +870,18 @@ const Calendario = () => {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Cupo (máx. alumnos por clase)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formDataTurno.cupo}
+                  onChange={(e) => setFormDataTurno({ ...formDataTurno, cupo: Math.max(1, parseInt(e.target.value, 10) || 6) })}
+                  className="input-field"
+                />
+              </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   onClick={() => {
@@ -838,6 +900,40 @@ const Calendario = () => {
                   Guardar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Aumentar cupo */}
+      {showModalAumentarCupo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Aumentar cupo</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Establecé el cupo (máx. alumnos) para todas las clases. Las que ya existan se actualizarán.
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Cupo por clase</label>
+              <input
+                type="number"
+                min={1}
+                value={cupoGlobal}
+                onChange={(e) => setCupoGlobal(Math.max(1, parseInt(e.target.value, 10) || CUPO_DEFAULT))}
+                className="input-field"
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowModalAumentarCupo(false)}
+                className="btn-secondary"
+              >
+                Cancelar
+              </button>
+              <button type="button" onClick={handleAumentarCupo} className="btn-primary">
+                Aplicar a todas las clases
+              </button>
             </div>
           </div>
         </div>

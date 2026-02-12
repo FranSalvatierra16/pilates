@@ -64,6 +64,7 @@ export interface Turno {
   titulo: string; // Título de la clase
   profesorId: string; // ID del profesor que da la clase
   alumnoIds: string[]; // Array de IDs de alumnos asignados
+  cupo?: number; // Máximo de alumnos por clase (default 6)
   createdAt: string;
 }
 

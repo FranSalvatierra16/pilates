@@ -12,16 +12,35 @@ import Actividades from './pages/Actividades';
 import Acceso from './pages/Acceso';
 import Pagos from './pages/Pagos';
 import Caja from './pages/Caja';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminSucursales from './pages/admin/AdminSucursales';
+import AdminSucursalNueva from './pages/admin/AdminSucursalNueva';
+import AdminSucursalEditar from './pages/admin/AdminSucursalEditar';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuth();
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
+
+const ProtectedSucursalRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isAdmin } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (isAdmin) return <Navigate to="/admin" replace />;
+  return <>{children}</>;
+};
+
+const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isAdmin } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAdmin) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+};
+
+function RootRedirect() {
+  const { isAdmin } = useAuth();
+  return <Navigate to={isAdmin ? '/admin' : '/dashboard'} replace />;
+}
 
 function App() {
   return (
@@ -34,100 +53,110 @@ function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <Layout>
-                  <Navigate to="/dashboard" replace />
-                </Layout>
+                <RootRedirect />
               </ProtectedRoute>
             }
           />
           <Route
+            path="/admin"
+            element={
+              <ProtectedAdminRoute>
+                <AdminLayout />
+              </ProtectedAdminRoute>
+            }
+          >
+            <Route index element={<AdminSucursales />} />
+            <Route path="sucursales/nueva" element={<AdminSucursalNueva />} />
+            <Route path="sucursales/:id/editar" element={<AdminSucursalEditar />} />
+          </Route>
+          <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <Dashboard />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
           <Route
             path="/calendario"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <Calendario />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
           <Route
             path="/alumnos"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <Alumnos />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
           <Route
             path="/registros-link"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <RegistrosPorLink />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
           <Route
             path="/profesores"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <Profesores />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
           <Route
             path="/actividades"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <Actividades />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
           <Route
             path="/acceso"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <Acceso />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
           <Route
             path="/pagos"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <Pagos />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
           <Route
             path="/caja"
             element={
-              <ProtectedRoute>
+              <ProtectedSucursalRoute>
                 <Layout>
                   <Caja />
                 </Layout>
-              </ProtectedRoute>
+              </ProtectedSucursalRoute>
             }
           />
         </Routes>

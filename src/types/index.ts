@@ -1,3 +1,14 @@
+export interface Sucursal {
+  id: string;
+  nombreLugar: string;
+  usuario: string;
+  fotoPerfil: string | null;
+  createdAt: string;
+  cantidadAlumnos: number;
+  cantidadActividades: number;
+  cantidadProfesores: number;
+}
+
 export interface Alumno {
   id: string;
   nombre: string;

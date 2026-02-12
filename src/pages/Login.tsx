@@ -13,9 +13,9 @@ const Login = () => {
     e.preventDefault();
     setError('');
 
-    const ok = await login(username, password);
-    if (ok) {
-      navigate('/dashboard');
+    const role = await login(username, password);
+    if (role) {
+      navigate(role === 'admin' ? '/admin' : '/dashboard');
     } else {
       setError('Usuario o contraseña incorrectos');
     }

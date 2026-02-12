@@ -1,12 +1,18 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, RegistroLink } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, RegistroLink, Sucursal } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+
+function getAuthHeaders(): Record<string, string> {
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('savia_token') : null;
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = getBase() + path;
   const res = await fetch(url, {
     ...options,
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options?.headers },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -124,5 +130,20 @@ export const storageApi = {
     delete: (id: string): Promise<void> => request(`/api/asistencias/${id}`, { method: 'DELETE' }),
     deleteBySemana: (semana: string): Promise<void> =>
       request(`/api/asistencias/by-semana/${encodeURIComponent(semana)}`, { method: 'DELETE' }),
+  },
+  admin: {
+    getSucursales: (): Promise<Sucursal[]> => request<Sucursal[]>('/api/admin/sucursales'),
+    createSucursal: (data: {
+      nombreLugar: string;
+      usuario: string;
+      password: string;
+      fotoPerfil?: string | null;
+    }): Promise<{ ok: boolean; id: string }> =>
+      request('/api/admin/sucursales', { method: 'POST', body: JSON.stringify(data) }),
+    updateSucursal: (
+      id: string,
+      data: { nombreLugar?: string; usuario?: string; password?: string; fotoPerfil?: string | null }
+    ): Promise<void> =>
+      request(`/api/admin/sucursales/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },
 };

@@ -28,7 +28,7 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, sucursalNombre, fotoPerfil } = useAuth();
   const navigate = useNavigate();
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
 
@@ -67,12 +67,25 @@ const Layout = ({ children }: LayoutProps) => {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
-                <Link to="/dashboard" className="flex items-center hover:opacity-90 transition-opacity">
-                  <img 
-                    src="/savia.png" 
-                    alt="SAVIA Pilates" 
-                    className="h-16 w-auto max-h-16 object-contain"
-                  />
+                <Link to="/dashboard" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/80 flex items-center justify-center border border-primary-100">
+                    {fotoPerfil ? (
+                      <img
+                        src={fotoPerfil}
+                        alt={sucursalNombre || 'Sucursal'}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src="/savia.png"
+                        alt={sucursalNombre || 'SAVIA Pilates'}
+                        className="h-10 w-auto object-contain"
+                      />
+                    )}
+                  </div>
+                  <span className="font-semibold text-gray-800 hidden sm:block">
+                    {sucursalNombre || 'SAVIA Pilates'}
+                  </span>
                 </Link>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">

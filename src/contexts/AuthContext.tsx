@@ -1,8 +1,22 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+
+const TOKEN_KEY = 'savia_token';
+const ROLE_KEY = 'savia_role';
+const SUCURSAL_ID_KEY = 'savia_sucursalId';
+const SUCURSAL_NOMBRE_KEY = 'savia_sucursalNombre';
+const FOTO_PERFIL_KEY = 'savia_fotoPerfil';
+
+export type Role = 'admin' | 'sucursal';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
+  role: Role | null;
+  token: string | null;
+  sucursalId: string | null;
+  sucursalNombre: string | null;
+  fotoPerfil: string | null;
+  isAdmin: boolean;
+  login: (username: string, password: string) => Promise<Role | false>;
   logout: () => void;
 }
 
@@ -15,21 +29,39 @@ const useApi = () => {
 };
 const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
+function loadStored() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  const role = localStorage.getItem(ROLE_KEY) as Role | null;
+  if (!token || !role) return { isAuthenticated: false, role: null, token: null, sucursalId: null, sucursalNombre: null, fotoPerfil: null };
+  return {
+    isAuthenticated: true,
+    role,
+    token,
+    sucursalId: localStorage.getItem(SUCURSAL_ID_KEY),
+    sucursalNombre: localStorage.getItem(SUCURSAL_NOMBRE_KEY),
+    fotoPerfil: localStorage.getItem(FOTO_PERFIL_KEY),
+  };
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    const saved = localStorage.getItem('savia_authenticated');
-    return saved === 'true';
-  });
+  const [state, setState] = useState(loadStored);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      localStorage.setItem('savia_authenticated', 'true');
+    if (state.isAuthenticated && state.token) {
+      localStorage.setItem(TOKEN_KEY, state.token);
+      localStorage.setItem(ROLE_KEY, state.role!);
+      if (state.sucursalId) localStorage.setItem(SUCURSAL_ID_KEY, state.sucursalId);
+      else localStorage.removeItem(SUCURSAL_ID_KEY);
+      if (state.sucursalNombre) localStorage.setItem(SUCURSAL_NOMBRE_KEY, state.sucursalNombre);
+      else localStorage.removeItem(SUCURSAL_NOMBRE_KEY);
+      if (state.fotoPerfil) localStorage.setItem(FOTO_PERFIL_KEY, state.fotoPerfil);
+      else localStorage.removeItem(FOTO_PERFIL_KEY);
     } else {
-      localStorage.removeItem('savia_authenticated');
+      [TOKEN_KEY, ROLE_KEY, SUCURSAL_ID_KEY, SUCURSAL_NOMBRE_KEY, FOTO_PERFIL_KEY].forEach((k) => localStorage.removeItem(k));
     }
-  }, [isAuthenticated]);
+  }, [state.isAuthenticated, state.token, state.role, state.sucursalId, state.sucursalNombre, state.fotoPerfil]);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = useCallback(async (username: string, password: string): Promise<Role | false> => {
     if (useApi()) {
       try {
         const res = await fetch(getApiBase() + '/api/auth/login', {
@@ -38,9 +70,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           body: JSON.stringify({ usuario: username.trim(), password }),
         });
         const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok) {
-          setIsAuthenticated(true);
-          return true;
+        if (res.ok && data.ok && data.token && data.role) {
+          setState({
+            isAuthenticated: true,
+            token: data.token,
+            role: data.role,
+            sucursalId: data.sucursalId ?? null,
+            sucursalNombre: data.sucursalNombre ?? null,
+            fotoPerfil: data.fotoPerfil ?? null,
+          });
+          return data.role as Role;
         }
         return false;
       } catch {
@@ -48,19 +87,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     if (username === 'Savia' && password === '2286') {
-      setIsAuthenticated(true);
-      return true;
+      setState({
+        isAuthenticated: true,
+        token: null,
+        role: 'sucursal',
+        sucursalId: null,
+        sucursalNombre: 'Savia',
+        fotoPerfil: null,
+      });
+      return 'sucursal';
     }
     return false;
-  };
+  }, []);
 
-  const logout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('savia_authenticated');
-  };
+  const logout = useCallback(() => {
+    setState({
+      isAuthenticated: false,
+      role: null,
+      token: null,
+      sucursalId: null,
+      sucursalNombre: null,
+      fotoPerfil: null,
+    });
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        isAuthenticated: state.isAuthenticated,
+        role: state.role,
+        token: state.token,
+        sucursalId: state.sucursalId,
+        sucursalNombre: state.sucursalNombre,
+        fotoPerfil: state.fotoPerfil,
+        isAdmin: state.role === 'admin',
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { LogIn } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -25,13 +26,11 @@ const Login = () => {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <img 
-            src="/savia.png" 
-            alt="SAVIA" 
-            className="h-20 w-auto mx-auto mb-4"
-          />
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">SAVIA</h1>
-          <p className="text-gray-600">Iniciar sesión</p>
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary-100 text-primary-600 mb-4">
+            <LogIn className="w-10 h-10" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Iniciar sesión</h1>
+          <p className="text-gray-600 text-sm">Ingresá con tu usuario y contraseña</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">

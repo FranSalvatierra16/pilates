@@ -81,15 +81,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok && data.token && data.role) {
+          const role = data.role as Role;
+          localStorage.setItem(TOKEN_KEY, data.token);
+          localStorage.setItem(ROLE_KEY, role);
+          if (data.sucursalId) localStorage.setItem(SUCURSAL_ID_KEY, data.sucursalId);
+          else localStorage.removeItem(SUCURSAL_ID_KEY);
+          if (data.sucursalNombre) localStorage.setItem(SUCURSAL_NOMBRE_KEY, data.sucursalNombre);
+          else localStorage.removeItem(SUCURSAL_NOMBRE_KEY);
+          if (data.fotoPerfil) localStorage.setItem(FOTO_PERFIL_KEY, data.fotoPerfil);
+          else localStorage.removeItem(FOTO_PERFIL_KEY);
           setState({
             isAuthenticated: true,
             token: data.token,
-            role: data.role,
+            role,
             sucursalId: data.sucursalId ?? null,
             sucursalNombre: data.sucursalNombre ?? null,
             fotoPerfil: data.fotoPerfil ?? null,
           });
-          return data.role as Role;
+          return role;
         }
         return false;
       } catch {

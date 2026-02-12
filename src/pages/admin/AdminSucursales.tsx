@@ -34,9 +34,15 @@ export default function AdminSucursales() {
   }
 
   if (error) {
+    const isUnauth = /no autorizado|unauthorized|401|403/i.test(error);
     return (
       <div className="card border-red-200 bg-red-50 text-red-800">
-        {error}
+        <p className="font-medium">{error}</p>
+        {isUnauth && (
+          <p className="mt-2 text-sm">
+            Cerrando sesión y volvé a entrar con usuario <strong>adminF</strong> para usar el panel admin.
+          </p>
+        )}
       </div>
     );
   }

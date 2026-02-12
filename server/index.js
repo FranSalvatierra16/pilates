@@ -4,9 +4,12 @@ import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'savia-pilates-secret-cambiar-en-produccion';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -34,6 +37,19 @@ app.use('/api', async (req, res, next) => {
     console.error('Schema no listo:', err.message);
     res.status(503).json({ error: 'Base de datos en preparación. Reintentá en unos segundos.' });
   }
+});
+
+// Auth: exigir JWT en todas las rutas excepto login, health y registro público (seed-demo requiere sucursal logueada)
+const authSkip = ['/health', '/auth/login'];
+const isAuthSkip = (path) => authSkip.some((p) => path === p || path.startsWith(p + '?'));
+app.use('/api', (req, res, next) => {
+  if (isAuthSkip(req.path)) return next();
+  if (req.path === '/registro-link' && req.method === 'POST' && !req.path.includes('/agregar')) return next();
+  if (req.path === '/actividades' && req.method === 'GET') return next();
+  authMiddleware(req, res, () => {
+    if (req.path.startsWith('/admin')) return requireAdmin(req, res, next);
+    requireSucursal(req, res, next);
+  });
 });
 
 let pool = null;
@@ -67,15 +83,32 @@ function ensureSchemaReady() {
   return schemaReady;
 }
 
-async function seedUsuarioInicial(db) {
-  const { rows } = await db.query('SELECT id FROM usuarios WHERE usuario = $1', ['Savia']);
-  if (rows.length > 0) return;
-  const claveHash = await bcrypt.hash('2286', 10);
-  await db.query(
-    'INSERT INTO usuarios (id, usuario, clave_hash) VALUES ($1, $2, $3)',
-    ['savia-default', 'Savia', claveHash]
-  );
-  console.log('Usuario inicial Savia creado.');
+async function seedAdminAndSucursal(db) {
+  const { rows: adminRows } = await db.query('SELECT id FROM admin WHERE usuario = $1', ['admin']);
+  if (adminRows.length === 0) {
+    const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Admin123', 10);
+    await db.query('INSERT INTO admin (id, usuario, clave_hash) VALUES ($1, $2, $3)', [crypto.randomUUID(), 'admin', hash]);
+    console.log('Cuenta admin creada (usuario: admin).');
+  }
+  const { rows: sucRows } = await db.query('SELECT id FROM sucursales WHERE usuario = $1', ['Savia']);
+  let saviaId = sucRows.length > 0 ? sucRows[0].id : null;
+  if (sucRows.length === 0) {
+    saviaId = crypto.randomUUID();
+    const hash = await bcrypt.hash('2286', 10);
+    await db.query(
+      'INSERT INTO sucursales (id, nombre_lugar, usuario, clave_hash) VALUES ($1, $2, $3, $4)',
+      [saviaId, 'Savia', 'Savia', hash]
+    );
+    console.log('Sucursal Savia creada (usuario: Savia, clave: 2286).');
+  }
+  if (saviaId) {
+    for (const table of ['alumnos', 'actividades', 'gastos', 'profesores', 'turnos', 'registros_link']) {
+      try {
+        const r = await db.query(`UPDATE ${table} SET sucursal_id = $1 WHERE sucursal_id IS NULL`, [saviaId]);
+        if (r.rowCount > 0) console.log(`Migrados ${r.rowCount} registros de ${table} a Savia.`);
+      } catch (e) { /* columna puede no existir aún */ }
+    }
+  }
 }
 
 async function initSchema() {
@@ -85,7 +118,7 @@ async function initSchema() {
     const schemaPath = join(__dirname, 'schema.sql');
     const schema = readFileSync(schemaPath, 'utf8');
     await db.query(schema);
-    await seedUsuarioInicial(db);
+    await seedAdminAndSucursal(db);
     console.log('Esquema de base de datos listo.');
   } catch (err) {
     console.error('Error al inicializar esquema:', err.message);
@@ -93,12 +126,39 @@ async function initSchema() {
   }
 }
 
-// --- Alumnos ---
+function authMiddleware(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'No autorizado' });
+  try {
+    const token = auth.slice(7);
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Sesión inválida' });
+  }
+}
+
+function requireSucursal(req, res, next) {
+  if (req.user?.role !== 'sucursal' || !req.user?.sucursalId) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Acceso admin requerido' });
+  next();
+}
+
+// --- Alumnos (por sucursal) ---
 app.get('/api/alumnos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM alumnos ORDER BY created_at DESC');
+    const sid = req.user?.sucursalId;
+    const { rows } = await db.query(
+      'SELECT * FROM alumnos WHERE sucursal_id = $1 ORDER BY created_at DESC',
+      [sid]
+    );
     const data = rows.map((r) => ({
       id: r.id,
       nombre: r.nombre,
@@ -123,12 +183,14 @@ app.post('/api/alumnos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
     const b = req.body;
     await db.query(
-      `INSERT INTO alumnos (id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, descripcion, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, descripcion, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         b.id,
+        sid,
         b.nombre,
         b.apellido,
         b.dni,
@@ -166,8 +228,8 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.clasesAsistidas !== undefined) { updates.push(`clases_asistidas = $${i++}`); values.push(b.clasesAsistidas); }
     if (b.descripcion !== undefined) { updates.push(`descripcion = $${i++}`); values.push(b.descripcion || null); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
-    values.push(req.params.id);
-    await db.query(`UPDATE alumnos SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    values.push(req.params.id, req.user.sucursalId);
+    await db.query(`UPDATE alumnos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -179,7 +241,7 @@ app.delete('/api/alumnos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('DELETE FROM alumnos WHERE id = $1', [req.params.id]);
+    await db.query('DELETE FROM alumnos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -191,7 +253,7 @@ app.get('/api/alumnos/findByDni', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM alumnos WHERE dni = $1', [req.query.dni]);
+    const { rows } = await db.query('SELECT * FROM alumnos WHERE dni = $1 AND sucursal_id = $2', [req.query.dni, req.user.sucursalId]);
     if (rows.length === 0) return res.json(null);
     const r = rows[0];
     res.json({
@@ -220,11 +282,13 @@ app.post('/api/registro-link', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     const id = crypto.randomUUID();
+    const sucursalId = req.user?.sucursalId || b.sucursalId || null;
     await db.query(
-      `INSERT INTO registros_link (id, nombre, apellido, dni, telefono, email, actividad_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      `INSERT INTO registros_link (id, sucursal_id, nombre, apellido, dni, telefono, email, actividad_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         id,
+        sucursalId,
         (b.nombre || '').trim(),
         (b.apellido || '').trim(),
         (b.dni || '').trim(),
@@ -244,7 +308,7 @@ app.get('/api/registro-link', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM registros_link ORDER BY created_at DESC');
+    const { rows } = await db.query('SELECT * FROM registros_link WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]);
     res.json(rows.map((r) => ({
       id: r.id,
       nombre: r.nombre,
@@ -266,7 +330,7 @@ app.post('/api/registro-link/:id/agregar', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { id } = req.params;
-    const { rows } = await db.query('SELECT * FROM registros_link WHERE id = $1', [id]);
+    const { rows } = await db.query('SELECT * FROM registros_link WHERE id = $1 AND sucursal_id = $2', [id, req.user.sucursalId]);
     if (rows.length === 0) return res.status(404).json({ error: 'Registro no encontrado' });
     const r = rows[0];
     const alumnoId = crypto.randomUUID();
@@ -288,7 +352,7 @@ app.delete('/api/registro-link/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('DELETE FROM registros_link WHERE id = $1', [req.params.id]);
+    await db.query('DELETE FROM registros_link WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -296,12 +360,14 @@ app.delete('/api/registro-link/:id', async (req, res) => {
   }
 });
 
-// --- Actividades ---
+// --- Actividades (por sucursal; GET puede ser público con ?sucursalId= para el formulario de registro) ---
 app.get('/api/actividades', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM actividades ORDER BY created_at DESC');
+    const sid = req.user?.sucursalId || req.query.sucursalId || null;
+    if (!sid) return res.json([]);
+    const { rows } = await db.query('SELECT * FROM actividades WHERE sucursal_id = $1 ORDER BY created_at DESC', [sid]);
     res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, precio: Number(r.precio), createdAt: r.created_at?.toISOString?.() ?? r.created_at })));
   } catch (e) {
     console.error(e);
@@ -313,7 +379,7 @@ app.get('/api/actividades/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM actividades WHERE id = $1', [req.params.id]);
+    const { rows } = await db.query('SELECT * FROM actividades WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     if (rows.length === 0) return res.status(404).json(null);
     const r = rows[0];
     res.json({ id: r.id, nombre: r.nombre, precio: Number(r.precio), createdAt: r.created_at?.toISOString?.() ?? r.created_at });
@@ -329,8 +395,8 @@ app.post('/api/actividades', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     await db.query(
-      'INSERT INTO actividades (id, nombre, precio, created_at) VALUES ($1, $2, $3, $4)',
-      [b.id, b.nombre, b.precio, b.createdAt || new Date().toISOString()]
+      'INSERT INTO actividades (id, sucursal_id, nombre, precio, created_at) VALUES ($1, $2, $3, $4, $5)',
+      [b.id, req.user.sucursalId, b.nombre, b.precio, b.createdAt || new Date().toISOString()]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -350,8 +416,8 @@ app.patch('/api/actividades/:id', async (req, res) => {
     if (b.nombre !== undefined) { updates.push(`nombre = $${i++}`); values.push(b.nombre); }
     if (b.precio !== undefined) { updates.push(`precio = $${i++}`); values.push(b.precio); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
-    values.push(req.params.id);
-    await db.query(`UPDATE actividades SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    values.push(req.params.id, req.user.sucursalId);
+    await db.query(`UPDATE actividades SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -363,7 +429,7 @@ app.delete('/api/actividades/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('DELETE FROM actividades WHERE id = $1', [req.params.id]);
+    await db.query('DELETE FROM actividades WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -376,7 +442,10 @@ app.get('/api/pagos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM pagos ORDER BY created_at DESC');
+    const { rows } = await db.query(
+      'SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id WHERE a.sucursal_id = $1 ORDER BY p.created_at DESC',
+      [req.user.sucursalId]
+    );
     res.json(rows.map((r) => ({
       id: r.id,
       alumnoId: r.alumno_id,
@@ -395,7 +464,10 @@ app.get('/api/pagos/by-alumno/:alumnoId', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM pagos WHERE alumno_id = $1 ORDER BY created_at DESC', [req.params.alumnoId]);
+    const { rows } = await db.query(
+      'SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id WHERE p.alumno_id = $1 AND a.sucursal_id = $2 ORDER BY p.created_at DESC',
+      [req.params.alumnoId, req.user.sucursalId]
+    );
     res.json(rows.map((r) => ({
       id: r.id,
       alumnoId: r.alumno_id,
@@ -431,7 +503,7 @@ app.get('/api/gastos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM gastos ORDER BY created_at DESC');
+    const { rows } = await db.query('SELECT * FROM gastos WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]);
     res.json(rows.map((r) => ({
       id: r.id,
       descripcion: r.descripcion,
@@ -452,8 +524,8 @@ app.post('/api/gastos', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     await db.query(
-      'INSERT INTO gastos (id, descripcion, monto, metodo_pago, fecha, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-      [b.id, b.descripcion, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString()]
+      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [b.id, req.user.sucursalId, b.descripcion, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString()]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -475,8 +547,8 @@ app.patch('/api/gastos/:id', async (req, res) => {
     if (b.metodoPago !== undefined) { updates.push(`metodo_pago = $${i++}`); values.push(b.metodoPago); }
     if (b.fecha !== undefined) { updates.push(`fecha = $${i++}`); values.push(b.fecha); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
-    values.push(req.params.id);
-    await db.query(`UPDATE gastos SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    values.push(req.params.id, req.user.sucursalId);
+    await db.query(`UPDATE gastos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -488,7 +560,7 @@ app.delete('/api/gastos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('DELETE FROM gastos WHERE id = $1', [req.params.id]);
+    await db.query('DELETE FROM gastos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -501,7 +573,7 @@ app.get('/api/profesores', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM profesores ORDER BY created_at DESC');
+    const { rows } = await db.query('SELECT * FROM profesores WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]);
     res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, apellido: r.apellido, createdAt: r.created_at?.toISOString?.() ?? r.created_at })));
   } catch (e) {
     console.error(e);
@@ -515,8 +587,8 @@ app.post('/api/profesores', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     await db.query(
-      'INSERT INTO profesores (id, nombre, apellido, created_at) VALUES ($1, $2, $3, $4)',
-      [b.id, b.nombre, b.apellido, b.createdAt || new Date().toISOString()]
+      'INSERT INTO profesores (id, sucursal_id, nombre, apellido, created_at) VALUES ($1, $2, $3, $4, $5)',
+      [b.id, req.user.sucursalId, b.nombre, b.apellido, b.createdAt || new Date().toISOString()]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -536,8 +608,8 @@ app.patch('/api/profesores/:id', async (req, res) => {
     if (b.nombre !== undefined) { updates.push(`nombre = $${i++}`); values.push(b.nombre); }
     if (b.apellido !== undefined) { updates.push(`apellido = $${i++}`); values.push(b.apellido); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
-    values.push(req.params.id);
-    await db.query(`UPDATE profesores SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    values.push(req.params.id, req.user.sucursalId);
+    await db.query(`UPDATE profesores SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -549,7 +621,7 @@ app.delete('/api/profesores/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('DELETE FROM profesores WHERE id = $1', [req.params.id]);
+    await db.query('DELETE FROM profesores WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -562,7 +634,7 @@ app.get('/api/turnos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM turnos ORDER BY created_at DESC');
+    const { rows } = await db.query('SELECT * FROM turnos WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]);
     res.json(rows.map((r) => ({
       id: r.id,
       diaSemana: r.dia_semana,
@@ -584,8 +656,8 @@ app.post('/api/turnos', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     await db.query(
-      'INSERT INTO turnos (id, dia_semana, hora, titulo, profesor_id, alumno_ids, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [b.id, b.diaSemana, b.hora, b.titulo || null, b.profesorId || null, b.alumnoIds || [], b.createdAt || new Date().toISOString()]
+      'INSERT INTO turnos (id, sucursal_id, dia_semana, hora, titulo, profesor_id, alumno_ids, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [b.id, req.user.sucursalId, b.diaSemana, b.hora, b.titulo || null, b.profesorId || null, b.alumnoIds || [], b.createdAt || new Date().toISOString()]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -608,8 +680,8 @@ app.patch('/api/turnos/:id', async (req, res) => {
     if (b.profesorId !== undefined) { updates.push(`profesor_id = $${i++}`); values.push(b.profesorId || null); }
     if (b.alumnoIds !== undefined) { updates.push(`alumno_ids = $${i++}`); values.push(b.alumnoIds); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
-    values.push(req.params.id);
-    await db.query(`UPDATE turnos SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    values.push(req.params.id, req.user.sucursalId);
+    await db.query(`UPDATE turnos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -621,7 +693,7 @@ app.delete('/api/turnos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('DELETE FROM turnos WHERE id = $1', [req.params.id]);
+    await db.query('DELETE FROM turnos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -633,7 +705,7 @@ app.get('/api/turnos/by-dia/:diaSemana', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM turnos WHERE dia_semana = $1', [req.params.diaSemana]);
+    const { rows } = await db.query('SELECT * FROM turnos WHERE dia_semana = $1 AND sucursal_id = $2', [req.params.diaSemana, req.user.sucursalId]);
     res.json(rows.map((r) => ({
       id: r.id,
       diaSemana: r.dia_semana,
@@ -654,7 +726,7 @@ app.get('/api/turnos/by-dia-hora', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { diaSemana, hora } = req.query;
-    const { rows } = await db.query('SELECT * FROM turnos WHERE dia_semana = $1 AND hora = $2', [diaSemana, hora]);
+    const { rows } = await db.query('SELECT * FROM turnos WHERE dia_semana = $1 AND hora = $2 AND sucursal_id = $3', [diaSemana, hora, req.user.sucursalId]);
     if (rows.length === 0) return res.json(null);
     const r = rows[0];
     res.json({
@@ -676,7 +748,7 @@ app.get('/api/turnos/by-alumno/:alumnoId', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query("SELECT * FROM turnos WHERE $1 = ANY(alumno_ids)", [req.params.alumnoId]);
+    const { rows } = await db.query("SELECT * FROM turnos WHERE sucursal_id = $1 AND $2 = ANY(alumno_ids)", [req.user.sucursalId, req.params.alumnoId]);
     res.json(rows.map((r) => ({
       id: r.id,
       diaSemana: r.dia_semana,
@@ -697,7 +769,10 @@ app.get('/api/asistencias', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM asistencias ORDER BY created_at DESC');
+    const { rows } = await db.query(
+      'SELECT asi.* FROM asistencias asi JOIN turnos t ON asi.turno_id = t.id WHERE t.sucursal_id = $1 ORDER BY asi.created_at DESC',
+      [req.user.sucursalId]
+    );
     res.json(rows.map((r) => ({
       id: r.id,
       turnoId: r.turno_id,
@@ -716,7 +791,10 @@ app.get('/api/asistencias/by-semana/:semana', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM asistencias WHERE semana = $1', [req.params.semana]);
+    const { rows } = await db.query(
+      'SELECT asi.* FROM asistencias asi JOIN turnos t ON asi.turno_id = t.id WHERE asi.semana = $1 AND t.sucursal_id = $2',
+      [req.params.semana, req.user.sucursalId]
+    );
     res.json(rows.map((r) => ({
       id: r.id,
       turnoId: r.turno_id,
@@ -797,11 +875,32 @@ app.post('/api/auth/login', async (req, res) => {
     if (!db) return res.status(503).json({ ok: false, error: 'Base de datos no configurada' });
     const { usuario, password } = req.body || {};
     if (!usuario || !password) return res.status(400).json({ ok: false, error: 'Faltan usuario o contraseña' });
-    const { rows } = await db.query('SELECT id, clave_hash FROM usuarios WHERE usuario = $1', [usuario.trim()]);
-    if (rows.length === 0) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
-    const valid = await bcrypt.compare(password, rows[0].clave_hash);
+    const u = usuario.trim();
+    const { rows: adminRows } = await db.query('SELECT id, clave_hash FROM admin WHERE usuario = $1', [u]);
+    if (adminRows.length > 0) {
+      const valid = await bcrypt.compare(password, adminRows[0].clave_hash);
+      if (!valid) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
+      const token = jwt.sign({ role: 'admin', sub: adminRows[0].id }, JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ ok: true, token, role: 'admin' });
+    }
+    const { rows: sucRows } = await db.query('SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil FROM sucursales WHERE usuario = $1', [u]);
+    if (sucRows.length === 0) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
+    const valid = await bcrypt.compare(password, sucRows[0].clave_hash);
     if (!valid) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
-    res.json({ ok: true });
+    const s = sucRows[0];
+    const token = jwt.sign(
+      { role: 'sucursal', sub: s.id, sucursalId: s.id },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    return res.json({
+      ok: true,
+      token,
+      role: 'sucursal',
+      sucursalId: s.id,
+      sucursalNombre: s.nombre_lugar,
+      fotoPerfil: s.foto_perfil || null,
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ ok: false, error: e.message });
@@ -836,24 +935,26 @@ app.post('/api/seed-demo', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Tenés que estar logueado como sucursal para cargar datos de prueba' });
     const client = await db.connect();
     try {
       const actividadIds = [];
       for (let i = 0; i < SEED_ACTIVIDADES.length; i++) {
-        const id = `act-demo-${i + 1}`;
+        const id = `act-demo-${crypto.randomUUID().slice(0, 8)}-${i + 1}`;
         await client.query(
-          'INSERT INTO actividades (id, nombre, precio) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET nombre = $2, precio = $3',
-          [id, SEED_ACTIVIDADES[i].nombre, SEED_ACTIVIDADES[i].precio]
+          'INSERT INTO actividades (id, sucursal_id, nombre, precio) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET nombre = $3, precio = $4',
+          [id, sid, SEED_ACTIVIDADES[i].nombre, SEED_ACTIVIDADES[i].precio]
         );
         actividadIds.push(id);
       }
-      let { rows: profs } = await client.query('SELECT id FROM profesores LIMIT 2');
+      let { rows: profs } = await client.query('SELECT id FROM profesores WHERE sucursal_id = $1 LIMIT 2', [sid]);
       const profesorIds = profs.map((r) => r.id);
       if (profesorIds.length < 2) {
         const [nombres, apellidos] = [['Laura', 'Pedro'], ['Pilates', 'Instructor']];
         for (let i = profesorIds.length; i < 2; i++) {
-          const id = `prof-demo-${i + 1}`;
-          await client.query('INSERT INTO profesores (id, nombre, apellido) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING', [id, nombres[i], apellidos[i]]);
+          const id = crypto.randomUUID();
+          await client.query('INSERT INTO profesores (id, sucursal_id, nombre, apellido) VALUES ($1, $2, $3, $4)', [id, sid, nombres[i], apellidos[i]]);
           profesorIds.push(id);
         }
       }
@@ -868,12 +969,13 @@ app.post('/api/seed-demo', async (req, res) => {
         const f = new Date();
         f.setDate(f.getDate() + seedRandomInt(-10, 30));
         const fechaVencStr = f.toISOString().slice(0, 10);
+        const dniUnico = `90-${sid.slice(0, 6)}-${String(i).padStart(4, '0')}`;
         await client.query(
-          'INSERT INTO alumnos (id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, NOW()) ON CONFLICT (dni) DO NOTHING',
-          [id, nombre, apellido, dni, telefono, email, fechaVencStr, actividadId]
+          'INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, NOW())',
+          [id, sid, nombre, apellido, dniUnico, telefono, email, fechaVencStr, actividadId]
         );
       }
-      const { rows: alumnosRows } = await client.query("SELECT id FROM alumnos WHERE dni LIKE '90%'");
+      const { rows: alumnosRows } = await client.query("SELECT id FROM alumnos WHERE sucursal_id = $1 AND dni LIKE '90-%'", [sid]);
       const idsParaTurnos = alumnosRows.map((r) => r.id);
       let turnosCreados = 0;
       for (let dia = 0; dia < 6; dia++) {
@@ -884,8 +986,8 @@ app.post('/api/seed-demo', async (req, res) => {
           const shuffled = [...idsParaTurnos].sort(() => Math.random() - 0.5);
           const asignados = cantidad === 0 ? [] : shuffled.slice(0, cantidad);
           await client.query(
-            'INSERT INTO turnos (id, dia_semana, hora, titulo, profesor_id, alumno_ids, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) ON CONFLICT (id) DO NOTHING',
-            [turnoId, dia, hora, `Clase ${hora}`, profesorId, asignados]
+            'INSERT INTO turnos (id, sucursal_id, dia_semana, hora, titulo, profesor_id, alumno_ids, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())',
+            [turnoId, sid, dia, hora, `Clase ${hora}`, profesorId, asignados]
           );
           turnosCreados++;
         }
@@ -903,6 +1005,78 @@ app.post('/api/seed-demo', async (req, res) => {
   } catch (e) {
     console.error('Error seed-demo:', e);
     res.status(500).json({ error: e.message, ok: false });
+  }
+});
+
+// --- Admin: sucursales ---
+app.get('/api/admin/sucursales', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { rows } = await db.query(
+      `SELECT s.id, s.nombre_lugar, s.usuario, s.foto_perfil, s.created_at,
+        (SELECT COUNT(*) FROM alumnos a WHERE a.sucursal_id = s.id) AS cantidad_alumnos,
+        (SELECT COUNT(*) FROM actividades ac WHERE ac.sucursal_id = s.id) AS cantidad_actividades,
+        (SELECT COUNT(*) FROM profesores p WHERE p.sucursal_id = s.id) AS cantidad_profesores
+       FROM sucursales s ORDER BY s.created_at DESC`
+    );
+    res.json(rows.map((r) => ({
+      id: r.id,
+      nombreLugar: r.nombre_lugar,
+      usuario: r.usuario,
+      fotoPerfil: r.foto_perfil,
+      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+      cantidadAlumnos: Number(r.cantidad_alumnos ?? 0),
+      cantidadActividades: Number(r.cantidad_actividades ?? 0),
+      cantidadProfesores: Number(r.cantidad_profesores ?? 0),
+    })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/admin/sucursales', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const b = req.body;
+    const id = crypto.randomUUID();
+    const hash = await bcrypt.hash(b.password || '1234', 10);
+    await db.query(
+      'INSERT INTO sucursales (id, nombre_lugar, usuario, clave_hash, foto_perfil) VALUES ($1, $2, $3, $4, $5)',
+      [id, (b.nombreLugar || b.nombre_lugar || '').trim(), (b.usuario || '').trim(), hash, b.fotoPerfil || b.foto_perfil || null]
+    );
+    res.status(201).json({ ok: true, id });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/admin/sucursales/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const b = req.body;
+    const updates = [];
+    const values = [];
+    let i = 1;
+    if (b.nombreLugar !== undefined) { updates.push(`nombre_lugar = $${i++}`); values.push(b.nombreLugar); }
+    if (b.usuario !== undefined) { updates.push(`usuario = $${i++}`); values.push(b.usuario); }
+    if (b.password !== undefined && b.password.trim() !== '') {
+      const hash = await bcrypt.hash(b.password, 10);
+      updates.push(`clave_hash = $${i++}`);
+      values.push(hash);
+    }
+    if (b.fotoPerfil !== undefined) { updates.push(`foto_perfil = $${i++}`); values.push(b.fotoPerfil); }
+    if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
+    values.push(req.params.id);
+    await db.query(`UPDATE sucursales SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
 });
 

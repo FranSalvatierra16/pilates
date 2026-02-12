@@ -1,5 +1,22 @@
--- Esquema PostgreSQL para SAVIA Pilates (Railway u otro)
--- Se ejecuta automáticamente al iniciar el servidor si las tablas no existen
+-- Esquema PostgreSQL para SAVIA Pilates (multi-sucursal)
+-- Sucursales (cada una: usuario, contraseña, nombre del lugar, foto de perfil)
+CREATE TABLE IF NOT EXISTS sucursales (
+  id TEXT PRIMARY KEY,
+  nombre_lugar TEXT NOT NULL,
+  usuario TEXT NOT NULL UNIQUE,
+  clave_hash TEXT NOT NULL,
+  foto_perfil TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_sucursales_usuario ON sucursales(usuario);
+
+-- Admin (una cuenta para gestionar todas las sucursales)
+CREATE TABLE IF NOT EXISTS admin (
+  id TEXT PRIMARY KEY,
+  usuario TEXT NOT NULL UNIQUE,
+  clave_hash TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
 -- Actividades
 CREATE TABLE IF NOT EXISTS actividades (
@@ -8,13 +25,14 @@ CREATE TABLE IF NOT EXISTS actividades (
   precio NUMERIC NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE actividades ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 
 -- Alumnos
 CREATE TABLE IF NOT EXISTS alumnos (
   id TEXT PRIMARY KEY,
   nombre TEXT NOT NULL,
   apellido TEXT NOT NULL,
-  dni TEXT NOT NULL UNIQUE,
+  dni TEXT NOT NULL,
   telefono TEXT NOT NULL,
   email TEXT NOT NULL,
   fecha_vencimiento_cuota DATE,
@@ -23,9 +41,8 @@ CREATE TABLE IF NOT EXISTS alumnos (
   descripcion TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
--- Permitir agregar columna en bases existentes
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS descripcion TEXT;
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 
 -- Pagos
 CREATE TABLE IF NOT EXISTS pagos (
@@ -46,6 +63,7 @@ CREATE TABLE IF NOT EXISTS gastos (
   fecha DATE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 
 -- Profesores
 CREATE TABLE IF NOT EXISTS profesores (
@@ -54,6 +72,7 @@ CREATE TABLE IF NOT EXISTS profesores (
   apellido TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE profesores ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 
 -- Turnos
 CREATE TABLE IF NOT EXISTS turnos (
@@ -65,6 +84,7 @@ CREATE TABLE IF NOT EXISTS turnos (
   alumno_ids TEXT[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE turnos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 
 -- Asistencias
 CREATE TABLE IF NOT EXISTS asistencias (
@@ -76,17 +96,7 @@ CREATE TABLE IF NOT EXISTS asistencias (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Usuarios (login)
-CREATE TABLE IF NOT EXISTS usuarios (
-  id TEXT PRIMARY KEY,
-  usuario TEXT NOT NULL UNIQUE,
-  clave_hash TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios(usuario);
-
--- Registros desde link público (IG, etc.): se cargan acá y después se agregan como alumnos
+-- Registros desde link público
 CREATE TABLE IF NOT EXISTS registros_link (
   id TEXT PRIMARY KEY,
   nombre TEXT NOT NULL,
@@ -97,11 +107,12 @@ CREATE TABLE IF NOT EXISTS registros_link (
   actividad_id TEXT REFERENCES actividades(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
+ALTER TABLE registros_link ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_registros_link_created_at ON registros_link(created_at DESC);
 
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_alumnos_dni ON alumnos(dni);
+CREATE INDEX IF NOT EXISTS idx_alumnos_sucursal ON alumnos(sucursal_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha);
 CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);

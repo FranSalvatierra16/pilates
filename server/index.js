@@ -393,12 +393,15 @@ app.post('/api/actividades', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Debés iniciar sesión como sucursal para crear actividades' });
     const b = req.body;
+    const id = b.id || crypto.randomUUID();
     await db.query(
       'INSERT INTO actividades (id, sucursal_id, nombre, precio, created_at) VALUES ($1, $2, $3, $4, $5)',
-      [b.id, req.user.sucursalId, b.nombre, b.precio, b.createdAt || new Date().toISOString()]
+      [id, sid, (b.nombre || '').trim(), Number(b.precio) || 0, b.createdAt || new Date().toISOString()]
     );
-    res.status(201).json({ ok: true });
+    res.status(201).json({ ok: true, id });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

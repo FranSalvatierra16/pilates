@@ -13,6 +13,7 @@ const Actividades = () => {
     nombre: '',
     precio: '',
   });
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     loadActividades();
@@ -40,6 +41,7 @@ const Actividades = () => {
   };
 
   const handleOpenModal = (actividad?: Actividad) => {
+    setSaveError('');
     if (actividad) {
       setEditingActividad(actividad);
       setFormData({
@@ -59,10 +61,10 @@ const Actividades = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setSaveError('');
     const precio = parseFloat(formData.precio);
     if (isNaN(precio) || precio <= 0) {
-      alert('El precio debe ser un número válido mayor a 0');
+      setSaveError('El precio debe ser un número válido mayor a 0');
       return;
     }
 
@@ -74,19 +76,19 @@ const Actividades = () => {
         });
       } else {
         const nuevaActividad: Actividad = {
-          id: Date.now().toString(),
+          id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           nombre: formData.nombre,
           precio: precio,
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.actividades.add(nuevaActividad);
       }
-      
       await loadActividades();
       handleCloseModal();
     } catch (error) {
       console.error('Error saving actividad:', error);
-      alert('Error al guardar la actividad. Revisá la consola para más detalles.');
+      const msg = error instanceof Error ? error.message : 'Error al guardar la actividad';
+      setSaveError(msg);
     }
   };
 
@@ -212,6 +214,11 @@ const Actividades = () => {
                   placeholder="0"
                 />
               </div>
+              {saveError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {saveError}
+              </div>
+            )}
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"

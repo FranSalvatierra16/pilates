@@ -154,8 +154,7 @@ export const storageHybrid = {
       return storage.turnos.getByAlumnoId(alumnoId);
     },
     ajustarCupo: async (): Promise<{ turnosActualizados: number; alumnosEliminados: number }> => {
-      const b = backend();
-      if (b) return await b.turnos.ajustarCupo();
+      if (useApi()) return await storageApi.turnos.ajustarCupo();
       const todos = storage.turnos.getAll();
       let turnosActualizados = 0;
       let alumnosEliminados = 0;

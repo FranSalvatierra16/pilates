@@ -45,7 +45,7 @@ const isAuthSkip = (path) => authSkip.some((p) => path === p || path.startsWith(
 app.use('/api', (req, res, next) => {
   if (isAuthSkip(req.path)) return next();
   if (req.path === '/registro-link' && req.method === 'POST' && !req.path.includes('/agregar')) return next();
-  if (req.path === '/actividades' && req.method === 'GET') return next();
+  if (req.path === '/actividades' && req.method === 'GET' && !req.headers.authorization) return next();
   authMiddleware(req, res, () => {
     if (req.path.startsWith('/admin')) return requireAdmin(req, res, next);
     requireSucursal(req, res, next);

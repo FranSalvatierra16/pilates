@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Activity, DollarSign, AlertTriangle } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { isCuotaVencida } from '../utils/date';
 
 const Dashboard = () => {
+  const { sucursalNombre } = useAuth();
+  const nombreSucursal = sucursalNombre || 'SAVIA';
   const [stats, setStats] = useState({
     totalAlumnos: 0,
     totalActividades: 0,
@@ -140,7 +143,7 @@ const Dashboard = () => {
         <div className="card">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Bienvenido</h2>
           <p className="text-gray-600 mb-4">
-            Sistema de gestión para SAVIA. Desde aquí puedes gestionar alumnos,
+            Sistema de gestión para {nombreSucursal}. Desde aquí puedes gestionar alumnos,
             actividades, controlar accesos, registrar pagos, ver el estado de la caja y gestionar turnos.
           </p>
           <div className="bg-primary-50 p-4 rounded-lg">

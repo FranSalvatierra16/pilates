@@ -387,14 +387,11 @@ const Calendario = () => {
     if (!turno) return null;
     
     const estadoAsistencia = getEstadoAsistencia(turno.id, alumno.id);
-    let bgColor = estadoAsistencia === 'asistio' 
-      ? 'bg-green-100 text-green-900' 
-      : estadoAsistencia === 'no_asistio'
-      ? 'bg-red-100 text-red-900'
-      : 'bg-primary-100 text-primary-900';
     const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
     const vencido = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
     const porVencer = tieneFecha && !vencido && (isCuotaVenceHoy(alumno.fechaVencimientoCuota) || isCuotaPorVencer(alumno.fechaVencimientoCuota, 3));
+    // Cuadro: solo rojo/ámbar si está vencido o por vencer; si está al día, todos el mismo color (asistencia solo en los íconos ✓/X)
+    let bgColor = 'bg-primary-100 text-primary-900';
     if (vencido) bgColor = 'bg-red-200 text-red-900 border-l-4 border-red-600';
     else if (porVencer) bgColor = 'bg-amber-100 text-amber-900 border-l-4 border-amber-500';
     

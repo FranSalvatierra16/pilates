@@ -603,11 +603,10 @@ const Alumnos = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre *
+                    Nombre
                   </label>
                   <input
                     type="text"
-                    required
                     value={formData.nombre}
                     onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                     className="input-field"
@@ -615,11 +614,10 @@ const Alumnos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Apellido *
+                    Apellido
                   </label>
                   <input
                     type="text"
-                    required
                     value={formData.apellido}
                     onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
                     className="input-field"
@@ -627,11 +625,10 @@ const Alumnos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    DNI *
+                    DNI
                   </label>
                   <input
                     type="text"
-                    required
                     value={formData.dni}
                     onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
                     className="input-field"
@@ -639,11 +636,10 @@ const Alumnos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Teléfono *
+                    Teléfono
                   </label>
                   <input
                     type="tel"
-                    required
                     value={formData.telefono}
                     onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
                     className="input-field"
@@ -651,11 +647,10 @@ const Alumnos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email *
+                    Email
                   </label>
                   <input
                     type="email"
-                    required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="input-field"
@@ -663,10 +658,9 @@ const Alumnos = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Actividad *
+                    Actividad
                   </label>
                   <select
-                    required
                     value={formData.actividadId}
                     onChange={(e) => setFormData({ ...formData, actividadId: e.target.value })}
                     className="input-field"
@@ -693,11 +687,10 @@ const Alumnos = () => {
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Fecha Vencimiento Cuota {editingAlumno ? '*' : '(Se establecerá al pagar)'}
+                    Fecha Vencimiento Cuota (se puede establecer al pagar)
                   </label>
                   <input
                     type="date"
-                    required={!!editingAlumno}
                     value={formData.fechaVencimientoCuota}
                     onChange={(e) => setFormData({ ...formData, fechaVencimientoCuota: e.target.value })}
                     className="input-field"

@@ -430,34 +430,34 @@ const Calendario = () => {
         <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}>
           {alumno.nombre} {alumno.apellido}
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleMarcarAsistencia(turno.id, alumno.id, 'asistio');
             }}
-            className={`p-0.5 rounded transition-colors ${
+            className={`min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 sm:p-0.5 rounded transition-colors flex items-center justify-center touch-manipulation ${
               estadoAsistencia === 'asistio'
                 ? 'bg-green-600 text-white'
-                : 'bg-gray-200 text-gray-600 hover:bg-green-300'
+                : 'bg-gray-200 text-gray-600 hover:bg-green-300 active:bg-green-400'
             }`}
             title="Marcar como asistió"
           >
-            <Check className="w-4 h-4" />
+            <Check className="w-5 h-5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               handleMarcarAsistencia(turno.id, alumno.id, 'no_asistio');
             }}
-            className={`p-0.5 rounded transition-colors ${
+            className={`min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 sm:p-0.5 rounded transition-colors flex items-center justify-center touch-manipulation ${
               estadoAsistencia === 'no_asistio'
                 ? 'bg-red-600 text-white'
-                : 'bg-gray-200 text-gray-600 hover:bg-red-300'
+                : 'bg-gray-200 text-gray-600 hover:bg-red-300 active:bg-red-400'
             }`}
             title="Marcar como no asistió"
           >
-            <XCircle className="w-4 h-4" />
+            <XCircle className="w-5 h-5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </div>
@@ -488,8 +488,15 @@ const Calendario = () => {
         </div>
       </div>
 
-      <div className="card overflow-x-auto p-0 -mx-2 sm:mx-0 touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
-        <div className="min-w-[640px]">
+      {/* Hint móvil: deslizar para ver más días */}
+      <p className="sm:hidden text-center text-sm text-gray-500 mb-2 px-2">
+        ← Deslizá a la derecha para ver todos los días →
+      </p>
+      <div
+        className="card p-0 -mx-2 sm:mx-0 overflow-x-scroll sm:overflow-x-auto overflow-y-visible touch-pan-x"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        <div className="min-w-[720px] pr-4 sm:pr-0">
           {/* Header con días de la semana */}
           <div className="grid grid-cols-8 border-b border-gray-200 bg-primary-50">
             <div className="sticky left-0 z-20 p-2 sm:p-3 font-semibold text-gray-700 border-r border-gray-200 bg-primary-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)]">Hora</div>

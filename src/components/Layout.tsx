@@ -148,8 +148,8 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
-        <div className="relative min-h-0">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 w-full max-w-[100vw] overflow-x-hidden min-w-0">
+        <div className="relative min-h-0 w-full min-w-0">
           {children}
         </div>
       </main>

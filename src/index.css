@@ -14,6 +14,10 @@
   @media (max-width: 768px) {
     body {
       background-attachment: scroll;
+      overflow-x: hidden;
+    }
+    html {
+      overflow-x: hidden;
     }
   }
 }

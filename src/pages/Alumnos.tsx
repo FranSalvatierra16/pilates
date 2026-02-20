@@ -38,6 +38,15 @@ const Alumnos = () => {
     fechaVencimiento: '',
   });
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const fn = () => setIsMobile(mq.matches);
+    fn();
+    mq.addEventListener('change', fn);
+    return () => mq.removeEventListener('change', fn);
+  }, []);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -341,7 +350,7 @@ const Alumnos = () => {
               value={filtroBusqueda}
               onChange={(e) => setFiltroBusqueda(e.target.value)}
               placeholder="Buscar por nombre, apellido o DNI..."
-              className="input-field flex-1 min-w-[200px]"
+              className="input-field flex-1 min-w-0 sm:min-w-[200px]"
             />
             {filtroBusqueda && (
               <button
@@ -352,8 +361,8 @@ const Alumnos = () => {
               </button>
             )}
           </div>
-          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">
-            <span className="text-sm text-gray-500 self-center mr-1">Vencimiento:</span>
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200 items-center">
+            <span className="text-sm text-gray-500 w-full sm:w-auto">Vencimiento:</span>
             <button
               type="button"
               onClick={() => setFiltroVencimiento('todos')}
@@ -428,36 +437,77 @@ const Alumnos = () => {
             Agregar primer alumno
           </button>
         </div>
+      ) : isMobile ? (
+        /* Vista móvil: tarjetas por alumno, todo entra en pantalla */
+        <div className="space-y-3">
+          {alumnosAMostrar.map((alumno) => {
+            const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
+            const vencida = tieneFechaVencimiento ? isCuotaVencida(alumno.fechaVencimientoCuota) : false;
+            const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;
+            const estado = !tieneFechaVencimiento ? 'pendiente' : vencida ? 'vencida' : venceHoy ? 'venceHoy' : 'alDia';
+            return (
+              <div key={alumno.id} className="card p-4 border border-gray-200">
+                <div className="flex justify-between items-start gap-2 mb-3">
+                  <div>
+                    <h3 className="font-semibold text-gray-900 text-base">
+                      {alumno.nombre} {alumno.apellido}
+                    </h3>
+                    <p className="text-sm text-gray-500">DNI {alumno.dni}</p>
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button onClick={() => handlePagarCuota(alumno)} className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title="Pagar cuota" aria-label="Pagar"><CreditCard className="w-5 h-5" /></button>
+                    <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
+                    <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-primary-600 hover:bg-primary-50 touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
+                    <button onClick={() => handleDelete(alumno.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation" title="Eliminar" aria-label="Eliminar"><Trash2 className="w-5 h-5" /></button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div>
+                    <span className="text-gray-500">Contacto: </span>
+                    <span className="text-gray-900">{alumno.telefono || '—'}</span>
+                    {alumno.email && <span className="text-gray-600"> · {alumno.email}</span>}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Actividad: </span>
+                    <span className="text-gray-900">{getActividadNombre(alumno.actividadId)}</span>
+                    <span className="text-gray-600"> — {formatCurrency(getActividadPrecio(alumno.actividadId))}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Vencimiento: </span>
+                    {estado === 'pendiente' ? (
+                      <span className="text-orange-600 font-medium">Pendiente de pago</span>
+                    ) : (
+                      <span className={`font-medium ${estado === 'vencida' ? 'text-red-600' : estado === 'venceHoy' ? 'text-amber-600' : 'text-green-600'}`}>
+                        {formatDate(alumno.fechaVencimientoCuota)}
+                        {estado === 'vencida' && ' (Vencida)'}
+                        {estado === 'venceHoy' && ' (Vence hoy)'}
+                        {estado === 'alDia' && ' (Al día)'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex justify-between text-gray-500 text-xs pt-1 border-t border-gray-100">
+                    <span>Clases este mes: <strong className="text-primary-600">{alumno.clasesAsistidas || 0}</strong></span>
+                    <span>Registro: {formatDate(alumno.createdAt.split('T')[0])}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div className="card overflow-hidden p-0 -mx-2 sm:mx-0">
           <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
             <table className="w-full min-w-[800px]">
               <thead className="bg-primary-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Alumno
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    DNI
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Contacto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Actividad
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Vencimiento
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Clases
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Fecha Registro
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Acciones
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Alumno</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">DNI</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Contacto</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actividad</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Vencimiento</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Clases</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Fecha Registro</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -469,111 +519,48 @@ const Alumnos = () => {
                   return (
                     <tr key={alumno.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {alumno.nombre} {alumno.apellido}
-                        </div>
+                        <div className="text-sm font-medium text-gray-900">{alumno.nombre} {alumno.apellido}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {alumno.dni}
-                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{alumno.dni}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{alumno.telefono}</div>
                         <div className="text-sm text-gray-500">{alumno.email}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {getActividadNombre(alumno.actividadId)}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {formatCurrency(getActividadPrecio(alumno.actividadId))}
-                        </div>
+                        <div className="text-sm font-medium text-gray-900">{getActividadNombre(alumno.actividadId)}</div>
+                        <div className="text-sm text-gray-500">{formatCurrency(getActividadPrecio(alumno.actividadId))}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {estado === 'pendiente' ? (
                           <>
-                            <div className="text-sm font-medium text-orange-600">
-                              Pendiente de pago
-                            </div>
-                            <div className="text-xs text-orange-500">
-                              ⚠️ Sin fecha de vencimiento
-                            </div>
+                            <div className="text-sm font-medium text-orange-600">Pendiente de pago</div>
+                            <div className="text-xs text-orange-500">⚠️ Sin fecha de vencimiento</div>
                           </>
                         ) : (
                           <>
-                            <div className={`text-sm font-medium ${
-                              estado === 'vencida' 
-                                ? 'text-red-600' 
-                                : estado === 'venceHoy'
-                                ? 'text-yellow-600'
-                                : 'text-green-600'
-                            }`}>
+                            <div className={`text-sm font-medium ${estado === 'vencida' ? 'text-red-600' : estado === 'venceHoy' ? 'text-yellow-600' : 'text-green-600'}`}>
                               {formatDate(alumno.fechaVencimientoCuota)}
                             </div>
-                            <div className={`text-xs ${
-                              estado === 'vencida' 
-                                ? 'text-red-500' 
-                                : estado === 'venceHoy'
-                                ? 'text-yellow-500'
-                                : 'text-green-500'
-                            }`}>
-                              {estado === 'vencida' 
-                                ? 'Vencida' 
-                                : estado === 'venceHoy'
-                                ? '⚠️ Vence hoy'
-                                : 'Al día'}
+                            <div className={`text-xs ${estado === 'vencida' ? 'text-red-500' : estado === 'venceHoy' ? 'text-yellow-500' : 'text-green-500'}`}>
+                              {estado === 'vencida' ? 'Vencida' : estado === 'venceHoy' ? '⚠️ Vence hoy' : 'Al día'}
                             </div>
                           </>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-primary-600">
-                          {alumno.clasesAsistidas || 0}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          este mes
-                        </div>
+                        <div className="text-sm font-semibold text-primary-600">{alumno.clasesAsistidas || 0}</div>
+                        <div className="text-xs text-gray-500">este mes</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {formatDate(alumno.createdAt.split('T')[0])}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(alumno.createdAt).toLocaleTimeString('es-AR', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </div>
+                        <div className="text-sm text-gray-900">{formatDate(alumno.createdAt.split('T')[0])}</div>
+                        <div className="text-xs text-gray-500">{new Date(alumno.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2 items-center">
-                          <button
-                            onClick={() => handlePagarCuota(alumno)}
-                            className="text-green-600 hover:text-green-900 p-1 rounded"
-                            title="Pagar cuota"
-                          >
-                            <CreditCard className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenDescripcion(alumno)}
-                            className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`}
-                            title="Descripción / Notas"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenModal(alumno)}
-                            className="text-primary-600 hover:text-primary-900"
-                            title="Editar"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(alumno.id)}
-                            className="text-red-600 hover:text-red-900"
-                            title="Eliminar"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <button onClick={() => handlePagarCuota(alumno)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Pagar cuota"><CreditCard className="w-4 h-4" /></button>
+                          <button onClick={() => handleOpenDescripcion(alumno)} className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`} title="Descripción / Notas"><FileText className="w-4 h-4" /></button>
+                          <button onClick={() => handleOpenModal(alumno)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit className="w-4 h-4" /></button>
+                          <button onClick={() => handleDelete(alumno.id)} className="text-red-600 hover:text-red-900" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>

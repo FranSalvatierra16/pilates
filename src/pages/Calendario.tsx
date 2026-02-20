@@ -8,6 +8,8 @@ import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy } from '.
 // Horarios disponibles: 7:00-12:00 cada hora, y 16:00-21:00 cada hora
 const HORARIOS_MANANA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
 const HORARIOS_TARDE = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+// Días cortos para móvil
+const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 // Función para obtener el número de semana (YYYY-WW)
 const getSemanaActual = (): string => {
@@ -463,50 +465,55 @@ const Calendario = () => {
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8 flex-wrap gap-4">
-        <h1 className="text-3xl font-bold text-gray-900">Calendario de Turnos</h1>
-        <div className="flex gap-3 items-center">
+    <div className="pb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Calendario de Turnos</h1>
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={handleReiniciarSemana}
-            className="btn-secondary flex items-center gap-2"
+            className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
             title="Reiniciar asistencias de esta semana"
           >
             <RotateCcw className="w-4 h-4" />
             Reiniciar Semana
           </button>
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <p className="text-sm text-blue-800">
-              💡 Los turnos se repiten cada semana. Los alumnos siempre van a los mismos días y horarios.
-              Usá ✓ para marcar asistencia (verde) o ✗ para marcar inasistencia (rojo).
+          <details className="bg-blue-50 rounded-lg border border-blue-200 overflow-hidden sm:block">
+            <summary className="p-3 sm:p-4 text-sm text-blue-800 font-medium cursor-pointer touch-manipulation list-none flex items-center gap-2">
+              <span className="text-blue-600">💡</span> Ayuda
+            </summary>
+            <p className="px-4 pb-4 pt-0 text-sm text-blue-800 sm:pt-0">
+              Los turnos se repiten cada semana. Usá ✓ para asistencia (verde) o ✗ para inasistencia (rojo).
             </p>
-          </div>
+          </details>
         </div>
       </div>
 
-      <div className="card overflow-x-auto p-0">
-        <div className="min-w-full">
+      <div className="card overflow-x-auto p-0 -mx-2 sm:mx-0 touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="min-w-[640px]">
           {/* Header con días de la semana */}
           <div className="grid grid-cols-8 border-b border-gray-200 bg-primary-50">
-            <div className="p-3 font-semibold text-gray-700 border-r border-gray-200">Hora</div>
+            <div className="sticky left-0 z-20 p-2 sm:p-3 font-semibold text-gray-700 border-r border-gray-200 bg-primary-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)]">Hora</div>
             {diasSemana.map((diaIndex) => (
               <div
                 key={diaIndex}
-                className="p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700"
+                className="p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700 min-w-[72px]"
               >
-                <div className="text-sm uppercase">{DIAS_SEMANA[diaIndex]}</div>
+                <div className="text-xs sm:text-sm uppercase">
+                  <span className="hidden sm:inline">{DIAS_SEMANA[diaIndex]}</span>
+                  <span className="sm:hidden">{DIAS_CORTOS[diaIndex]}</span>
+                </div>
               </div>
             ))}
           </div>
 
           {/* Horarios mañana */}
           <div className="border-b border-gray-300">
-            <div className="bg-gray-50 px-3 py-2 font-semibold text-gray-700 text-sm">
+            <div className="bg-gray-50 px-2 sm:px-3 py-2 font-semibold text-gray-700 text-xs sm:text-sm">
               Mañana (7:00 - 12:00)
             </div>
             {HORARIOS_MANANA.map((hora) => (
               <div key={hora} className="grid grid-cols-8 border-b border-gray-200 hover:bg-gray-50">
-                <div className="p-3 font-medium text-gray-700 border-r border-gray-200 bg-gray-50">
+                <div className="sticky left-0 z-10 p-2 sm:p-3 font-medium text-gray-700 border-r border-gray-200 bg-gray-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)] min-w-[52px]">
                   {hora}
                 </div>
                 {diasSemana.map((diaIndex) => {
@@ -516,35 +523,32 @@ const Calendario = () => {
                   return (
                     <div
                       key={`${diaIndex}-${hora}`}
-                      className="p-2 min-h-[80px] border-r border-gray-200 last:border-r-0 relative group hover:bg-gray-50"
+                      className="p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group hover:bg-gray-50"
                     >
-                      {/* Botón de Profesor - Siempre visible */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEditarTurno(diaIndex, hora);
                         }}
-                        className="absolute top-1 left-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-purple-600 hover:bg-purple-700 rounded text-white z-20"
+                        className="absolute top-1 left-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-purple-600 hover:bg-purple-700 active:bg-purple-800 rounded text-white z-20 touch-manipulation"
                         title="Editar título y profesor"
                       >
                         <GraduationCap className="w-4 h-4" />
                       </button>
-                      
-                      {/* Título, Profesor y Cupo */}
                       {turno && (
-                        <div className="mb-2 pb-2 border-b border-gray-200">
+                        <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
                           {turno.titulo && (
-                            <div className="text-xs font-semibold text-gray-700 mb-1">
+                            <div className="text-xs font-semibold text-gray-700 mb-0.5 truncate" title={turno.titulo}>
                               {turno.titulo}
                             </div>
                           )}
                           {profesor && (
-                            <div className="text-xs text-gray-600">
+                            <div className="text-xs text-gray-600 truncate" title={`Prof: ${profesor.nombre} ${profesor.apellido}`}>
                               Prof: {profesor.nombre} {profesor.apellido}
                             </div>
                           )}
                           <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                            <Users className="w-3.5 h-3.5" />
+                            <Users className="w-3.5 h-3.5 flex-shrink-0" />
                             {alumnosTurno.length}/{turno.cupo ?? CUPO_DEFAULT}
                           </div>
                         </div>
@@ -554,8 +558,8 @@ const Calendario = () => {
                           {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                         </div>
                       ) : (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Plus className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <Plus className="w-5 h-5 text-gray-400 opacity-0 sm:group-hover:opacity-100 transition-opacity" />
                         </div>
                       )}
                       {(() => {
@@ -565,7 +569,7 @@ const Calendario = () => {
                           <button
                             onClick={() => !lleno && handleAgregarAlumno(diaIndex, hora)}
                             disabled={lleno}
-                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="absolute top-1 right-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 active:bg-primary-800 rounded text-white z-20 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                             title={lleno ? 'Clase llena' : 'Agregar alumno'}
                           >
                             <Plus className="w-4 h-4" />
@@ -581,12 +585,12 @@ const Calendario = () => {
 
           {/* Horarios tarde */}
           <div>
-            <div className="bg-gray-50 px-3 py-2 font-semibold text-gray-700 text-sm">
+            <div className="bg-gray-50 px-2 sm:px-3 py-2 font-semibold text-gray-700 text-xs sm:text-sm">
               Tarde (16:00 - 21:00)
             </div>
             {HORARIOS_TARDE.map((hora) => (
               <div key={hora} className="grid grid-cols-8 border-b border-gray-200 hover:bg-gray-50 last:border-b-0">
-                <div className="p-3 font-medium text-gray-700 border-r border-gray-200 bg-gray-50">
+                <div className="sticky left-0 z-10 p-2 sm:p-3 font-medium text-gray-700 border-r border-gray-200 bg-gray-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)] min-w-[52px]">
                   {hora}
                 </div>
                 {diasSemana.map((diaIndex) => {
@@ -596,35 +600,32 @@ const Calendario = () => {
                   return (
                     <div
                       key={`${diaIndex}-${hora}`}
-                      className="p-2 min-h-[80px] border-r border-gray-200 last:border-r-0 relative group hover:bg-gray-50"
+                      className="p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group hover:bg-gray-50"
                     >
-                      {/* Botón de Profesor - Siempre visible */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEditarTurno(diaIndex, hora);
                         }}
-                        className="absolute top-1 left-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-purple-600 hover:bg-purple-700 rounded text-white z-20"
+                        className="absolute top-1 left-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-purple-600 hover:bg-purple-700 active:bg-purple-800 rounded text-white z-20 touch-manipulation"
                         title="Editar título y profesor"
                       >
                         <GraduationCap className="w-4 h-4" />
                       </button>
-                      
-                      {/* Título, Profesor y Cupo */}
                       {turno && (
-                        <div className="mb-2 pb-2 border-b border-gray-200">
+                        <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
                           {turno.titulo && (
-                            <div className="text-xs font-semibold text-gray-700 mb-1">
+                            <div className="text-xs font-semibold text-gray-700 mb-0.5 truncate" title={turno.titulo}>
                               {turno.titulo}
                             </div>
                           )}
                           {profesor && (
-                            <div className="text-xs text-gray-600">
+                            <div className="text-xs text-gray-600 truncate" title={`Prof: ${profesor.nombre} ${profesor.apellido}`}>
                               Prof: {profesor.nombre} {profesor.apellido}
                             </div>
                           )}
                           <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                            <Users className="w-3.5 h-3.5" />
+                            <Users className="w-3.5 h-3.5 flex-shrink-0" />
                             {alumnosTurno.length}/{turno.cupo ?? CUPO_DEFAULT}
                           </div>
                         </div>
@@ -634,8 +635,8 @@ const Calendario = () => {
                           {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                         </div>
                       ) : (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Plus className="w-5 h-5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <Plus className="w-5 h-5 text-gray-400 opacity-0 sm:group-hover:opacity-100 transition-opacity" />
                         </div>
                       )}
                       {(() => {
@@ -645,7 +646,7 @@ const Calendario = () => {
                           <button
                             onClick={() => !lleno && handleAgregarAlumno(diaIndex, hora)}
                             disabled={lleno}
-                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="absolute top-1 right-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 active:bg-primary-800 rounded text-white z-20 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                             title={lleno ? 'Clase llena' : 'Agregar alumno'}
                           >
                             <Plus className="w-4 h-4" />
@@ -662,7 +663,7 @@ const Calendario = () => {
       </div>
 
       {/* Botones cupo - abajo del calendario */}
-      <div className="mt-6 flex flex-wrap justify-end gap-3">
+      <div className="mt-4 sm:mt-6 flex flex-wrap justify-end gap-2 sm:gap-3">
         <button
           type="button"
           onClick={async () => {
@@ -678,9 +679,9 @@ const Calendario = () => {
               alert('Error al ajustar. Reintentá.');
             }
           }}
-          className="btn-secondary flex items-center gap-2"
+          className="btn-secondary flex items-center justify-center gap-2 min-h-[44px] flex-1 sm:flex-initial"
         >
-          {/* <Users className="w-5 h-5" />
+          <Users className="w-5 h-5" />
           Recortar al cupo
         </button>
         <button
@@ -689,20 +690,20 @@ const Calendario = () => {
             setCupoGlobal(CUPO_DEFAULT);
             setShowModalAumentarCupo(true);
           }}
-          className="btn-primary flex items-center gap-2"
-        > */}
+          className="btn-primary flex items-center justify-center gap-2 min-h-[44px] flex-1 sm:flex-initial"
+        >
           <Users className="w-5 h-5" />
           Aumentar cupo
         </button>
       </div>
 
       {/* Estadísticas de asistencias - Colapsable */}
-      <div className="mt-6">
+      <div className="mt-4 sm:mt-6">
         <button
           onClick={() => setShowEstadisticas(!showEstadisticas)}
-          className="w-full btn-secondary flex items-center justify-between mb-4"
+          className="w-full btn-secondary flex items-center justify-between mb-4 min-h-[44px] px-4 touch-manipulation"
         >
-          <span className="font-semibold">Estadísticas de Asistencia - Semana Actual</span>
+          <span className="font-semibold text-left text-sm sm:text-base">Estadísticas - Semana Actual</span>
           {showEstadisticas ? (
             <ChevronUp className="w-5 h-5" />
           ) : (
@@ -753,20 +754,21 @@ const Calendario = () => {
       </div>
 
       {showModal && turnoSeleccionado && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
                 Agregar Alumno al Turno
               </h2>
               <button
                 onClick={handleCerrarModal}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 touch-manipulation"
+                aria-label="Cerrar"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain">
               <div>
                 <p className="text-sm text-gray-600 mb-2">
                   <strong>Día:</strong> {DIAS_SEMANA[turnoSeleccionado.diaSemana]}
@@ -824,17 +826,17 @@ const Calendario = () => {
                   </p>
                 )}
               </div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 flex-shrink-0">
                 <button
                   onClick={handleCerrarModal}
-                  className="btn-secondary"
+                  className="btn-secondary min-h-[44px]"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleGuardarAlumno}
                   disabled={!alumnoSeleccionado}
-                  className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-primary flex items-center gap-2 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <UserPlus className="w-4 h-4" />
                   Agregar
@@ -847,10 +849,10 @@ const Calendario = () => {
 
       {/* Modal para editar título y profesor del turno */}
       {showModalEditarTurno && turnoParaEditar && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
                 Editar Turno
               </h2>
               <button
@@ -858,12 +860,13 @@ const Calendario = () => {
                   setShowModalEditarTurno(false);
                   setTurnoParaEditar(null);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 touch-manipulation"
+                aria-label="Cerrar"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain">
               <div>
                 <p className="text-sm text-gray-600 mb-2">
                   <strong>Día:</strong> {DIAS_SEMANA[turnoParaEditar.diaSemana]}
@@ -913,19 +916,19 @@ const Calendario = () => {
                   className="input-field"
                 />
               </div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 flex-shrink-0">
                 <button
                   onClick={() => {
                     setShowModalEditarTurno(false);
                     setTurnoParaEditar(null);
                   }}
-                  className="btn-secondary"
+                  className="btn-secondary min-h-[44px]"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleGuardarEdicionTurno}
-                  className="btn-primary flex items-center gap-2"
+                  className="btn-primary flex items-center gap-2 min-h-[44px]"
                 >
                   <Save className="w-4 h-4" />
                   Guardar
@@ -938,8 +941,8 @@ const Calendario = () => {
 
       {/* Modal Aumentar cupo */}
       {showModalAumentarCupo && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-sm w-full p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Aumentar cupo</h2>
             <p className="text-sm text-gray-600 mb-4">
               Establecé el cupo (máx. alumnos) para todas las clases. Las que ya existan se actualizarán.
@@ -974,10 +977,16 @@ const Calendario = () => {
       {showPopupAlumno && (
         <div
           ref={popupRef}
-          className="fixed bg-white rounded-lg shadow-xl border border-gray-200 p-4 z-50 min-w-[280px]"
+          className="fixed bg-white shadow-xl border border-gray-200 p-4 z-50 min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md rounded-xl sm:rounded-lg"
           style={{
-            left: `${Math.min(showPopupAlumno.position.x, window.innerWidth - 300)}px`,
-            top: `${Math.min(showPopupAlumno.position.y + 10, window.innerHeight - 200)}px`,
+            left: window.innerWidth < 640
+              ? '1rem'
+              : `${Math.min(showPopupAlumno.position.x, window.innerWidth - 320)}px`,
+            right: window.innerWidth < 640 ? '1rem' : undefined,
+            top: window.innerWidth < 640
+              ? 'auto'
+              : `${Math.min(showPopupAlumno.position.y + 10, window.innerHeight - 200)}px`,
+            bottom: window.innerWidth < 640 ? '1rem' : undefined,
           }}
         >
           <div className="mb-3">

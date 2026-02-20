@@ -320,12 +320,12 @@ const Alumnos = () => {
   }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Alumnos</h1>
+    <div className="pb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Alumnos</h1>
         <button
           onClick={() => handleOpenModal()}
-          className="btn-primary flex items-center gap-2"
+          className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
         >
           <Plus className="w-5 h-5" />
           Nuevo Alumno
@@ -429,9 +429,9 @@ const Alumnos = () => {
           </button>
         </div>
       ) : (
-        <div className="card overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+        <div className="card overflow-hidden p-0 -mx-2 sm:mx-0">
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <table className="w-full min-w-[800px]">
               <thead className="bg-primary-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
@@ -586,20 +586,21 @@ const Alumnos = () => {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
                 {editingAlumno ? 'Editar Alumno' : 'Nuevo Alumno'}
               </h2>
               <button
                 onClick={handleCloseModal}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 touch-manipulation"
+                aria-label="Cerrar"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -723,20 +724,21 @@ const Alumnos = () => {
       )}
 
       {showModalPago && alumnoParaPagar && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">
-                Registrar Pago - {alumnoParaPagar.nombre} {alumnoParaPagar.apellido}
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900 pr-2 truncate">
+                Pago — {alumnoParaPagar.nombre} {alumnoParaPagar.apellido}
               </h2>
               <button
                 onClick={handleCerrarModalPago}
-                className="text-gray-400 hover:text-gray-600"
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 touch-manipulation flex-shrink-0"
+                aria-label="Cerrar"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <form onSubmit={handleSubmitPago} className="p-6 space-y-4">
+            <form onSubmit={handleSubmitPago} className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
                   <strong>Alumno:</strong> {alumnoParaPagar.nombre} {alumnoParaPagar.apellido}
@@ -817,15 +819,15 @@ const Alumnos = () => {
                   💡 <strong>Nota:</strong> La fecha de vencimiento se calcula automáticamente un mes después de la fecha del pago, pero podés editarla manualmente si lo necesitás.
                 </p>
               </div>
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 flex-shrink-0">
                 <button
                   type="button"
                   onClick={handleCerrarModalPago}
-                  className="btn-secondary"
+                  className="btn-secondary min-h-[44px]"
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary flex items-center gap-2">
+                <button type="submit" className="btn-primary flex items-center gap-2 min-h-[44px]">
                   <CreditCard className="w-4 h-4" />
                   Registrar Pago
                 </button>
@@ -837,17 +839,18 @@ const Alumnos = () => {
 
       {/* Modal Descripción / Notas */}
       {showModalDescripcion && alumnoDescripcion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <FileText className="w-5 h-5 text-amber-500" />
-                Descripción / Notas — {alumnoDescripcion.nombre} {alumnoDescripcion.apellido}
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 flex-shrink-0">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2 min-w-0 truncate">
+                <FileText className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                <span className="truncate">Notas — {alumnoDescripcion.nombre} {alumnoDescripcion.apellido}</span>
               </h2>
               <button
                 type="button"
                 onClick={() => { setShowModalDescripcion(false); setAlumnoDescripcion(null); }}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 rounded-lg touch-manipulation flex-shrink-0"
+                aria-label="Cerrar"
               >
                 <X className="w-5 h-5" />
               </button>

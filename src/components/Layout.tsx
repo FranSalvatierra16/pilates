@@ -122,9 +122,9 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
         
         {/* Mobile menu */}
-        <div className="sm:hidden">
-          <div className="pt-2 pb-3 space-y-1 overflow-x-auto">
-            <div className="flex space-x-2 px-4">
+        <div className="sm:hidden border-t border-gray-100">
+          <div className="pt-2 pb-3 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex gap-1 px-3 min-w-0">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
@@ -132,13 +132,13 @@ const Layout = ({ children }: LayoutProps) => {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`flex items-center px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${
+                    className={`flex items-center px-3 py-3 rounded-lg text-sm font-medium whitespace-nowrap touch-manipulation min-h-[44px] ${
                       isActive
                         ? 'bg-primary-50 text-primary-600'
-                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                        : 'text-gray-600 hover:bg-gray-50 active:bg-gray-100'
                     }`}
                   >
-                    <Icon className="w-4 h-4 mr-2" />
+                    <Icon className="w-4 h-4 mr-2 flex-shrink-0" />
                     {item.label}
                   </Link>
                 );
@@ -148,8 +148,8 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="relative">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+        <div className="relative min-h-0">
           {children}
         </div>
       </main>

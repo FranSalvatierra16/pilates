@@ -51,9 +51,11 @@ const Calendario = () => {
   const [cupoGlobal, setCupoGlobal] = useState(CUPO_DEFAULT);
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
-  const dayCardRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  const [selectedDiaMobile, setSelectedDiaMobile] = useState<number | null>(null);
+  const [selectedBloqueMobile, setSelectedBloqueMobile] = useState<'todos' | 'manana' | 'tarde'>('todos');
+
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
     const fn = () => setIsMobile(mq.matches);
@@ -499,66 +501,48 @@ const Calendario = () => {
       {/* Vista móvil: por día y horario (lista vertical) */}
       {isMobile ? (
         <div>
-          {/* Barra fija: ir al día y al bloque horario */}
-          <div className="sticky top-16 z-30 bg-white/95 backdrop-blur border-b border-gray-200 rounded-xl shadow-sm p-3 mb-4 -mx-1">
-            <p className="text-xs font-medium text-gray-500 mb-2">Ir al día</p>
+          {/* Selector: día y horario (filtrar, sin scroll automático) */}
+          <div className="sticky top-16 z-30 bg-white/95 backdrop-blur border border-gray-200 rounded-xl shadow-sm p-3 mb-4 -mx-1">
+            <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
             <div className="flex flex-wrap gap-1.5 mb-3">
               <button
                 type="button"
-                onClick={() => dayCardRefs.current[0]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 touch-manipulation"
+                onClick={() => setSelectedDiaMobile(null)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${selectedDiaMobile === null ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
               >
-                Lun
+                Todos
               </button>
-              <button
-                type="button"
-                onClick={() => dayCardRefs.current[1]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 touch-manipulation"
-              >
-                Mar
-              </button>
-              <button
-                type="button"
-                onClick={() => dayCardRefs.current[2]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 touch-manipulation"
-              >
-                Mié
-              </button>
-              <button
-                type="button"
-                onClick={() => dayCardRefs.current[3]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 touch-manipulation"
-              >
-                Jue
-              </button>
-              <button
-                type="button"
-                onClick={() => dayCardRefs.current[4]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 touch-manipulation"
-              >
-                Vie
-              </button>
-              <button
-                type="button"
-                onClick={() => dayCardRefs.current[5]?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 touch-manipulation"
-              >
-                Sáb
-              </button>
+              {diasSemana.map((diaIndex) => (
+                <button
+                  key={diaIndex}
+                  type="button"
+                  onClick={() => setSelectedDiaMobile(diaIndex)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${selectedDiaMobile === diaIndex ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][diaIndex]}
+                </button>
+              ))}
             </div>
-            <p className="text-xs font-medium text-gray-500 mb-2">Ir al horario</p>
+            <p className="text-xs font-medium text-gray-500 mb-2">Ver horario</p>
             <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
-                onClick={() => document.getElementById('cal-mobile-manana')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-3 py-2 rounded-lg text-sm font-medium bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 touch-manipulation"
+                onClick={() => setSelectedBloqueMobile('todos')}
+                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${selectedBloqueMobile === 'todos' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                Todos
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedBloqueMobile('manana')}
+                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${selectedBloqueMobile === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
               >
                 Mañana (7–12h)
               </button>
               <button
                 type="button"
-                onClick={() => document.getElementById('cal-mobile-tarde')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="px-3 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 touch-manipulation"
+                onClick={() => setSelectedBloqueMobile('tarde')}
+                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${selectedBloqueMobile === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
               >
                 Tarde (16–21h)
               </button>
@@ -566,17 +550,14 @@ const Calendario = () => {
           </div>
 
           <div className="space-y-6">
-          {diasSemana.map((diaIndex) => (
-            <div
-              key={diaIndex}
-              ref={(el) => { dayCardRefs.current[diaIndex] = el; }}
-              className="card scroll-mt-4"
-            >
+          {(selectedDiaMobile !== null ? [selectedDiaMobile] : diasSemana).map((diaIndex) => (
+            <div key={diaIndex} className="card">
               <h2 className="text-lg font-bold text-primary-700 border-b border-primary-200 pb-2 mb-4">
                 {DIAS_SEMANA[diaIndex]}
               </h2>
               <div className="space-y-5">
-                <div id={diaIndex === 0 ? 'cal-mobile-manana' : undefined} className="scroll-mt-4">
+                {(selectedBloqueMobile === 'todos' || selectedBloqueMobile === 'manana') && (
+                <div>
                   <h3 className="text-sm font-semibold text-gray-600 mb-2">Mañana (7:00 - 12:00)</h3>
                   <div className="space-y-3">
                     {HORARIOS_MANANA.map((hora) => {
@@ -639,7 +620,9 @@ const Calendario = () => {
                     })}
                   </div>
                 </div>
-                <div id={diaIndex === 0 ? 'cal-mobile-tarde' : undefined} className="scroll-mt-4">
+                )}
+                {(selectedBloqueMobile === 'todos' || selectedBloqueMobile === 'tarde') && (
+                <div>
                   <h3 className="text-sm font-semibold text-gray-600 mb-2">Tarde (16:00 - 21:00)</h3>
                   <div className="space-y-3">
                     {HORARIOS_TARDE.map((hora) => {
@@ -702,6 +685,7 @@ const Calendario = () => {
                     })}
                   </div>
                 </div>
+                )}
               </div>
             </div>
           ))}

@@ -42,5 +42,18 @@
   .card {
     @apply bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-6;
   }
+
+  .drawer-panel {
+    animation: drawerSlideIn 0.2s ease-out;
+  }
+}
+
+@keyframes drawerSlideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 

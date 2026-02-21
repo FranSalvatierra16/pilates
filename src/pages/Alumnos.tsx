@@ -1,10 +1,55 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento } from '../utils/date';
 import { formatCurrency } from '../utils/format';
+
+/** Normaliza teléfono para WhatsApp (Argentina: 54 9 área número). Devuelve null si no hay número válido. */
+function normalizePhoneForWhatsApp(telefono: string): string | null {
+  if (!telefono || !telefono.trim()) return null;
+  let digits = telefono.replace(/\D/g, '');
+  if (digits.startsWith('15') && digits.length === 12) digits = digits.slice(2);
+  if (digits.length < 8) return null;
+  let num = digits;
+  if (!num.startsWith('54')) num = '54' + num;
+  if (num.startsWith('54') && num.length >= 11 && num[2] !== '9') num = '549' + num.slice(2);
+  return num.length >= 12 ? num : null;
+}
+
+/** Arma mensaje de recordatorio por WhatsApp según estado de cuota. */
+function getWhatsAppRecordatorio(alumno: Alumno): { url: string | null; tooltip: string } {
+  const nombre = [alumno.nombre, alumno.apellido].filter(Boolean).join(' ') || 'Hola';
+  const phone = normalizePhoneForWhatsApp(alumno.telefono || '');
+  const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
+  const vencida = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
+  const venceHoy = tieneFecha && isCuotaVenceHoy(alumno.fechaVencimientoCuota);
+  const fechaStr = tieneFecha ? formatDate(alumno.fechaVencimientoCuota) : '';
+
+  let text = '';
+  if (vencida) {
+    text = `Hola ${nombre}, te recordamos que tu cuota está *vencida*. Por favor acercate a regularizar. Gracias.`;
+  } else if (venceHoy) {
+    text = `Hola ${nombre}, te recordamos que tu cuota *vence hoy*. No olvides regularizar. Gracias.`;
+  } else if (tieneFecha) {
+    text = `Hola ${nombre}, te recordamos que tu cuota vence el *${fechaStr}*. Gracias.`;
+  } else {
+    text = `Hola ${nombre}, te recordamos que tenés pendiente el pago de la cuota. Cuando puedas acercate a regularizar. Gracias.`;
+  }
+
+  const tooltip = vencida
+    ? 'Recordatorio por WhatsApp (cuota vencida)'
+    : venceHoy
+    ? 'Recordatorio por WhatsApp (vence hoy)'
+    : tieneFecha
+    ? `Recordatorio por WhatsApp (vence ${fechaStr})`
+    : 'Recordatorio por WhatsApp (pendiente de pago)';
+
+  if (!phone) return { url: null, tooltip: 'Agregá teléfono al alumno para enviar por WhatsApp' };
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  return { url, tooltip };
+}
 
 const Alumnos = () => {
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
@@ -455,6 +500,14 @@ const Alumnos = () => {
                     <p className="text-sm text-gray-500">DNI {alumno.dni}</p>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
+                    {(() => {
+                      const wa = getWhatsAppRecordatorio(alumno);
+                      return wa.url ? (
+                        <a href={wa.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title={wa.tooltip} aria-label="Recordatorio WhatsApp"><MessageCircle className="w-5 h-5" /></a>
+                      ) : (
+                        <span className="p-2 rounded-lg text-gray-300 cursor-not-allowed" title={wa.tooltip}><MessageCircle className="w-5 h-5" /></span>
+                      );
+                    })()}
                     <button onClick={() => handlePagarCuota(alumno)} className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title="Pagar cuota" aria-label="Pagar"><CreditCard className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-primary-600 hover:bg-primary-50 touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
@@ -557,6 +610,14 @@ const Alumnos = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2 items-center">
+                          {(() => {
+                            const wa = getWhatsAppRecordatorio(alumno);
+                            return wa.url ? (
+                              <a href={wa.url} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-900 p-1 rounded" title={wa.tooltip}><MessageCircle className="w-4 h-4" /></a>
+                            ) : (
+                              <span className="text-gray-300 cursor-not-allowed p-1 rounded" title={wa.tooltip}><MessageCircle className="w-4 h-4" /></span>
+                            );
+                          })()}
                           <button onClick={() => handlePagarCuota(alumno)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Pagar cuota"><CreditCard className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenDescripcion(alumno)} className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`} title="Descripción / Notas"><FileText className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenModal(alumno)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit className="w-4 h-4" /></button>

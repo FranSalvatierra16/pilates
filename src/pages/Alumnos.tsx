@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento } from '../utils/date';
@@ -18,8 +19,8 @@ function normalizePhoneForWhatsApp(telefono: string): string | null {
   return num.length >= 12 ? num : null;
 }
 
-/** Arma mensaje de recordatorio por WhatsApp según estado de cuota. */
-function getWhatsAppRecordatorio(alumno: Alumno): { url: string | null; tooltip: string } {
+/** Arma mensaje de recordatorio por WhatsApp según estado de cuota. nombreLugar = sucursal/estudio. */
+function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { url: string | null; tooltip: string } {
   const nombre = [alumno.nombre, alumno.apellido].filter(Boolean).join(' ') || 'Hola';
   const phone = normalizePhoneForWhatsApp(alumno.telefono || '');
   const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
@@ -29,14 +30,18 @@ function getWhatsAppRecordatorio(alumno: Alumno): { url: string | null; tooltip:
 
   let text = '';
   if (vencida) {
-    text = `Hola ${nombre}, te recordamos que tu cuota está *vencida*. Por favor acercate a regularizar. Gracias.`;
+    text = `Hola ${nombre}, te recordamos que tu cuota está *vencida*. Por favor acercate a regularizar.`;
   } else if (venceHoy) {
-    text = `Hola ${nombre}, te recordamos que tu cuota *vence hoy*. No olvides regularizar. Gracias.`;
+    text = `Hola ${nombre}, te recordamos que tu cuota *vence hoy*. No olvides regularizar.`;
   } else if (tieneFecha) {
-    text = `Hola ${nombre}, te recordamos que tu cuota vence el *${fechaStr}*. Gracias.`;
+    text = `Hola ${nombre}, te recordamos que tu cuota vence el *${fechaStr}*.`;
   } else {
-    text = `Hola ${nombre}, te recordamos que tenés pendiente el pago de la cuota. Cuando puedas acercate a regularizar. Gracias.`;
+    text = `Hola ${nombre}, te recordamos que tenés pendiente el pago de la cuota. Cuando puedas acercate a regularizar.`;
   }
+  const cierre = nombreLugar.trim()
+    ? ` Te hablamos desde ${nombreLugar.trim()}. Este mensaje se envía automáticamente. Gracias.`
+    : ' Este mensaje se envía automáticamente. Gracias.';
+  text = text + cierre;
 
   const tooltip = vencida
     ? 'Recordatorio por WhatsApp (cuota vencida)'
@@ -52,6 +57,7 @@ function getWhatsAppRecordatorio(alumno: Alumno): { url: string | null; tooltip:
 }
 
 const Alumnos = () => {
+  const { sucursalNombre } = useAuth();
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
@@ -501,7 +507,7 @@ const Alumnos = () => {
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
                     {(() => {
-                      const wa = getWhatsAppRecordatorio(alumno);
+                      const wa = getWhatsAppRecordatorio(alumno, sucursalNombre || '');
                       return wa.url ? (
                         <a href={wa.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title={wa.tooltip} aria-label="Recordatorio WhatsApp"><MessageCircle className="w-5 h-5" /></a>
                       ) : (
@@ -611,7 +617,7 @@ const Alumnos = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2 items-center">
                           {(() => {
-                            const wa = getWhatsAppRecordatorio(alumno);
+                            const wa = getWhatsAppRecordatorio(alumno, sucursalNombre || '');
                             return wa.url ? (
                               <a href={wa.url} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-900 p-1 rounded" title={wa.tooltip}><MessageCircle className="w-4 h-4" /></a>
                             ) : (

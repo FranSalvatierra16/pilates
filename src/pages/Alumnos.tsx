@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -88,6 +88,22 @@ const Alumnos = () => {
     fecha: new Date().toISOString().split('T')[0],
     fechaVencimiento: '',
   });
+
+  const refNombre = useRef<HTMLInputElement>(null);
+  const refApellido = useRef<HTMLInputElement>(null);
+  const refDni = useRef<HTMLInputElement>(null);
+  const refTelefono = useRef<HTMLInputElement>(null);
+  const refEmail = useRef<HTMLInputElement>(null);
+  const refActividad = useRef<HTMLSelectElement>(null);
+  const refDescripcion = useRef<HTMLTextAreaElement>(null);
+  const refFecha = useRef<HTMLInputElement>(null);
+
+  const focusNext = (e: React.KeyboardEvent, next: React.RefObject<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      next.current?.focus();
+    }
+  };
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   useEffect(() => {
@@ -661,9 +677,11 @@ const Alumnos = () => {
                     Nombre
                   </label>
                   <input
+                    ref={refNombre}
                     type="text"
                     value={formData.nombre}
                     onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                    onKeyDown={(e) => focusNext(e, refApellido)}
                     className="input-field"
                   />
                 </div>
@@ -672,9 +690,11 @@ const Alumnos = () => {
                     Apellido
                   </label>
                   <input
+                    ref={refApellido}
                     type="text"
                     value={formData.apellido}
                     onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+                    onKeyDown={(e) => focusNext(e, refDni)}
                     className="input-field"
                   />
                 </div>
@@ -683,9 +703,11 @@ const Alumnos = () => {
                     DNI
                   </label>
                   <input
+                    ref={refDni}
                     type="text"
                     value={formData.dni}
                     onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
+                    onKeyDown={(e) => focusNext(e, refTelefono)}
                     className="input-field"
                   />
                 </div>
@@ -694,9 +716,11 @@ const Alumnos = () => {
                     Teléfono
                   </label>
                   <input
+                    ref={refTelefono}
                     type="tel"
                     value={formData.telefono}
                     onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                    onKeyDown={(e) => focusNext(e, refEmail)}
                     className="input-field"
                   />
                 </div>
@@ -705,9 +729,11 @@ const Alumnos = () => {
                     Email
                   </label>
                   <input
+                    ref={refEmail}
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onKeyDown={(e) => focusNext(e, refActividad)}
                     className="input-field"
                   />
                 </div>
@@ -716,8 +742,10 @@ const Alumnos = () => {
                     Actividad
                   </label>
                   <select
+                    ref={refActividad}
                     value={formData.actividadId}
                     onChange={(e) => setFormData({ ...formData, actividadId: e.target.value })}
+                    onKeyDown={(e) => focusNext(e, refDescripcion)}
                     className="input-field"
                   >
                     <option value="">Seleccionar actividad</option>
@@ -733,6 +761,7 @@ const Alumnos = () => {
                     Descripción / Notas (opcional)
                   </label>
                   <textarea
+                    ref={refDescripcion}
                     value={formData.descripcion}
                     onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
                     placeholder="Notas, observaciones, preferencias..."
@@ -745,6 +774,7 @@ const Alumnos = () => {
                     Fecha Vencimiento Cuota (se puede establecer al pagar)
                   </label>
                   <input
+                    ref={refFecha}
                     type="date"
                     value={formData.fechaVencimientoCuota}
                     onChange={(e) => setFormData({ ...formData, fechaVencimientoCuota: e.target.value })}

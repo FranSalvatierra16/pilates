@@ -11,7 +11,6 @@ import {
   Calendar,
   LogOut,
   GraduationCap,
-  Database,
   AlertCircle,
   Menu,
   X
@@ -147,8 +146,8 @@ const Layout = ({ children }: LayoutProps) => {
             role="dialog"
             aria-label="Menú de navegación"
           >
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <span className="font-semibold text-gray-800">
+            <div className="flex items-center justify-between pt-6 pb-4 px-5 border-b border-gray-200 safe-top">
+              <span className="text-lg font-semibold text-gray-900">
                 {sucursalNombre || 'SAVIA Pilates'}
               </span>
               <button
@@ -160,7 +159,7 @@ const Layout = ({ children }: LayoutProps) => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <nav className="flex-1 overflow-y-auto py-4">
+            <nav className="flex-1 overflow-y-auto py-5 px-3">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
@@ -169,19 +168,19 @@ const Layout = ({ children }: LayoutProps) => {
                     key={item.path}
                     to={item.path}
                     onClick={() => setMenuOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 mx-2 rounded-lg text-base font-medium touch-manipulation ${
+                    className={`flex items-center gap-4 px-4 py-3.5 mx-1 rounded-xl text-[15px] font-medium touch-manipulation ${
                       isActive
                         ? 'bg-primary-50 text-primary-600'
                         : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
                     }`}
                   >
-                    <Icon className="w-5 h-5 flex-shrink-0" />
+                    <Icon className="w-6 h-6 flex-shrink-0 text-gray-500" />
                     {item.label}
                   </Link>
                 );
               })}
             </nav>
-            <div className="p-4 border-t border-gray-200">
+            <div className="p-4 pt-3 border-t border-gray-200">
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -209,25 +208,10 @@ const Layout = ({ children }: LayoutProps) => {
         </div>
       )}
 
-      {useApi() && dbStatus !== 'checking' && (
-        <div
-          className={`fixed bottom-2 left-2 right-2 sm:left-auto sm:right-4 sm:max-w-xs flex items-center gap-2 px-3 py-2 rounded-lg shadow text-xs bottom-safe safe-bottom ${
-            dbStatus === 'connected'
-              ? 'text-green-800 bg-green-100/95'
-              : 'text-red-800 bg-red-100/95'
-          }`}
-        >
-          {dbStatus === 'connected' ? (
-            <>
-              <Database className="w-4 h-4 flex-shrink-0" />
-              <span>Base de datos conectada. Los datos se sincronizan en todos los dispositivos.</span>
-            </>
-          ) : (
-            <>
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>Sin conexión a la base de datos. Revisá DATABASE_URL en Railway y los logs del servidor.</span>
-            </>
-          )}
+      {useApi() && dbStatus !== 'checking' && dbStatus === 'disconnected' && (
+        <div className="fixed bottom-2 left-2 right-2 sm:left-auto sm:right-4 sm:max-w-xs flex items-center gap-2 px-3 py-2 rounded-lg shadow text-xs text-red-800 bg-red-100/95 bottom-safe safe-bottom">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span>Sin conexión a la base de datos. Revisá DATABASE_URL en Railway y los logs del servidor.</span>
         </div>
       )}
     </div>

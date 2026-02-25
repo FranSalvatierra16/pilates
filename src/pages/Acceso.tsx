@@ -103,7 +103,7 @@ const Acceso = () => {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Control de Acceso</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-8 mt-1">Control de Acceso</h1>
 
       <div className="max-w-2xl mx-auto">
         <div className="card mb-6">

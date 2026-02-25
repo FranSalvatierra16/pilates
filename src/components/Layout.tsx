@@ -65,9 +65,9 @@ const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className="min-h-screen">
-      <nav className="bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200">
+      <nav className="bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200 safe-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
+          <div className="flex justify-between min-h-16 h-16 items-center">
             <div className="flex items-center gap-2">
               {/* Botón menú móvil: abre panel lateral */}
               <button
@@ -197,21 +197,21 @@ const Layout = ({ children }: LayoutProps) => {
         </>
       )}
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 w-full max-w-[100vw] overflow-x-hidden min-w-0">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 pb-4 sm:pt-8 sm:pb-8 w-full max-w-[100vw] overflow-x-hidden min-w-0">
         <div className="relative min-h-0 w-full min-w-0">
           {children}
         </div>
       </main>
 
       {!useApi() && (
-        <div className="fixed bottom-2 left-2 right-2 sm:left-auto sm:right-4 sm:max-w-xs text-center text-xs text-amber-800 bg-amber-100/95 px-3 py-2 rounded-lg shadow">
+        <div className="fixed bottom-2 left-2 right-2 sm:left-auto sm:right-4 sm:max-w-xs text-center text-xs text-amber-800 bg-amber-100/95 px-3 py-2 rounded-lg shadow bottom-safe safe-bottom">
           ⚠️ Modo local: los datos solo se guardan en este navegador. En Railway agregá VITE_USE_API=true y hacé un nuevo deploy.
         </div>
       )}
 
       {useApi() && dbStatus !== 'checking' && (
         <div
-          className={`fixed bottom-2 left-2 right-2 sm:left-auto sm:right-4 sm:max-w-xs flex items-center gap-2 px-3 py-2 rounded-lg shadow text-xs ${
+          className={`fixed bottom-2 left-2 right-2 sm:left-auto sm:right-4 sm:max-w-xs flex items-center gap-2 px-3 py-2 rounded-lg shadow text-xs bottom-safe safe-bottom ${
             dbStatus === 'connected'
               ? 'text-green-800 bg-green-100/95'
               : 'text-red-800 bg-red-100/95'

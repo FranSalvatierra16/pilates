@@ -22,6 +22,18 @@
   }
 }
 
+/* Zona segura para notch/barra de estado en PWA móvil */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+/* Barra fija inferior: que no quede bajo el indicador de inicio (iPhone) */
+.bottom-safe {
+  bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 @layer components {
   .btn-primary {
     @apply px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium;

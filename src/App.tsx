@@ -1,6 +1,21 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
+
+const APP_NAME_FALLBACK = import.meta.env.VITE_APP_NAME || 'Sistema de Gestión';
+
+function DocumentTitle() {
+  const { isAuthenticated, sucursalNombre } = useAuth();
+  useEffect(() => {
+    if (isAuthenticated && sucursalNombre) {
+      document.title = `${sucursalNombre} - Sistema de Gestión`;
+    } else {
+      document.title = APP_NAME_FALLBACK === 'Sistema de Gestión' ? APP_NAME_FALLBACK : `${APP_NAME_FALLBACK} - Sistema de Gestión`;
+    }
+  }, [isAuthenticated, sucursalNombre]);
+  return null;
+}
 import Login from './pages/Login';
 import RegistroLink from './pages/RegistroLink';
 import Dashboard from './pages/Dashboard';
@@ -46,6 +61,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <DocumentTitle />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroLink />} />

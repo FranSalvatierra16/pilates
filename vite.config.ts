@@ -10,8 +10,8 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['savia.png'],
       manifest: {
-        name: 'SAVIA - Sistema de Gestión',
-        short_name: 'SAVIA',
+        name: process.env.VITE_APP_NAME ? `${process.env.VITE_APP_NAME} - Sistema de Gestión` : 'Sistema de Gestión',
+        short_name: process.env.VITE_APP_NAME || 'Sistema',
         description: 'Sistema de gestión para Pilates',
         theme_color: '#0f172a',
         background_color: '#0f172a',

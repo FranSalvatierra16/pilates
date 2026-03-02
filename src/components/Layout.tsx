@@ -88,14 +88,14 @@ const Layout = ({ children }: LayoutProps) => {
                       />
                     ) : (
                       <img
-                        src="/savia.png"
-                        alt={sucursalNombre || 'SAVIA Pilates'}
+                        src={import.meta.env.VITE_APP_LOGO || '/savia.png'}
+                        alt={sucursalNombre || 'Sistema de Gestión'}
                         className="h-10 w-auto object-contain"
                       />
                     )}
                   </div>
                   <span className="font-semibold text-gray-800 hidden sm:block">
-                    {sucursalNombre || 'SAVIA Pilates'}
+                    {sucursalNombre || (import.meta.env.VITE_APP_NAME || 'Sistema de Gestión')}
                   </span>
                 </Link>
               </div>
@@ -148,7 +148,7 @@ const Layout = ({ children }: LayoutProps) => {
           >
             <div className="flex items-center justify-between pt-6 pb-4 px-5 border-b border-gray-200 safe-top">
               <span className="text-lg font-semibold text-gray-900">
-                {sucursalNombre || 'SAVIA Pilates'}
+                {sucursalNombre || (import.meta.env.VITE_APP_NAME || 'Sistema de Gestión')}
               </span>
               <button
                 type="button"

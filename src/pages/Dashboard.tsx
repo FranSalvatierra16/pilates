@@ -8,7 +8,7 @@ import { isCuotaVencida } from '../utils/date';
 
 const Dashboard = () => {
   const { sucursalNombre } = useAuth();
-  const nombreSucursal = sucursalNombre || 'SAVIA';
+  const nombreSucursal = sucursalNombre || (import.meta.env.VITE_APP_NAME || 'Sistema de Gestión');
   const [stats, setStats] = useState({
     totalAlumnos: 0,
     totalActividades: 0,

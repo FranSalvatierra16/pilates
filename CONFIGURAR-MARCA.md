@@ -15,24 +15,18 @@ Si tu backend ya envía estos campos al iniciar sesión, no hace falta cambiar n
 
 Cuando alguien **instala** la app en el celular o en el escritorio, el nombre y el icono que ve en el launcher vienen del build. Podés configurarlos con variables de entorno:
 
-- **`VITE_APP_NAME`**: nombre que tendrá la app instalada (ej. `FITGEST`).
-- **`VITE_APP_LOGO`**: ruta del logo que se usa en el header cuando la sucursal no tiene `fotoPerfil` (ej. `/fitgest.png` si ponés `fitgest.png` en la carpeta `public/`).
+- **`VITE_APP_NAME`**: nombre de la app instalada (ej. `FITGEST`). Sin esto sale "Sistema de Gestión".
+- **`VITE_APP_ICON`**: archivo del **icono de la PWA** en `public/` (ej. `fitgest.png`). Sin esto se usa savia.png.
+- **`VITE_APP_LOGO`**: ruta del logo en el header cuando no hay `fotoPerfil` (ej. `/fitgest.png`).
 
 ### Ejemplo para FITGEST
 
-1. Poné el logo de FITGEST en `public/fitgest.png`.
-2. Al construir o desplegar, usá:
+1. Subí el icono de FITGEST (ej. `fitgest.png`, 512×512 px) a **`public/`** y hacé commit.
+2. En Railway → Variables → agregá `VITE_APP_NAME` = `FITGEST` y `VITE_APP_ICON` = `fitgest.png`. (Opcional: `VITE_APP_LOGO` = `/fitgest.png`.)
+3. Hacé un **nuevo deploy**. Sin redeploy el nombre e icono no cambian.
 
-```bash
-VITE_APP_NAME=FITGEST VITE_APP_LOGO=/fitgest.png npm run build
-```
 
-O en tu plataforma (Railway, Vercel, etc.) definí:
-
-- `VITE_APP_NAME` = `FITGEST`
-- `VITE_APP_LOGO` = `/fitgest.png`
-
-Así, al instalar la PWA se verá “FITGEST - Sistema de Gestión” y, si el backend no manda `fotoPerfil`, se usará el logo de FITGEST en el header.
+Después de redeploy, al instalar la app se verá **FITGEST - Sistema de Gestión** y el **icono de FITGEST**. Si ya la tenías instalada, desinstalala y volvé a instalar para que tome el nuevo nombre e icono.
 
 ## Resumen
 
@@ -40,6 +34,6 @@ Así, al instalar la PWA se verá “FITGEST - Sistema de Gestión” y, si el b
 |-------------|----------------|
 | Título de la ventana / pestaña | Al estar logueado: `sucursalNombre` que devuelve la API. Si no hay usuario logueado: `VITE_APP_NAME` o “Sistema de Gestión”. |
 | Nombre y foto en el header (barra superior) | `sucursalNombre` y `fotoPerfil` de la respuesta de login. Si no hay `fotoPerfil`, se usa `VITE_APP_LOGO` o el logo por defecto. |
-| Nombre e icono de la app instalada (PWA) | `VITE_APP_NAME` (y opcionalmente el icono del manifest) en el build. |
+| Nombre e icono de la app instalada (PWA) | `VITE_APP_NAME` y `VITE_APP_ICON` en el build (variables de entorno en Railway). |
 
 Para que “se instale con el nombre del usuario que tenés abierto y su foto”: configurá el backend para que ese usuario (ej. fitgest) tenga `sucursalNombre` y `fotoPerfil` correctos, y para la instalación usá `VITE_APP_NAME=FITGEST` (y si querés, `VITE_APP_LOGO=/fitgest.png`) al hacer el build.

@@ -2,16 +2,19 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const appName = process.env.VITE_APP_NAME || ''
+const appIcon = process.env.VITE_APP_ICON || 'savia.png'
+
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['savia.png'],
+      includeAssets: [appIcon],
       manifest: {
-        name: process.env.VITE_APP_NAME ? `${process.env.VITE_APP_NAME} - Sistema de Gestión` : 'Sistema de Gestión',
-        short_name: process.env.VITE_APP_NAME || 'Sistema',
+        name: appName ? `${appName} - Sistema de Gestión` : 'Sistema de Gestión',
+        short_name: appName || 'Sistema',
         description: 'Sistema de gestión para Pilates',
         theme_color: '#0f172a',
         background_color: '#0f172a',
@@ -20,8 +23,8 @@ export default defineConfig({
         scope: '/',
         start_url: '/',
         icons: [
-          { src: 'savia.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: 'savia.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+          { src: appIcon, sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: appIcon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
         ]
       },
       workbox: {

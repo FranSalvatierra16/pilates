@@ -10,8 +10,13 @@ function DocumentTitle() {
   useEffect(() => {
     if (isAuthenticated && sucursalNombre) {
       document.title = `${sucursalNombre} - Sistema de Gestión`;
+      const slug = sucursalNombre.toLowerCase().replace(/\s+/g, '');
+      const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+      if (link && slug) link.href = `/api/manifest.webmanifest?brand=${encodeURIComponent(slug)}`;
     } else {
       document.title = APP_NAME_FALLBACK === 'Sistema de Gestión' ? APP_NAME_FALLBACK : `${APP_NAME_FALLBACK} - Sistema de Gestión`;
+      const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+      if (link) link.href = '/api/manifest.webmanifest?brand=savia';
     }
   }, [isAuthenticated, sucursalNombre]);
   return null;

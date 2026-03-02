@@ -4,15 +4,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { existsSync } from 'fs'
 import { join } from 'path'
 
-const appName = (process.env.VITE_APP_NAME || '').trim()
-// Icono PWA: VITE_APP_ICON, o si hay VITE_APP_NAME usar nombre.png (ej. fitgest.png), sino savia.png
+// Nombre e icono de la PWA. Por defecto FITGEST (así sale bien en Railway aunque no pasen env en el build).
+const appName = (process.env.VITE_APP_NAME || 'FITGEST').trim()
 function getAppIcon(): string {
   if (process.env.VITE_APP_ICON) return process.env.VITE_APP_ICON.trim()
-  if (appName) {
-    const nameIcon = `${appName.toLowerCase().replace(/\s+/g, '')}.png`
-    const path = join(process.cwd(), 'public', nameIcon)
-    if (existsSync(path)) return nameIcon
-  }
+  const nameIcon = `${appName.toLowerCase().replace(/\s+/g, '')}.png`
+  const iconPath = join(process.cwd(), 'public', nameIcon)
+  if (existsSync(iconPath)) return nameIcon
   return 'savia.png'
 }
 const appIcon = getAppIcon()

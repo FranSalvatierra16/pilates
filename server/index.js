@@ -39,8 +39,8 @@ app.use('/api', async (req, res, next) => {
   }
 });
 
-// Auth: exigir JWT en todas las rutas excepto login, health y registro público (seed-demo requiere sucursal logueada)
-const authSkip = ['/health', '/auth/login'];
+// Auth: exigir JWT en todas las rutas excepto login, health, manifest PWA y registro público
+const authSkip = ['/health', '/auth/login', '/manifest.webmanifest'];
 const isAuthSkip = (path) => authSkip.some((p) => path === p || path.startsWith(p + '?'));
 app.use('/api', (req, res, next) => {
   if (isAuthSkip(req.path)) return next();
@@ -1125,6 +1125,30 @@ app.patch('/api/admin/sucursales/:id', async (req, res) => {
 app.get('/api/health', async (req, res) => {
   const db = await getPool();
   res.json({ ok: true, db: !!db });
+});
+
+// Manifest PWA dinámico: nombre e icono según el usuario (brand=fitgest → FITGEST + fitgest.png)
+app.get('/api/manifest.webmanifest', (req, res) => {
+  const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '') || 'savia';
+  const name = brand.charAt(0).toUpperCase() + brand.slice(1);
+  const icon = ['fitgest', 'savia'].includes(brand) ? `/${brand}.png` : '/savia.png';
+  res.set('Content-Type', 'application/manifest+json');
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    name: `${name} - Sistema de Gestión`,
+    short_name: name,
+    description: 'Sistema de gestión para Pilates',
+    theme_color: '#0f172a',
+    background_color: '#0f172a',
+    display: 'standalone',
+    orientation: 'portrait',
+    scope: '/',
+    start_url: '/',
+    icons: [
+      { src: icon, sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+    ],
+  });
 });
 
 // Servir frontend estático (después de build)

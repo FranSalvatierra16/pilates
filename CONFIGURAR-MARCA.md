@@ -1,6 +1,6 @@
 # Configurar nombre y logo por sucursal (ej. FITGEST)
 
-Para que la app muestre el **nombre y la foto del usuario/sucursal** con el que inicias sesión (por ejemplo FITGEST), y que al instalarla en el celular o PC se vea con esa marca:
+La app usa **manifest dinámico**: al instalar la PWA se muestra el **nombre e icono del usuario con el que estás logueado** (si es FITGEST → FITGEST + logo FITGEST; si es SAVIA → SAVIA + logo SAVIA). No hace falta configurar variables de entorno para esto.
 
 ## 1. Backend: nombre y foto de la sucursal
 

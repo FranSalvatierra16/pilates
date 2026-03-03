@@ -240,6 +240,14 @@ export const storageSupabase = {
       }
       return (data || []).map(dbToPago);
     },
+    delete: async (id: string): Promise<void> => {
+      if (!useSupabase()) return;
+      const { error } = await supabase.from('pagos').delete().eq('id', id);
+      if (error) {
+        console.error('Error deleting pago:', error);
+        throw error;
+      }
+    },
   },
   
   gastos: {

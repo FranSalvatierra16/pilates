@@ -19,7 +19,7 @@ function normalizePhoneForWhatsApp(telefono: string): string | null {
   return num.length >= 12 ? num : null;
 }
 
-/** Arma mensaje de recordatorio por WhatsApp según estado de cuota. nombreLugar = sucursal/estudio. */
+/** Arma mensaje de recordatorio por WhatsApp según estado de cuota. nombreLugar = sucursal/estudio (ej. Savia). */
 function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { url: string | null; tooltip: string } {
   const nombre = [alumno.nombre, alumno.apellido].filter(Boolean).join(' ') || 'Hola';
   const phone = normalizePhoneForWhatsApp(alumno.telefono || '');
@@ -27,21 +27,22 @@ function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { ur
   const vencida = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
   const venceHoy = tieneFecha && isCuotaVenceHoy(alumno.fechaVencimientoCuota);
   const fechaStr = tieneFecha ? formatDate(alumno.fechaVencimientoCuota) : '';
+  const marca = nombreLugar.trim() || 'Savia';
+
+  const cierre = '\n\nMuchas gracias por confiar en nosotras! Te vemos la próxima clase 🫶🏼';
 
   let text = '';
   if (vencida) {
-    text = `Hola ${nombre}, te recordamos que tu cuota está *vencida*. Por favor acercate a regularizar.`;
+    text = tieneFecha
+      ? `Hola ${nombre}! Este es un mensaje automático de ${marca}, te recordamos que tu cuota venció el día ${fechaStr}.${cierre}`
+      : `Hola ${nombre}! Este es un mensaje automático de ${marca}, te recordamos que tu cuota está vencida.${cierre}`;
   } else if (venceHoy) {
-    text = `Hola ${nombre}, te recordamos que tu cuota *vence hoy*. No olvides regularizar.`;
+    text = `Hola ${nombre}! Este es un mensaje automático de ${marca}, te recordamos que tu cuota vence hoy.${cierre}`;
   } else if (tieneFecha) {
-    text = `Hola ${nombre}, te recordamos que tu cuota vence el *${fechaStr}*.`;
+    text = `Hola ${nombre}! Este es un mensaje automático de ${marca}, te recordamos que tu cuota vence el día ${fechaStr}.${cierre}`;
   } else {
-    text = `Hola ${nombre}, te recordamos que tenés pendiente el pago de la cuota. Cuando puedas acercate a regularizar.`;
+    text = `Hola ${nombre}! Este es un mensaje automático de ${marca}, te recordamos que tenés pendiente el pago de la cuota.${cierre}`;
   }
-  const cierre = nombreLugar.trim()
-    ? ` Te hablamos desde ${nombreLugar.trim()}. Este mensaje se envía automáticamente. Gracias.`
-    : ' Este mensaje se envía automáticamente. Gracias.';
-  text = text + cierre;
 
   const tooltip = vencida
     ? 'Recordatorio por WhatsApp (cuota vencida)'

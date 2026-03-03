@@ -16,6 +16,7 @@ const Pagos = () => {
     monto: '',
     metodoPago: 'efectivo' as MetodoPago,
     fecha: new Date().toISOString().split('T')[0],
+    descripcion: '', // para aporte a caja (sin alumno)
   });
 
   useEffect(() => {
@@ -59,6 +60,7 @@ const Pagos = () => {
       monto: '',
       metodoPago: 'efectivo',
       fecha: new Date().toISOString().split('T')[0],
+      descripcion: '',
     });
   };
 
@@ -74,11 +76,6 @@ const Pagos = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.alumnoId) {
-      alert('Por favor seleccioná un alumno');
-      return;
-    }
 
     const monto = parseFloat(formData.monto);
     if (isNaN(monto) || monto <= 0) {
@@ -86,51 +83,53 @@ const Pagos = () => {
       return;
     }
 
-    const alumno = alumnos.find(a => a.id === formData.alumnoId);
-    if (!alumno) {
-      alert('Alumno no encontrado');
-      return;
+    const esAporte = !formData.alumnoId;
+    if (!esAporte) {
+      const alumno = alumnos.find(a => a.id === formData.alumnoId);
+      if (!alumno) {
+        alert('Alumno no encontrado');
+        return;
+      }
     }
 
     try {
-      // Calcular nueva fecha de vencimiento (1 mes desde la fecha del pago)
-      const nuevaFechaVencimiento = calcularFechaVencimiento(formData.fecha);
-
-      // Crear el pago
       const nuevoPago: Pago = {
         id: Date.now().toString(),
-        alumnoId: formData.alumnoId,
-        monto: monto,
+        alumnoId: formData.alumnoId || null,
+        monto,
         metodoPago: formData.metodoPago,
         fecha: formData.fecha,
         createdAt: new Date().toISOString(),
+        ...(esAporte && { descripcion: formData.descripcion.trim() || 'Aporte a caja' }),
       };
 
-      // Guardar el pago y actualizar la fecha de vencimiento del alumno
-      await Promise.all([
-        storageHybrid.pagos.add(nuevoPago),
-        storageHybrid.alumnos.update(formData.alumnoId, {
+      await storageHybrid.pagos.add(nuevoPago);
+
+      if (!esAporte && formData.alumnoId) {
+        const nuevaFechaVencimiento = calcularFechaVencimiento(formData.fecha);
+        await storageHybrid.alumnos.update(formData.alumnoId, {
           fechaVencimientoCuota: nuevaFechaVencimiento,
-        })
-      ]);
+        });
+      }
 
       await loadPagos();
       await loadAlumnos();
       handleCloseModal();
-      alert('Pago registrado exitosamente');
+      alert(esAporte ? 'Ingreso registrado en caja.' : 'Pago registrado exitosamente');
     } catch (error) {
       console.error('Error saving pago:', error);
       alert('Error al registrar el pago. Revisá la consola para más detalles.');
     }
   };
 
-  const getAlumnoNombre = (alumnoId: string) => {
-    const alumno = alumnos.find(a => a.id === alumnoId);
+  const getAlumnoNombre = (pago: Pago) => {
+    if (pago.alumnoId == null) return pago.descripcion || 'Aporte a caja';
+    const alumno = alumnos.find(a => a.id === pago.alumnoId);
     return alumno ? `${alumno.nombre} ${alumno.apellido}` : 'Desconocido';
   };
 
   const handleEliminarPago = async (pago: Pago) => {
-    const nombre = getAlumnoNombre(pago.alumnoId);
+    const nombre = getAlumnoNombre(pago);
     if (!confirm(`¿Eliminar el pago de ${formatCurrency(pago.monto)} (${nombre}, ${formatDate(pago.fecha)})? Esta acción no se puede deshacer.`)) return;
     try {
       await storageHybrid.pagos.delete(pago.id);
@@ -154,11 +153,11 @@ const Pagos = () => {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Pagos</h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Pagos</h1>
         <button
           onClick={handleOpenModal}
-          className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
+          className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-5 h-5" />
           Registrar Pago
@@ -166,7 +165,7 @@ const Pagos = () => {
       </div>
 
       {/* Resumen */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="card bg-green-50 border border-green-200">
           <div className="flex items-center justify-between">
             <div>
@@ -221,113 +220,69 @@ const Pagos = () => {
           </button>
         </div>
       ) : (
-        <>
-          {/* Vista móvil: tarjetas */}
-          <div className="block md:hidden space-y-3">
-            {pagos.map((pago) => (
-              <div
-                key={pago.id}
-                className="card p-4 flex flex-col gap-2 border border-gray-200"
-              >
-                <div className="flex justify-between items-start gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {getAlumnoNombre(pago.alumnoId)}
-                    </p>
-                    <p className="flex items-center gap-1.5 text-sm text-gray-500 mt-0.5">
-                      <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      {formatDate(pago.fecha)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-base font-semibold text-gray-900">
+        <div className="card overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-primary-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Fecha
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Alumno
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Monto
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Método de Pago
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">
+                    Eliminar
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {pagos.map((pago) => (
+                  <tr key={pago.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2 text-sm text-gray-900">
+                        <Calendar className="w-4 h-4 text-gray-400" />
+                        {formatDate(pago.fecha)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {getAlumnoNombre(pago)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {formatCurrency(pago.monto)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleEliminarPago(pago)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg touch-manipulation"
-                      aria-label="Eliminar pago"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-                <span className={`inline-flex w-fit px-2.5 py-1 rounded-full text-xs font-medium ${
-                  pago.metodoPago === 'efectivo'
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-blue-100 text-blue-800'
-                }`}>
-                  {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
-                </span>
-              </div>
-            ))}
-          </div>
-          {/* Vista escritorio: tabla */}
-          <div className="hidden md:block card overflow-hidden p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px]">
-                <thead className="bg-primary-50">
-                  <tr>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Fecha
-                    </th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Alumno
-                    </th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Monto
-                    </th>
-                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Método de Pago
-                    </th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">
-                      Eliminar
-                    </th>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        pago.metodoPago === 'efectivo'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarPago(pago)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
+                        title="Eliminar pago"
+                        aria-label="Eliminar pago"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {pagos.map((pago) => (
-                    <tr key={pago.id} className="hover:bg-gray-50">
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2 text-sm text-gray-900">
-                          <Calendar className="w-4 h-4 text-gray-400" />
-                          {formatDate(pago.fecha)}
-                        </div>
-                      </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {getAlumnoNombre(pago.alumnoId)}
-                      </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {formatCurrency(pago.monto)}
-                      </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          pago.metodoPago === 'efectivo'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
-                        </span>
-                      </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleEliminarPago(pago)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
-                          title="Eliminar pago"
-                          aria-label="Eliminar pago"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </>
+        </div>
       )}
 
       {showModal && (
@@ -345,21 +300,29 @@ const Pagos = () => {
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Alumno *
+                  Alumno (opcional)
                 </label>
                 <select
-                  required
                   value={formData.alumnoId}
                   onChange={(e) => setFormData({ ...formData, alumnoId: e.target.value })}
                   className="input-field"
                 >
-                  <option value="">Seleccionar alumno</option>
+                  <option value="">Ninguno — Aporte a caja / ingreso del dueño</option>
                   {alumnos.map((alumno) => (
                     <option key={alumno.id} value={alumno.id}>
                       {alumno.nombre} {alumno.apellido} - DNI: {alumno.dni}
                     </option>
                   ))}
                 </select>
+                {!formData.alumnoId && (
+                  <input
+                    type="text"
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                    className="input-field mt-2"
+                    placeholder="Ej. Aporte del dueño (opcional)"
+                  />
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -402,11 +365,13 @@ const Pagos = () => {
                   className="input-field"
                 />
               </div>
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  💡 <strong>Nota:</strong> Al registrar el pago, la fecha de vencimiento de la cuota del alumno se actualizará automáticamente un mes después de la fecha del pago (ej: si pagás el 07/01, la cuota vence el 07/02). Podés editarla después si es necesario.
-                </p>
-              </div>
+              {formData.alumnoId && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    💡 <strong>Nota:</strong> Al registrar el pago, la fecha de vencimiento de la cuota del alumno se actualizará automáticamente un mes después de la fecha del pago. Podés editarla después si es necesario.
+                  </p>
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"

@@ -114,8 +114,14 @@ CREATE INDEX IF NOT EXISTS idx_registros_link_created_at ON registros_link(creat
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_alumnos_dni ON alumnos(dni);
 CREATE INDEX IF NOT EXISTS idx_alumnos_sucursal ON alumnos(sucursal_id);
+-- Permitir pagos sin alumno (aporte a caja, ingreso del dueño)
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS descripcion TEXT;
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
+ALTER TABLE pagos ALTER COLUMN alumno_id DROP NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha);
+CREATE INDEX IF NOT EXISTS idx_pagos_sucursal_id ON pagos(sucursal_id);
 CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 CREATE INDEX IF NOT EXISTS idx_turnos_dia_hora ON turnos(dia_semana, hora);
 CREATE INDEX IF NOT EXISTS idx_turnos_profesor_id ON turnos(profesor_id);

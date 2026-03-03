@@ -32,11 +32,12 @@ export interface Actividad {
 
 export interface Pago {
   id: string;
-  alumnoId: string;
+  alumnoId: string | null; // null = ingreso sin alumno (ej. aporte del dueño)
   monto: number;
   metodoPago: 'efectivo' | 'transferencia';
   fecha: string; // YYYY-MM-DD
   createdAt: string;
+  descripcion?: string; // ej. "Aporte a caja" cuando no hay alumno
 }
 
 export type MetodoPago = 'efectivo' | 'transferencia';

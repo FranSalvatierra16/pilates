@@ -446,16 +446,20 @@ app.get('/api/pagos', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query(
-      'SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id WHERE a.sucursal_id = $1 ORDER BY p.created_at DESC',
+      `SELECT p.* FROM pagos p
+       LEFT JOIN alumnos a ON p.alumno_id = a.id
+       WHERE a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1)
+       ORDER BY p.created_at DESC`,
       [req.user.sucursalId]
     );
     res.json(rows.map((r) => ({
       id: r.id,
-      alumnoId: r.alumno_id,
+      alumnoId: r.alumno_id ?? null,
       monto: Number(r.monto),
       metodoPago: r.metodo_pago,
       fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+      descripcion: r.descripcion ?? undefined,
     })));
   } catch (e) {
     console.error(e);
@@ -490,9 +494,10 @@ app.post('/api/pagos', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
+    const sucursalId = b.alumnoId ? null : req.user.sucursalId;
     await db.query(
-      'INSERT INTO pagos (id, alumno_id, monto, metodo_pago, fecha, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-      [b.id, b.alumnoId, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString()]
+      'INSERT INTO pagos (id, alumno_id, monto, metodo_pago, fecha, created_at, descripcion, sucursal_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [b.id, b.alumnoId || null, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString(), b.descripcion || null, sucursalId]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -507,7 +512,10 @@ app.delete('/api/pagos/:id', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { id } = req.params;
     const { rowCount } = await db.query(
-      'DELETE FROM pagos WHERE id = $1 AND alumno_id IN (SELECT id FROM alumnos WHERE sucursal_id = $2)',
+      `DELETE FROM pagos WHERE id = $1 AND (
+        alumno_id IN (SELECT id FROM alumnos WHERE sucursal_id = $2) OR
+        (alumno_id IS NULL AND sucursal_id = $2)
+      )`,
       [id, req.user.sucursalId]
     );
     if (rowCount === 0) return res.status(404).json({ error: 'Pago no encontrado' });

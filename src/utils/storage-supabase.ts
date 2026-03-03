@@ -54,20 +54,22 @@ const actividadToDb = (actividad: Actividad) => ({
 
 const dbToPago = (row: any): Pago => ({
   id: row.id,
-  alumnoId: row.alumno_id,
+  alumnoId: row.alumno_id ?? null,
   monto: parseFloat(row.monto),
   metodoPago: row.metodo_pago,
   fecha: row.fecha,
   createdAt: row.created_at,
+  ...(row.descripcion && { descripcion: row.descripcion }),
 });
 
 const pagoToDb = (pago: Pago) => ({
   id: pago.id,
-  alumno_id: pago.alumnoId,
+  alumno_id: pago.alumnoId ?? null,
   monto: pago.monto,
   metodo_pago: pago.metodoPago,
   fecha: pago.fecha,
   created_at: pago.createdAt,
+  ...(pago.descripcion && { descripcion: pago.descripcion }),
 });
 
 const dbToGasto = (row: any): Gasto => ({

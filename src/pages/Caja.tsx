@@ -214,8 +214,9 @@ const Caja = () => {
     loadAlumnos();
   }, []);
 
-  const getAlumnoNombre = (alumnoId: string): string => {
-    const alumno = alumnos.find(a => a.id === alumnoId);
+  const getAlumnoNombre = (pago: Pago): string => {
+    if (pago.alumnoId == null) return pago.descripcion || 'Aporte a caja';
+    const alumno = alumnos.find(a => a.id === pago.alumnoId);
     return alumno ? `${alumno.nombre} ${alumno.apellido}` : 'Desconocido';
   };
 
@@ -232,19 +233,19 @@ const Caja = () => {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Caja</h1>
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Caja</h1>
+        <div className="flex gap-3">
           <button
             onClick={handleOpenModalGasto}
-            className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
+            className="btn-primary flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
             Registrar Gasto
           </button>
           <button
             onClick={loadStats}
-            className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto"
+            className="btn-secondary flex items-center gap-2"
           >
             <RefreshCw className="w-5 h-5" />
             Actualizar
@@ -253,23 +254,27 @@ const Caja = () => {
       </div>
 
       {/* Saldo de Caja - Destacado */}
-      <div className="card bg-gradient-to-r from-primary-600 to-primary-700 text-white mb-6 sm:mb-8 shadow-xl p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="min-w-0">
-            <h2 className="text-xl sm:text-2xl font-bold mb-2">Saldo de Caja</h2>
-            <div className="space-y-1 text-primary-100 text-sm">
-              <p><span className="font-semibold">Ingresos:</span> {formatCurrency(stats.totalGeneral)}</p>
-              <p><span className="font-semibold">Gastos:</span> {formatCurrency(stats.totalGastos)}</p>
+      <div className="card bg-gradient-to-r from-primary-600 to-primary-700 text-white mb-8 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold mb-2">Saldo de Caja</h2>
+            <div className="space-y-1 text-primary-100">
+              <p className="text-sm">
+                <span className="font-semibold">Ingresos:</span> {formatCurrency(stats.totalGeneral)}
+              </p>
+              <p className="text-sm">
+                <span className="font-semibold">Gastos:</span> {formatCurrency(stats.totalGastos)}
+              </p>
             </div>
           </div>
-          <div className="text-left sm:text-right flex-shrink-0">
-            <p className="text-xs sm:text-sm text-primary-200 mb-1 uppercase tracking-wide">Saldo Final</p>
-            <p className={`text-3xl sm:text-5xl font-bold ${
+          <div className="text-right">
+            <p className="text-sm text-primary-200 mb-2 uppercase tracking-wide">Saldo Final</p>
+            <p className={`text-5xl font-bold ${
               stats.totalNeto >= 0 ? 'text-green-300' : 'text-red-300'
             }`}>
               {formatCurrency(stats.totalNeto)}
             </p>
-            <p className={`text-xs mt-1 ${
+            <p className={`text-xs mt-2 ${
               stats.totalNeto >= 0 ? 'text-green-200' : 'text-red-200'
             }`}>
               {stats.totalNeto >= 0 ? '✓ Positivo' : '⚠ Negativo'}
@@ -279,7 +284,7 @@ const Caja = () => {
       </div>
 
       {/* Cards de Resumen - Ingresos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="card bg-green-50 border-2 border-green-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-green-700 uppercase tracking-wide">
@@ -289,7 +294,7 @@ const Caja = () => {
               <DollarSign className="w-5 h-5 text-green-700" />
             </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-green-900 mb-1">
+          <p className="text-3xl font-bold text-green-900 mb-1">
             {formatCurrency(stats.totalEfectivo)}
           </p>
           {stats.gastosEfectivo > 0 && (
@@ -311,7 +316,7 @@ const Caja = () => {
               <CreditCard className="w-5 h-5 text-blue-700" />
             </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-blue-900 mb-1">
+          <p className="text-3xl font-bold text-blue-900 mb-1">
             {formatCurrency(stats.totalTransferencia)}
           </p>
           {stats.gastosTransferencia > 0 && (
@@ -333,7 +338,7 @@ const Caja = () => {
               <DollarSign className="w-5 h-5 text-red-700" />
             </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-red-900 mb-2">
+          <p className="text-3xl font-bold text-red-900 mb-2">
             {formatCurrency(stats.totalGastos)}
           </p>
           <p className="text-xs text-red-600">
@@ -350,7 +355,7 @@ const Caja = () => {
               <Wallet className="w-5 h-5 text-primary-700" />
             </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-primary-900 mb-2">
+          <p className="text-3xl font-bold text-primary-900 mb-2">
             {formatCurrency(stats.totalNeto)}
           </p>
           <p className="text-xs text-primary-600">
@@ -371,7 +376,7 @@ const Caja = () => {
               <p className="text-sm text-gray-600">Total de pagos recibidos</p>
             </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-purple-900">
+          <p className="text-3xl font-bold text-purple-900">
             {formatCurrency(stats.pagosMes)}
           </p>
         </div>
@@ -386,7 +391,7 @@ const Caja = () => {
               <p className="text-sm text-gray-600">Monto promedio</p>
             </div>
           </div>
-          <p className="text-2xl sm:text-3xl font-bold text-indigo-900">
+          <p className="text-3xl font-bold text-indigo-900">
             {pagos.length > 0 
               ? formatCurrency(stats.totalGeneral / pagos.length)
               : formatCurrency(0)}
@@ -414,68 +419,36 @@ const Caja = () => {
             </button>
           </div>
         ) : (
-          <>
-            {/* Vista móvil: tarjetas de gastos */}
-            <div className="block md:hidden space-y-3">
-              {ultimosGastos.map((gasto) => (
-                <div key={gasto.id} className="border border-gray-200 rounded-lg p-4 flex flex-col gap-2">
-                  <div className="flex justify-between items-start gap-2">
-                    <p className="text-sm font-medium text-gray-900 flex-1 min-w-0 break-words">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Fecha
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Descripción
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Monto
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Método
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {ultimosGastos.map((gasto) => (
+                  <tr key={gasto.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                      {formatDate(gasto.fecha)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                       {gasto.descripcion}
-                    </p>
-                    <span className="text-base font-semibold text-gray-900 flex-shrink-0">
-                      {formatCurrency(gasto.monto)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">{formatDate(gasto.fecha)}</span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      gasto.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {gasto.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleEliminarGasto(gasto.id)}
-                    className="self-start text-red-600 hover:text-red-800 text-sm font-medium touch-manipulation"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              ))}
-            </div>
-            {/* Vista escritorio: tabla gastos */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full min-w-[500px]">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Fecha
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Descripción
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Monto
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Método
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {ultimosGastos.map((gasto) => (
-                    <tr key={gasto.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {formatDate(gasto.fecha)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {gasto.descripcion}
-                      </td>
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-red-600">
                       - {formatCurrency(gasto.monto)}
                     </td>
@@ -500,9 +473,8 @@ const Caja = () => {
                   </tr>
                 ))}
               </tbody>
-              </table>
-            </div>
-          </>
+            </table>
+          </div>
         )}
       </div>
 
@@ -514,76 +486,50 @@ const Caja = () => {
             <p className="text-gray-500">No hay pagos registrados aún</p>
           </div>
         ) : (
-          <>
-            {/* Vista móvil: tarjetas de pagos */}
-            <div className="block md:hidden space-y-3">
-              {ultimosPagos.map((pago) => (
-                <div key={pago.id} className="border border-gray-200 rounded-lg p-4 flex flex-col gap-2">
-                  <div className="flex justify-between items-start gap-2">
-                    <p className="text-sm font-medium text-gray-900 flex-1 min-w-0 truncate">
-                      {getAlumnoNombre(pago.alumnoId)}
-                    </p>
-                    <span className="text-base font-semibold text-gray-900 flex-shrink-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Fecha
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Alumno
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Monto
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Método
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {ultimosPagos.map((pago) => (
+                  <tr key={pago.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                      {formatDate(pago.fecha)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {getAlumnoNombre(pago)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {formatCurrency(pago.monto)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between flex-wrap gap-1">
-                    <span className="text-xs text-gray-500">{formatDate(pago.fecha)}</span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      pago.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {pago.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* Vista escritorio: tabla pagos */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full min-w-[500px]">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Fecha
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Alumno
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Monto
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      Método
-                    </th>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        pago.metodoPago === 'efectivo'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {pago.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {ultimosPagos.map((pago) => (
-                    <tr key={pago.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {formatDate(pago.fecha)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {getAlumnoNombre(pago.alumnoId)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {formatCurrency(pago.monto)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          pago.metodoPago === 'efectivo'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {pago.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

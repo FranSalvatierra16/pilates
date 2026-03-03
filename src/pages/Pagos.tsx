@@ -154,11 +154,11 @@ const Pagos = () => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Pagos</h1>
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Pagos</h1>
         <button
           onClick={handleOpenModal}
-          className="btn-primary flex items-center gap-2"
+          className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto"
         >
           <Plus className="w-5 h-5" />
           Registrar Pago
@@ -166,7 +166,7 @@ const Pagos = () => {
       </div>
 
       {/* Resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div className="card bg-green-50 border border-green-200">
           <div className="flex items-center justify-between">
             <div>
@@ -221,69 +221,113 @@ const Pagos = () => {
           </button>
         </div>
       ) : (
-        <div className="card overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-primary-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Alumno
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Monto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Método de Pago
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">
-                    Eliminar
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {pagos.map((pago) => (
-                  <tr key={pago.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2 text-sm text-gray-900">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        {formatDate(pago.fecha)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+        <>
+          {/* Vista móvil: tarjetas */}
+          <div className="block md:hidden space-y-3">
+            {pagos.map((pago) => (
+              <div
+                key={pago.id}
+                className="card p-4 flex flex-col gap-2 border border-gray-200"
+              >
+                <div className="flex justify-between items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">
                       {getAlumnoNombre(pago.alumnoId)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                    </p>
+                    <p className="flex items-center gap-1.5 text-sm text-gray-500 mt-0.5">
+                      <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      {formatDate(pago.fecha)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-base font-semibold text-gray-900">
                       {formatCurrency(pago.monto)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        pago.metodoPago === 'efectivo'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
-                        {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleEliminarPago(pago)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
-                        title="Eliminar pago"
-                        aria-label="Eliminar pago"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleEliminarPago(pago)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg touch-manipulation"
+                      aria-label="Eliminar pago"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <span className={`inline-flex w-fit px-2.5 py-1 rounded-full text-xs font-medium ${
+                  pago.metodoPago === 'efectivo'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-blue-100 text-blue-800'
+                }`}>
+                  {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
+                </span>
+              </div>
+            ))}
           </div>
-        </div>
+          {/* Vista escritorio: tabla */}
+          <div className="hidden md:block card overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead className="bg-primary-50">
+                  <tr>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Fecha
+                    </th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Alumno
+                    </th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Monto
+                    </th>
+                    <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Método de Pago
+                    </th>
+                    <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">
+                      Eliminar
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {pagos.map((pago) => (
+                    <tr key={pago.id} className="hover:bg-gray-50">
+                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2 text-sm text-gray-900">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          {formatDate(pago.fecha)}
+                        </div>
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {getAlumnoNombre(pago.alumnoId)}
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        {formatCurrency(pago.monto)}
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          pago.metodoPago === 'efectivo'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
+                        </span>
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarPago(pago)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
+                          title="Eliminar pago"
+                          aria-label="Eliminar pago"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       {showModal && (

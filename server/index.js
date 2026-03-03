@@ -501,6 +501,23 @@ app.post('/api/pagos', async (req, res) => {
   }
 });
 
+app.delete('/api/pagos/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { id } = req.params;
+    const { rowCount } = await db.query(
+      'DELETE FROM pagos WHERE id = $1 AND alumno_id IN (SELECT id FROM alumnos WHERE sucursal_id = $2)',
+      [id, req.user.sucursalId]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Pago no encontrado' });
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Gastos ---
 app.get('/api/gastos', async (req, res) => {
   try {

@@ -92,6 +92,11 @@ export const storageHybrid = {
       if (b) return await b.pagos.getByAlumnoId(alumnoId);
       return storage.pagos.getByAlumnoId(alumnoId);
     },
+    delete: async (id: string): Promise<void> => {
+      const b = backend();
+      if (b) await b.pagos.delete(id);
+      else storage.pagos.delete(id);
+    },
   },
 
   gastos: {

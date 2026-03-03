@@ -77,6 +77,7 @@ export const storageApi = {
       request('/api/pagos', { method: 'POST', body: JSON.stringify(pago) }),
     getByAlumnoId: (alumnoId: string): Promise<Pago[]> =>
       request<Pago[]>(`/api/pagos/by-alumno/${alumnoId}`),
+    delete: (id: string): Promise<void> => request(`/api/pagos/${id}`, { method: 'DELETE' }),
   },
   gastos: {
     getAll: (): Promise<Gasto[]> => request<Gasto[]>('/api/gastos'),

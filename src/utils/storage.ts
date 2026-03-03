@@ -87,6 +87,10 @@ export const storage = {
     getByAlumnoId: (alumnoId: string): Pago[] => {
       return storage.pagos.getAll().filter(p => p.alumnoId === alumnoId);
     },
+    delete: (id: string): void => {
+      const pagos = storage.pagos.getAll().filter(p => p.id !== id);
+      storage.pagos.save(pagos);
+    },
   },
   
   turnos: {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, Save, Calendar } from 'lucide-react';
+import { Plus, X, Save, Calendar, Trash2 } from 'lucide-react';
 import { Alumno, Pago, MetodoPago } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -129,6 +129,19 @@ const Pagos = () => {
     return alumno ? `${alumno.nombre} ${alumno.apellido}` : 'Desconocido';
   };
 
+  const handleEliminarPago = async (pago: Pago) => {
+    const nombre = getAlumnoNombre(pago.alumnoId);
+    if (!confirm(`¿Eliminar el pago de ${formatCurrency(pago.monto)} (${nombre}, ${formatDate(pago.fecha)})? Esta acción no se puede deshacer.`)) return;
+    try {
+      await storageHybrid.pagos.delete(pago.id);
+      await loadPagos();
+      await loadAlumnos();
+    } catch (error) {
+      console.error('Error al eliminar pago:', error);
+      alert('No se pudo eliminar el pago.');
+    }
+  };
+
   const totalEfectivo = pagos
     .filter(p => p.metodoPago === 'efectivo')
     .reduce((sum, p) => sum + p.monto, 0);
@@ -225,6 +238,9 @@ const Pagos = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                     Método de Pago
                   </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">
+                    Eliminar
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -250,6 +266,17 @@ const Pagos = () => {
                       }`}>
                         {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarPago(pago)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
+                        title="Eliminar pago"
+                        aria-label="Eliminar pago"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
                     </td>
                   </tr>
                 ))}

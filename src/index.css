@@ -67,10 +67,9 @@
     @apply bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-6;
   }
 
-  /* Título de página: integrado al tema, sin negro duro */
+  /* Título de página: legible en cualquier fondo, sin sombras raras */
   .page-title {
-    @apply text-2xl sm:text-3xl font-bold tracking-tight text-primary-800;
-    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+    @apply text-2xl sm:text-3xl font-bold tracking-tight text-gray-800;
   }
   .page-title-wrap {
     @apply flex items-center gap-3 flex-wrap;

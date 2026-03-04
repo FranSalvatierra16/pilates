@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    /* En móvil, reservar espacio para safe area en el scroll */
+    scroll-padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
   body {
     @apply text-gray-900 antialiased;
     background-image: url('/saviaFondo.png');
@@ -10,11 +14,13 @@
     background-position: center;
     background-attachment: fixed;
     min-height: 100vh;
+    min-height: 100dvh; /* En móvil: altura visible sin barra del navegador */
   }
   @media (max-width: 768px) {
     body {
       background-attachment: scroll;
       overflow-x: hidden;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
     }
     html {
       overflow-x: hidden;
@@ -27,7 +33,13 @@
   padding-top: env(safe-area-inset-top, 0px);
 }
 .safe-bottom {
+  /* Mínimo 1rem; en móvil sumamos safe area para que no se corte con la barra de inicio (iPhone) */
   padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 768px) {
+  .safe-bottom {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 /* Barra fija inferior: que no quede bajo el indicador de inicio (iPhone) */
 .bottom-safe {

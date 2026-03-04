@@ -196,7 +196,7 @@ const Layout = ({ children }: LayoutProps) => {
         </>
       )}
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 pb-4 sm:pt-8 sm:pb-8 w-full max-w-[100vw] overflow-x-hidden min-w-0">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 pb-4 sm:pt-8 sm:pb-8 safe-bottom w-full max-w-[100vw] overflow-x-hidden min-w-0">
         <div className="relative min-h-0 w-full min-w-0">
           {children}
         </div>

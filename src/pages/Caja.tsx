@@ -30,6 +30,15 @@ const Caja = () => {
     fecha: new Date().toISOString().split('T')[0],
   });
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const fn = () => setIsMobile(mq.matches);
+    fn();
+    mq.addEventListener('change', fn);
+    return () => mq.removeEventListener('change', fn);
+  }, []);
+
   useEffect(() => {
     loadStats();
   }, []);
@@ -218,6 +227,18 @@ const Caja = () => {
     if (pago.alumnoId == null) return pago.descripcion || 'Aporte a caja';
     const alumno = alumnos.find(a => a.id === pago.alumnoId);
     return alumno ? `${alumno.nombre} ${alumno.apellido}` : 'Desconocido';
+  };
+
+  const handleEliminarPago = async (pago: Pago) => {
+    const nombre = getAlumnoNombre(pago);
+    if (!confirm(`¿Eliminar el pago de ${formatCurrency(pago.monto)} (${nombre}, ${formatDate(pago.fecha)})? Esta acción no se puede deshacer.`)) return;
+    try {
+      await storageHybrid.pagos.delete(pago.id);
+      await loadStats();
+    } catch (error) {
+      console.error('Error al eliminar pago:', error);
+      alert('No se pudo eliminar el pago.');
+    }
   };
 
   if (loading) {
@@ -418,31 +439,56 @@ const Caja = () => {
               Registrar primer gasto
             </button>
           </div>
+        ) : isMobile ? (
+          <div className="space-y-3">
+            {ultimosGastos.map((gasto) => (
+              <div key={gasto.id} className="p-4 border border-gray-200 rounded-xl bg-white/80">
+                <div className="flex justify-between items-start gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900 text-base break-words">{gasto.descripcion}</p>
+                    <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                      <Calendar className="w-4 h-4 flex-shrink-0" />
+                      {formatDate(gasto.fecha)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className="text-base font-semibold text-red-600">- {formatCurrency(gasto.monto)}</span>
+                    <button onClick={() => handleEliminarGasto(gasto.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation" title="Eliminar gasto" aria-label="Eliminar"><Trash2 className="w-5 h-5" /></button>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-100">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${gasto.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                    {gasto.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="overflow-x-auto min-w-0 -mx-1 px-1">
-            <table className="w-full min-w-[380px] table-fixed sm:table-auto">
+            <table className="w-full min-w-[380px]">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-24 sm:w-auto">Fecha</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider min-w-0">Descripción</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-20 sm:w-auto">Monto</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider hidden sm:table-cell">Método</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-700 w-12 sm:w-auto">Acciones</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Fecha</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Descripción</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Monto</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Método</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 w-20">Eliminar</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {ultimosGastos.map((gasto) => (
                   <tr key={gasto.id} className="hover:bg-gray-50">
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm text-gray-900">{formatDate(gasto.fecha)}</td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-sm font-medium text-gray-900 min-w-0 break-words whitespace-normal">{gasto.descripcion}</td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm font-semibold text-red-600">- {formatCurrency(gasto.monto)}</td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap hidden sm:table-cell">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{formatDate(gasto.fecha)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 min-w-0 break-words">{gasto.descripcion}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-red-600">- {formatCurrency(gasto.monto)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${gasto.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                         {gasto.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
                       </span>
                     </td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm font-medium">
-                      <button onClick={() => handleEliminarGasto(gasto.id)} className="text-red-600 hover:text-red-900 p-1" title="Eliminar gasto"><Trash2 className="w-4 h-4" /></button>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <button onClick={() => handleEliminarGasto(gasto.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg touch-manipulation" title="Eliminar gasto"><Trash2 className="w-4 h-4" /></button>
                     </td>
                   </tr>
                 ))}
@@ -459,27 +505,71 @@ const Caja = () => {
           <div className="text-center py-8">
             <p className="text-gray-500">No hay pagos registrados aún</p>
           </div>
+        ) : isMobile ? (
+          <div className="space-y-3">
+            {ultimosPagos.map((pago) => (
+              <div key={pago.id} className="p-4 border border-gray-200 rounded-xl bg-white/80">
+                <div className="flex justify-between items-start gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-gray-900 text-base break-words">{getAlumnoNombre(pago)}</p>
+                    <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                      <Calendar className="w-4 h-4 flex-shrink-0" />
+                      {formatDate(pago.fecha)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <span className="text-lg font-bold text-gray-900">{formatCurrency(pago.monto)}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleEliminarPago(pago)}
+                      className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation"
+                      title="Eliminar pago"
+                      aria-label="Eliminar pago"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-gray-100">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${pago.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                    {pago.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
-          <div className="overflow-x-auto min-w-0 -mx-1 px-1">
-            <table className="w-full min-w-[320px] table-fixed sm:table-auto">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto min-w-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <table className="w-full min-w-[520px]">
+              <thead className="bg-primary-50">
                 <tr>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-24 sm:w-auto">Fecha</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider min-w-0">Alumno</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-24 sm:w-auto">Monto</th>
-                  <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider hidden sm:table-cell">Método</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Fecha</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Alumno</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Monto</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Método</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">Eliminar</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {ultimosPagos.map((pago) => (
                   <tr key={pago.id} className="hover:bg-gray-50">
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm text-gray-900">{formatDate(pago.fecha)}</td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 text-sm font-medium text-gray-900 min-w-0 break-words whitespace-normal">{getAlumnoNombre(pago)}</td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">{formatCurrency(pago.monto)}</td>
-                    <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap hidden sm:table-cell">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{formatDate(pago.fecha)}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 min-w-0 break-words">{getAlumnoNombre(pago)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatCurrency(pago.monto)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${pago.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                         {pago.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarPago(pago)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg touch-manipulation"
+                        title="Eliminar pago"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}

@@ -19,6 +19,15 @@ const Pagos = () => {
     descripcion: '', // para aporte a caja (sin alumno)
   });
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const fn = () => setIsMobile(mq.matches);
+    fn();
+    mq.addEventListener('change', fn);
+    return () => mq.removeEventListener('change', fn);
+  }, []);
+
   useEffect(() => {
     loadPagos();
     loadAlumnos();
@@ -219,54 +228,72 @@ const Pagos = () => {
             Registrar primer pago
           </button>
         </div>
+      ) : isMobile ? (
+        /* Vista móvil: tarjetas como en Alumnos */
+        <div className="space-y-3">
+          {pagos.map((pago) => (
+            <div key={pago.id} className="card p-4 border border-gray-200">
+              <div className="flex justify-between items-start gap-2 mb-2">
+                <div>
+                  <p className="font-semibold text-gray-900 text-base">{getAlumnoNombre(pago)}</p>
+                  <p className="text-sm text-gray-500 flex items-center gap-1">
+                    <Calendar className="w-4 h-4" />
+                    {formatDate(pago.fecha)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-lg font-bold text-gray-900">{formatCurrency(pago.monto)}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleEliminarPago(pago)}
+                    className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation"
+                    title="Eliminar pago"
+                    aria-label="Eliminar pago"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-100">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  pago.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                }`}>
+                  {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
-        <div className="card overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+        <div className="card overflow-hidden p-0 -mx-2 sm:mx-0">
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <table className="w-full min-w-[640px]">
               <thead className="bg-primary-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Alumno
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Monto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                    Método de Pago
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">
-                    Eliminar
-                  </th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Fecha</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Alumno</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Monto</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Método</th>
+                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">Eliminar</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {pagos.map((pago) => (
                   <tr key={pago.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-sm text-gray-900">
                         <Calendar className="w-4 h-4 text-gray-400" />
                         {formatDate(pago.fecha)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {getAlumnoNombre(pago)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                      {formatCurrency(pago.monto)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        pago.metodoPago === 'efectivo'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-blue-100 text-blue-800'
-                      }`}>
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{getAlumnoNombre(pago)}</td>
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{formatCurrency(pago.monto)}</td>
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${pago.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                         {pago.metodoPago === 'efectivo' ? '💵 Efectivo' : '💳 Transferencia'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                    <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-right">
                       <button
                         type="button"
                         onClick={() => handleEliminarPago(pago)}

@@ -477,7 +477,10 @@ const Calendario = () => {
   return (
     <div className="pb-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Calendario de Turnos</h1>
+        <div className="page-title-wrap">
+          <span className="page-title-accent" aria-hidden />
+          <h1 className="page-title">Calendario de Turnos</h1>
+        </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={handleReiniciarSemana}

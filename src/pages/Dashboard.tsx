@@ -76,7 +76,10 @@ const Dashboard = () => {
 
   return (
     <div className="pb-6">
-      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-8">Dashboard</h1>
+      <div className="page-title-wrap mb-6 sm:mb-8">
+        <span className="page-title-accent" aria-hidden />
+        <h1 className="page-title">Dashboard</h1>
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {cards.map((card) => {

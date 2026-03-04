@@ -89,7 +89,10 @@ const RegistrosPorLink = () => {
   return (
     <div>
       <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Registros por link</h1>
+        <div className="page-title-wrap">
+          <span className="page-title-accent" aria-hidden />
+          <h1 className="page-title">Registros por link</h1>
+        </div>
       </div>
 
       <div className="card mb-6">

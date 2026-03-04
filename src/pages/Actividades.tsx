@@ -116,7 +116,10 @@ const Actividades = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Actividades</h1>
+        <div className="page-title-wrap">
+          <span className="page-title-accent" aria-hidden />
+          <h1 className="page-title">Actividades</h1>
+        </div>
         <button
           onClick={() => handleOpenModal()}
           className="btn-primary flex items-center gap-2"

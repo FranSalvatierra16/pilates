@@ -399,7 +399,10 @@ const Alumnos = () => {
   return (
     <div className="pb-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Alumnos</h1>
+        <div className="page-title-wrap">
+          <span className="page-title-accent" aria-hidden />
+          <h1 className="page-title">Alumnos</h1>
+        </div>
         <button
           onClick={() => handleOpenModal()}
           className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"

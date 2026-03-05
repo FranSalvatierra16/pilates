@@ -176,15 +176,16 @@ const Pagos = () => {
         </button>
       </div>
 
-      {/* Resumen */}
+      {/* Resumen: saldo neto por método (en Pagos solo hay ingresos) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="card bg-green-50 border border-green-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-green-600 mb-1">Efectivo</p>
+              <p className="text-sm font-medium text-green-600 mb-1">Efectivo — Saldo neto</p>
               <p className="text-2xl font-bold text-green-900">
                 {formatCurrency(totalEfectivo)}
               </p>
+              <p className="text-xs text-green-700 mt-0.5">Total ingresos en efectivo</p>
             </div>
             <div className="bg-green-200 p-3 rounded-lg">
               <span className="text-2xl">💰</span>
@@ -194,10 +195,11 @@ const Pagos = () => {
         <div className="card bg-blue-50 border border-blue-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-blue-600 mb-1">Transferencia</p>
+              <p className="text-sm font-medium text-blue-600 mb-1">Transferencia — Saldo neto</p>
               <p className="text-2xl font-bold text-blue-900">
                 {formatCurrency(totalTransferencia)}
               </p>
+              <p className="text-xs text-blue-700 mt-0.5">Total ingresos por transferencia</p>
             </div>
             <div className="bg-blue-200 p-3 rounded-lg">
               <span className="text-2xl">💳</span>
@@ -207,10 +209,11 @@ const Pagos = () => {
         <div className="card bg-primary-50 border border-primary-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-primary-600 mb-1">Total</p>
+              <p className="text-sm font-medium text-primary-600 mb-1">Total — Saldo neto</p>
               <p className="text-2xl font-bold text-primary-900">
                 {formatCurrency(totalGeneral)}
               </p>
+              <p className="text-xs text-primary-700 mt-0.5">Suma de ambos</p>
             </div>
             <div className="bg-primary-200 p-3 rounded-lg">
               <span className="text-2xl">💵</span>

@@ -312,45 +312,49 @@ const Caja = () => {
         <div className="card bg-green-50 border-2 border-green-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-green-700 uppercase tracking-wide">
-              Efectivo (Ingresos)
+              Efectivo — Saldo neto
             </h3>
             <div className="bg-green-200 p-2 rounded-lg">
               <DollarSign className="w-5 h-5 text-green-700" />
             </div>
           </div>
           <p className="text-3xl font-bold text-green-900 mb-1">
-            {formatCurrency(stats.totalEfectivo)}
+            {formatCurrency(stats.totalEfectivo - stats.gastosEfectivo)}
           </p>
-          {stats.gastosEfectivo > 0 && (
-            <p className="text-xs text-red-600 mb-1">
-              - {formatCurrency(stats.gastosEfectivo)} gastos
+          <p className="text-xs text-green-700 mb-0.5">
+            Ingresos: {formatCurrency(stats.totalEfectivo)}
+          </p>
+          {stats.gastosEfectivo > 0 ? (
+            <p className="text-xs text-red-600">
+              Gastos: - {formatCurrency(stats.gastosEfectivo)}
             </p>
+          ) : (
+            <p className="text-xs text-green-600">Sin gastos en efectivo</p>
           )}
-          <p className="text-sm font-semibold text-green-800">
-            Neto: {formatCurrency(stats.totalEfectivo - stats.gastosEfectivo)}
-          </p>
         </div>
 
         <div className="card bg-blue-50 border-2 border-blue-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-blue-700 uppercase tracking-wide">
-              Transferencia (Ingresos)
+              Transferencia — Saldo neto
             </h3>
             <div className="bg-blue-200 p-2 rounded-lg">
               <CreditCard className="w-5 h-5 text-blue-700" />
             </div>
           </div>
           <p className="text-3xl font-bold text-blue-900 mb-1">
-            {formatCurrency(stats.totalTransferencia)}
+            {formatCurrency(stats.totalTransferencia - stats.gastosTransferencia)}
           </p>
-          {stats.gastosTransferencia > 0 && (
-            <p className="text-xs text-red-600 mb-1">
-              - {formatCurrency(stats.gastosTransferencia)} gastos
+          <p className="text-xs text-blue-700 mb-0.5">
+            Ingresos: {formatCurrency(stats.totalTransferencia)}
+          </p>
+          {stats.gastosTransferencia > 0 ? (
+            <p className="text-xs text-red-600">
+              Gastos: - {formatCurrency(stats.gastosTransferencia)}
             </p>
+          ) : (
+            <p className="text-xs text-blue-600">Sin gastos en transferencia</p>
           )}
-          <p className="text-sm font-semibold text-blue-800">
-            Neto: {formatCurrency(stats.totalTransferencia - stats.gastosTransferencia)}
-          </p>
         </div>
 
         <div className="card bg-red-50 border-2 border-red-300">

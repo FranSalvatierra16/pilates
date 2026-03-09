@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -73,6 +73,9 @@ const Alumnos = () => {
   const [textoDescripcion, setTextoDescripcion] = useState('');
   const [editingAlumno, setEditingAlumno] = useState<Alumno | null>(null);
   const [alumnoParaPagar, setAlumnoParaPagar] = useState<Alumno | null>(null);
+  const [showModalHistorial, setShowModalHistorial] = useState(false);
+  const [alumnoHistorial, setAlumnoHistorial] = useState<Alumno | null>(null);
+  const [historialPagos, setHistorialPagos] = useState<Pago[]>([]);
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -371,6 +374,24 @@ const Alumnos = () => {
     setShowModalDescripcion(true);
   };
 
+  const handleOpenHistorial = async (alumno: Alumno) => {
+    setAlumnoHistorial(alumno);
+    setShowModalHistorial(true);
+    try {
+      const todos = await storageHybrid.pagos.getAll();
+      const delAlumno = todos
+        .filter((p) => p.alumnoId === alumno.id)
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+      setHistorialPagos(delAlumno);
+    } catch {
+      const todos = storage.pagos.getAll();
+      const delAlumno = todos
+        .filter((p) => p.alumnoId === alumno.id)
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+      setHistorialPagos(delAlumno);
+    }
+  };
+
   const handleGuardarDescripcion = async () => {
     if (!alumnoDescripcion) return;
     try {
@@ -536,6 +557,7 @@ const Alumnos = () => {
                     })()}
                     <button onClick={() => handlePagarCuota(alumno)} className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title="Pagar cuota" aria-label="Pagar"><CreditCard className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
+                    <button onClick={() => handleOpenHistorial(alumno)} className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation" title="Historial de pagos" aria-label="Historial de pagos"><History className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-primary-600 hover:bg-primary-50 touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
                     <button onClick={() => handleDelete(alumno.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation" title="Eliminar" aria-label="Eliminar"><Trash2 className="w-5 h-5" /></button>
                   </div>
@@ -646,6 +668,7 @@ const Alumnos = () => {
                           })()}
                           <button onClick={() => handlePagarCuota(alumno)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Pagar cuota"><CreditCard className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenDescripcion(alumno)} className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`} title="Descripción / Notas"><FileText className="w-4 h-4" /></button>
+                          <button onClick={() => handleOpenHistorial(alumno)} className="p-1 rounded text-gray-600 hover:text-gray-900" title="Historial de pagos"><History className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenModal(alumno)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit className="w-4 h-4" /></button>
                           <button onClick={() => handleDelete(alumno.id)} className="text-red-600 hover:text-red-900" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
                         </div>
@@ -921,6 +944,64 @@ const Alumnos = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Historial de pagos */}
+      {showModalHistorial && alumnoHistorial && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 flex-shrink-0">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2 min-w-0 truncate">
+                <History className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                <span className="truncate">Historial de pagos — {alumnoHistorial.nombre} {alumnoHistorial.apellido}</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => { setShowModalHistorial(false); setAlumnoHistorial(null); setHistorialPagos([]); }}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 rounded-lg touch-manipulation flex-shrink-0"
+                aria-label="Cerrar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto min-h-0">
+              {historialPagos.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Sin pagos registrados para este alumno.</p>
+              ) : (
+                <>
+                  <ul className="space-y-2">
+                    {historialPagos.map((pago) => (
+                      <li key={pago.id} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm font-medium text-gray-900">{formatDate(pago.fecha)}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pago.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                            {pago.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                          </span>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900 flex-shrink-0">{formatCurrency(pago.monto)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 pt-3 border-t border-gray-200 flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">Total cobrado</span>
+                    <span className="text-lg font-bold text-primary-600">
+                      {formatCurrency(historialPagos.reduce((s, p) => s + p.monto, 0))}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => { setShowModalHistorial(false); setAlumnoHistorial(null); setHistorialPagos([]); }}
+                className="btn-secondary w-full"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -149,10 +149,19 @@ const Alumnos = () => {
     setAlumnosFiltrados(filtrados);
   }, [filtroBusqueda, filtroVencimiento, alumnos]);
 
-  // Ordenar por vencimiento más cercano y ocultar vencidos (solo cuando el botón está activo)
+  // Ordenar por apellido y luego nombre (alfabético); si "por vencimiento cercano" está activo, filtrar y ordenar por fecha
   const alumnosAMostrar = useMemo(() => {
-    if (!ordenarPorVencimientoCercano) return alumnosFiltrados;
-    const sinVencidos = alumnosFiltrados.filter(
+    const porApellidoNombre = [...alumnosFiltrados].sort((a, b) => {
+      const apA = (a.apellido || '').toLowerCase().trim();
+      const apB = (b.apellido || '').toLowerCase().trim();
+      const cmpAp = apA.localeCompare(apB, 'es');
+      if (cmpAp !== 0) return cmpAp;
+      const nA = (a.nombre || '').toLowerCase().trim();
+      const nB = (b.nombre || '').toLowerCase().trim();
+      return nA.localeCompare(nB, 'es');
+    });
+    if (!ordenarPorVencimientoCercano) return porApellidoNombre;
+    const sinVencidos = porApellidoNombre.filter(
       (a) => !a.fechaVencimientoCuota || a.fechaVencimientoCuota === '' || !isCuotaVencida(a.fechaVencimientoCuota)
     );
     return [...sinVencidos].sort((a, b) => {

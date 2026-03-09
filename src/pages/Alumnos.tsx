@@ -76,6 +76,8 @@ const Alumnos = () => {
   const [showModalHistorial, setShowModalHistorial] = useState(false);
   const [alumnoHistorial, setAlumnoHistorial] = useState<Alumno | null>(null);
   const [historialPagos, setHistorialPagos] = useState<Pago[]>([]);
+  /** IDs de alumnos que tienen al menos un pago (para no mostrar "Al día" si nunca pagó) */
+  const [alumnoIdsConPago, setAlumnoIdsConPago] = useState<Set<string>>(new Set());
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -163,20 +165,31 @@ const Alumnos = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [alumnosData, actividadesData] = await Promise.all([
+      const [alumnosData, actividadesData, pagosData] = await Promise.all([
         storageHybrid.alumnos.getAll(),
         storageHybrid.actividades.getAll(),
+        storageHybrid.pagos.getAll().catch(() => [] as Pago[]),
       ]);
       setAlumnos(alumnosData);
       setAlumnosFiltrados(alumnosData);
       setActividades(actividadesData);
+      const ids = new Set<string>();
+      pagosData.forEach((p) => { if (p.alumnoId) ids.add(p.alumnoId); });
+      setAlumnoIdsConPago(ids);
     } catch (error) {
       console.error('Error loading data:', error);
-      // Fallback a localStorage
       const alumnosLocal = storage.alumnos.getAll();
       setAlumnos(alumnosLocal);
       setAlumnosFiltrados(alumnosLocal);
       setActividades(storage.actividades.getAll());
+      try {
+        const pagosLocal = storage.pagos.getAll();
+        const ids = new Set<string>();
+        pagosLocal.forEach((p: Pago) => { if (p.alumnoId) ids.add(p.alumnoId); });
+        setAlumnoIdsConPago(ids);
+      } catch {
+        setAlumnoIdsConPago(new Set());
+      }
     } finally {
       setLoading(false);
     }
@@ -350,6 +363,7 @@ const Alumnos = () => {
       });
 
       await loadAlumnos();
+      setAlumnoIdsConPago((prev) => new Set(prev).add(alumnoParaPagar.id));
       handleCerrarModalPago();
       alert('Pago registrado exitosamente. La fecha de vencimiento se actualizó automáticamente.');
     } catch (error) {
@@ -533,10 +547,11 @@ const Alumnos = () => {
         /* Vista móvil: tarjetas por alumno, todo entra en pantalla */
         <div className="space-y-3">
           {alumnosAMostrar.map((alumno) => {
+            const tienePagos = alumnoIdsConPago.has(alumno.id);
             const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
             const vencida = tieneFechaVencimiento ? isCuotaVencida(alumno.fechaVencimientoCuota) : false;
             const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;
-            const estado = !tieneFechaVencimiento ? 'pendiente' : vencida ? 'vencida' : venceHoy ? 'venceHoy' : 'alDia';
+            const estado = !tienePagos ? 'pendiente' : !tieneFechaVencimiento ? 'pendiente' : vencida ? 'vencida' : venceHoy ? 'venceHoy' : 'alDia';
             return (
               <div key={alumno.id} className="card p-4 border border-gray-200">
                 <div className="flex justify-between items-start gap-2 mb-3">
@@ -613,10 +628,11 @@ const Alumnos = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {alumnosAMostrar.map((alumno) => {
+                  const tienePagos = alumnoIdsConPago.has(alumno.id);
                   const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
                   const vencida = tieneFechaVencimiento ? isCuotaVencida(alumno.fechaVencimientoCuota) : false;
                   const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;
-                  const estado = !tieneFechaVencimiento ? 'pendiente' : vencida ? 'vencida' : venceHoy ? 'venceHoy' : 'alDia';
+                  const estado = !tienePagos ? 'pendiente' : !tieneFechaVencimiento ? 'pendiente' : vencida ? 'vencida' : venceHoy ? 'venceHoy' : 'alDia';
                   return (
                     <tr key={alumno.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">

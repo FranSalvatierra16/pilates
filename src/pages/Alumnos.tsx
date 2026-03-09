@@ -566,7 +566,7 @@ const Alumnos = () => {
                 <div className="flex justify-between items-start gap-2 mb-3">
                   <div>
                     <h3 className="font-semibold text-gray-900 text-base">
-                      {alumno.nombre} {alumno.apellido}
+                      {[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}
                     </h3>
                     <p className="text-sm text-gray-500">DNI {alumno.dni}</p>
                   </div>
@@ -645,7 +645,7 @@ const Alumnos = () => {
                   return (
                     <tr key={alumno.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{alumno.nombre} {alumno.apellido}</div>
+                        <div className="text-sm font-medium text-gray-900">{[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{alumno.dni}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -864,7 +864,7 @@ const Alumnos = () => {
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
               <h2 className="text-lg sm:text-2xl font-bold text-gray-900 pr-2 truncate">
-                Pago — {alumnoParaPagar.nombre} {alumnoParaPagar.apellido}
+                Pago — {[alumnoParaPagar.apellido, alumnoParaPagar.nombre].filter(Boolean).join(', ')}
               </h2>
               <button
                 onClick={handleCerrarModalPago}
@@ -877,7 +877,7 @@ const Alumnos = () => {
             <form onSubmit={handleSubmitPago} className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain">
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
-                  <strong>Alumno:</strong> {alumnoParaPagar.nombre} {alumnoParaPagar.apellido}
+                  <strong>Alumno:</strong> {[alumnoParaPagar.apellido, alumnoParaPagar.nombre].filter(Boolean).join(', ')}
                 </p>
                 <p className="text-sm text-blue-800 mt-1">
                   <strong>DNI:</strong> {alumnoParaPagar.dni}
@@ -980,7 +980,7 @@ const Alumnos = () => {
             <div className="flex justify-between items-center p-4 border-b border-gray-200 flex-shrink-0">
               <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2 min-w-0 truncate">
                 <History className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                <span className="truncate">Historial de pagos — {alumnoHistorial.nombre} {alumnoHistorial.apellido}</span>
+                <span className="truncate">Historial de pagos — {[alumnoHistorial.apellido, alumnoHistorial.nombre].filter(Boolean).join(', ')}</span>
               </h2>
               <button
                 type="button"
@@ -1038,7 +1038,7 @@ const Alumnos = () => {
             <div className="flex justify-between items-center p-4 border-b border-gray-200 flex-shrink-0">
               <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2 min-w-0 truncate">
                 <FileText className="w-5 h-5 text-amber-500 flex-shrink-0" />
-                <span className="truncate">Notas — {alumnoDescripcion.nombre} {alumnoDescripcion.apellido}</span>
+                <span className="truncate">Notas — {[alumnoDescripcion.apellido, alumnoDescripcion.nombre].filter(Boolean).join(', ')}</span>
               </h2>
               <button
                 type="button"

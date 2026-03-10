@@ -39,11 +39,12 @@ app.use('/api', async (req, res, next) => {
   }
 });
 
-// Auth: exigir JWT en todas las rutas excepto login, health, manifest PWA y registro público
+// Auth: exigir JWT en todas las rutas excepto login, health, manifest PWA, registro público y portal alumno
 const authSkip = ['/health', '/auth/login', '/manifest.webmanifest'];
 const isAuthSkip = (path) => authSkip.some((p) => path === p || path.startsWith(p + '?'));
 app.use('/api', (req, res, next) => {
   if (isAuthSkip(req.path)) return next();
+  if (req.path.startsWith('/alumno-portal')) return next(); // Portal alumno: solo sumarse/liberar cupo
   if (req.path === '/registro-link' && req.method === 'POST' && !req.path.includes('/agregar')) return next();
   if (req.path === '/actividades' && req.method === 'GET' && !req.headers.authorization) return next();
   authMiddleware(req, res, () => {
@@ -170,6 +171,7 @@ app.get('/api/alumnos', async (req, res) => {
       actividadId: r.actividad_id,
       clasesAsistidas: r.clases_asistidas ?? 0,
       descripcion: r.descripcion ?? '',
+      linkToken: r.link_token ?? '',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     }));
     res.json(data);
@@ -227,6 +229,7 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.actividadId !== undefined) { updates.push(`actividad_id = $${i++}`); values.push(b.actividadId || null); }
     if (b.clasesAsistidas !== undefined) { updates.push(`clases_asistidas = $${i++}`); values.push(b.clasesAsistidas); }
     if (b.descripcion !== undefined) { updates.push(`descripcion = $${i++}`); values.push(b.descripcion || null); }
+    if (b.linkToken !== undefined) { updates.push(`link_token = $${i++}`); values.push(b.linkToken || null); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);
     await db.query(`UPDATE alumnos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
@@ -817,6 +820,86 @@ app.get('/api/turnos/by-alumno/:alumnoId', async (req, res) => {
       cupo: r.cupo != null ? Number(r.cupo) : 6,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Portal alumno (sin auth: solo sumarse o liberar cupo) ---
+app.get('/api/alumno-portal', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const token = (req.query.token || '').toString().trim();
+    if (!token) return res.status(400).json({ error: 'Faltó el token' });
+    const { rows: alumnoRows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE link_token = $1', [token]);
+    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Link inválido o expirado' });
+    const alumno = alumnoRows[0];
+    const sucursalId = alumno.sucursal_id;
+    const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora, titulo, alumno_ids, cupo FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora', [sucursalId]);
+    const turnos = turnoRows.map((r) => {
+      const alumnoIds = r.alumno_ids || [];
+      const cupo = r.cupo != null ? Number(r.cupo) : 6;
+      return {
+        id: r.id,
+        diaSemana: r.dia_semana,
+        hora: r.hora,
+        titulo: r.titulo || '',
+        cupo,
+        inscriptos: alumnoIds.length,
+        yaInscripto: alumnoIds.includes(alumno.id),
+      };
+    });
+    res.json({
+      alumno: { id: alumno.id, nombre: alumno.nombre, apellido: alumno.apellido },
+      turnos,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/alumno-portal/inscribir', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { token, turnoId } = req.body || {};
+    if (!token || !turnoId) return res.status(400).json({ error: 'Faltan token o turnoId' });
+    const { rows: alumnoRows } = await db.query('SELECT id, sucursal_id FROM alumnos WHERE link_token = $1', [token]);
+    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Link inválido' });
+    const alumno = alumnoRows[0];
+    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
+    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const t = turnoRows[0];
+    const ids = t.alumno_ids || [];
+    const cupo = t.cupo != null ? Number(t.cupo) : 6;
+    if (ids.includes(alumno.id)) return res.json({ ok: true, message: 'Ya estabas inscripto' });
+    if (ids.length >= cupo) return res.status(400).json({ error: 'No hay cupo disponible' });
+    const nuevosIds = [...ids, alumno.id];
+    await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [nuevosIds, turnoId, alumno.sucursal_id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/alumno-portal/liberar', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { token, turnoId } = req.body || {};
+    if (!token || !turnoId) return res.status(400).json({ error: 'Faltan token o turnoId' });
+    const { rows: alumnoRows } = await db.query('SELECT id, sucursal_id FROM alumnos WHERE link_token = $1', [token]);
+    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Link inválido' });
+    const alumno = alumnoRows[0];
+    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
+    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const ids = (turnoRows[0].alumno_ids || []).filter((id) => id !== alumno.id);
+    await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [ids, turnoId, alumno.sucursal_id]);
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2 } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -415,6 +415,29 @@ const Alumnos = () => {
     }
   };
 
+  const handleCopiarLinkClases = async (alumno: Alumno) => {
+    let token = alumno.linkToken?.trim();
+    if (!token) {
+      token = `${alumno.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      try {
+        await storageHybrid.alumnos.update(alumno.id, { linkToken: token });
+        setAlumnos((prev) => prev.map((a) => (a.id === alumno.id ? { ...a, linkToken: token } : a)));
+        setAlumnosFiltrados((prev) => prev.map((a) => (a.id === alumno.id ? { ...a, linkToken: token } : a)));
+      } catch (e) {
+        console.error(e);
+        alert('No se pudo generar el link. ¿Estás conectado al servidor?');
+        return;
+      }
+    }
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/mi-clase?token=${encodeURIComponent(token)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Link copiado. Enviale este link al alumno para que pueda sumarse o liberar cupo en las clases.');
+    } catch {
+      prompt('Copiá este link y envialo al alumno:', url);
+    }
+  };
+
   const handleGuardarDescripcion = async () => {
     if (!alumnoDescripcion) return;
     try {
@@ -582,6 +605,7 @@ const Alumnos = () => {
                     <button onClick={() => handlePagarCuota(alumno)} className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title="Pagar cuota" aria-label="Pagar"><CreditCard className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenHistorial(alumno)} className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation" title="Historial de pagos" aria-label="Historial de pagos"><History className="w-5 h-5" /></button>
+                    <button onClick={() => handleCopiarLinkClases(alumno)} className="p-2 rounded-lg text-indigo-600 hover:bg-indigo-50 touch-manipulation" title="Link para que el alumno sume o libere cupo en clases" aria-label="Link clases"><Link2 className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-primary-600 hover:bg-primary-50 touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
                     <button onClick={() => handleDelete(alumno.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation" title="Eliminar" aria-label="Eliminar"><Trash2 className="w-5 h-5" /></button>
                   </div>
@@ -694,6 +718,7 @@ const Alumnos = () => {
                           <button onClick={() => handlePagarCuota(alumno)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Pagar cuota"><CreditCard className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenDescripcion(alumno)} className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`} title="Descripción / Notas"><FileText className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenHistorial(alumno)} className="p-1 rounded text-gray-600 hover:text-gray-900" title="Historial de pagos"><History className="w-4 h-4" /></button>
+                          <button onClick={() => handleCopiarLinkClases(alumno)} className="p-1 rounded text-indigo-600 hover:text-indigo-900" title="Link para clases (sumarse/liberar cupo)"><Link2 className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenModal(alumno)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit className="w-4 h-4" /></button>
                           <button onClick={() => handleDelete(alumno.id)} className="text-red-600 hover:text-red-900" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
                         </div>

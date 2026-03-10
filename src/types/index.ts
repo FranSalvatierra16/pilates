@@ -20,6 +20,8 @@ export interface Alumno {
   actividadId: string;
   clasesAsistidas: number; // Contador de clases asistidas en el mes actual
   descripcion?: string; // Notas o info adicional del alumno (editable)
+  /** Token para que el alumno acceda a /mi-clase y solo pueda sumarse o liberar cupo */
+  linkToken?: string;
   createdAt: string;
 }
 

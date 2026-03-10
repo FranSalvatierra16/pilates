@@ -119,6 +119,10 @@ ALTER TABLE pagos ADD COLUMN IF NOT EXISTS descripcion TEXT;
 ALTER TABLE pagos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 ALTER TABLE pagos ALTER COLUMN alumno_id DROP NOT NULL;
 
+-- Token para que el alumno acceda solo a sumarse/liberar cupo en clases (portal público)
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS link_token TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_link_token ON alumnos(link_token) WHERE link_token IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha);
 CREATE INDEX IF NOT EXISTS idx_pagos_sucursal_id ON pagos(sucursal_id);

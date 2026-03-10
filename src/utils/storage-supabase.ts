@@ -20,6 +20,7 @@ const dbToAlumno = (row: any): Alumno => ({
   actividadId: row.actividad_id,
   clasesAsistidas: row.clases_asistidas || 0,
   descripcion: row.descripcion || '',
+  linkToken: row.link_token || '',
   createdAt: row.created_at,
 });
 
@@ -34,6 +35,7 @@ const alumnoToDb = (alumno: Alumno) => ({
   actividad_id: alumno.actividadId,
   clases_asistidas: alumno.clasesAsistidas || 0,
   descripcion: alumno.descripcion || null,
+  link_token: alumno.linkToken || null,
   created_at: alumno.createdAt,
 });
 
@@ -141,6 +143,7 @@ export const storageSupabase = {
       if (updates.actividadId) dbUpdates.actividad_id = updates.actividadId;
       if (updates.clasesAsistidas !== undefined) dbUpdates.clases_asistidas = updates.clasesAsistidas;
       if (updates.descripcion !== undefined) dbUpdates.descripcion = updates.descripcion || null;
+      if (updates.linkToken !== undefined) dbUpdates.link_token = updates.linkToken || null;
       const { error } = await supabase.from('alumnos').update(dbUpdates).eq('id', id);
       if (error) {
         console.error('Error updating alumno:', error);

@@ -23,6 +23,7 @@ function DocumentTitle() {
 }
 import Login from './pages/Login';
 import RegistroLink from './pages/RegistroLink';
+import MiClase from './pages/MiClase';
 import Dashboard from './pages/Dashboard';
 import Calendario from './pages/Calendario';
 import Alumnos from './pages/Alumnos';
@@ -70,6 +71,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroLink />} />
+          <Route path="/mi-clase" element={<MiClase />} />
           <Route
             path="/"
             element={

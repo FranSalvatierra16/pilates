@@ -76,6 +76,9 @@ CREATE INDEX IF NOT EXISTS idx_turnos_profesor_id ON turnos(profesor_id);
 -- ALTER TABLE gastos ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE turnos ENABLE ROW LEVEL SECURITY;
 
+-- Token para portal alumno (sumarse/liberar cupo en clases)
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS link_token TEXT;
+
 -- Política para permitir todas las operaciones (solo para desarrollo/pruebas)
 -- CREATE POLICY "Allow all operations" ON alumnos FOR ALL USING (true) WITH CHECK (true);
 -- CREATE POLICY "Allow all operations" ON actividades FOR ALL USING (true) WITH CHECK (true);

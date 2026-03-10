@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS notificaciones (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_notificaciones_sucursal_created ON notificaciones(sucursal_id, created_at DESC);
+ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS leido BOOLEAN DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha);

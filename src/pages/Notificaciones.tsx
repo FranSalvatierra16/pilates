@@ -9,8 +9,9 @@ const useApi = () => {
 };
 
 export interface NotificacionItem {
-  id: number;
+  id: string | number;
   tipo: 'inscribio' | 'liberar';
+  leido?: boolean;
   alumnoNombre: string;
   turnoDia: string;
   turnoHora: string;
@@ -70,16 +71,49 @@ export default function Notificaciones() {
       ? `${n.alumnoNombre} se anotó en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`
       : `${n.alumnoNombre} liberó cupo en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`;
 
+  const marcarTodasLeidas = () => {
+    if (!useApi()) return;
+    const token = localStorage.getItem('savia_token');
+    const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+    fetch(getApiBase() + '/api/notificaciones/marcar-leidas', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ todas: true }),
+    })
+      .then((r) => {
+        if (!r.ok) return;
+        return fetch(getApiBase() + '/api/notificaciones', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      })
+      .then((r) => (r && r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data)) setList(data);
+      })
+      .catch(() => {});
+  };
+
+  const noLeidasCount = list.filter((n) => !n.leido).length;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-xl bg-primary-100 text-primary-600">
-          <Bell className="w-6 h-6" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-primary-100 text-primary-600">
+            <Bell className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="page-title text-2xl font-semibold text-gray-800">Notificaciones</h1>
+            <p className="text-sm text-gray-500">Anotaciones y liberaciones de cupo en las clases</p>
+          </div>
         </div>
-        <div>
-          <h1 className="page-title text-2xl font-semibold text-gray-800">Notificaciones</h1>
-          <p className="text-sm text-gray-500">Anotaciones y liberaciones de cupo en las clases</p>
-        </div>
+        {list.length > 0 && noLeidasCount > 0 && (
+          <button
+            type="button"
+            onClick={marcarTodasLeidas}
+            className="btn-secondary text-sm"
+          >
+            Marcar todas como leídas
+          </button>
+        )}
       </div>
 
       {loading && (
@@ -105,9 +139,12 @@ export default function Notificaciones() {
           {list.map((n) => (
             <li
               key={n.id}
-              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 p-4 rounded-xl bg-white border border-gray-200 shadow-sm"
+              className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 p-4 rounded-xl border border-gray-200 shadow-sm ${
+                n.leido ? 'bg-gray-50/80' : 'bg-white'
+              }`}
             >
-              <p className="text-gray-800">
+              <p className={`text-gray-800 ${!n.leido ? 'font-medium' : ''}`}>
+                {!n.leido && <span className="inline-block w-2 h-2 rounded-full bg-primary-500 mr-2 align-middle" aria-hidden />}
                 {n.tipo === 'inscribio' ? (
                   <span className="text-green-600 font-medium">Se anotó:</span>
                 ) : (

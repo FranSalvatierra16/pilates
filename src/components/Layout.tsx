@@ -99,6 +99,20 @@ const Layout = ({ children }: LayoutProps) => {
     navigate('/login');
   };
 
+  const noLeidasCount = notificaciones.filter((n) => !n.leido).length;
+
+  const marcarTodasLeidas = () => {
+    if (!useApi() || noLeidasCount === 0) return;
+    const token = localStorage.getItem('savia_token');
+    fetch(getApiBase() + '/api/notificaciones/marcar-leidas', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ todas: true }),
+    })
+      .then((r) => r.ok && fetchNotificaciones(false))
+      .catch(() => {});
+  };
+
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/calendario', label: 'Calendario', icon: Calendar },
@@ -180,23 +194,34 @@ const Layout = ({ children }: LayoutProps) => {
                     aria-label="Notificaciones"
                   >
                     <Bell className="w-5 h-5" />
-                    {notificaciones.length > 0 && (
+                    {noLeidasCount > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-primary-500 text-white text-xs font-medium px-1">
-                        {notificaciones.length > 99 ? '99+' : notificaciones.length}
+                        {noLeidasCount > 99 ? '99+' : noLeidasCount}
                       </span>
                     )}
                   </button>
                   {notifOpen && (
                     <div className="absolute right-0 top-full mt-1 w-[min(360px,calc(100vw-2rem))] bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-[100] max-h-[min(70vh,320px)] sm:max-h-[min(70vh,400px)] flex flex-col">
-                      <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 flex items-center justify-between">
+                      <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 flex items-center justify-between gap-2">
                         <span className="font-medium text-gray-800">Notificaciones</span>
-                        <Link
-                          to="/notificaciones"
-                          onClick={() => setNotifOpen(false)}
-                          className="text-sm text-primary-600 hover:underline"
-                        >
-                          Ver todas
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          {noLeidasCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => { marcarTodasLeidas(); setNotifOpen(false); }}
+                              className="text-xs text-primary-600 hover:underline whitespace-nowrap"
+                            >
+                              Marcar leídas
+                            </button>
+                          )}
+                          <Link
+                            to="/notificaciones"
+                            onClick={() => setNotifOpen(false)}
+                            className="text-sm text-primary-600 hover:underline"
+                          >
+                            Ver todas
+                          </Link>
+                        </div>
                       </div>
                       <div className="overflow-y-auto min-h-0 flex-1 overscroll-contain max-h-[260px] sm:max-h-[320px]">
                         {notifLoading && (
@@ -211,9 +236,9 @@ const Layout = ({ children }: LayoutProps) => {
                           notificaciones.slice(0, 10).map((n) => (
                             <div
                               key={n.id}
-                              className="px-4 py-2.5 border-b border-gray-50 last:border-0 text-left"
+                              className={`px-4 py-2.5 border-b border-gray-50 last:border-0 text-left ${!n.leido ? 'bg-primary-50/50' : ''}`}
                             >
-                              <p className="text-sm text-gray-800">
+                              <p className={`text-sm text-gray-800 ${!n.leido ? 'font-medium' : ''}`}>
                                 {n.tipo === 'inscribio' ? (
                                   <span className="text-green-600 font-medium">Se anotó:</span>
                                 ) : (

@@ -925,7 +925,7 @@ app.get('/api/notificaciones', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
     const { rows } = await db.query(
-      `SELECT n.id, n.tipo, n.created_at,
+      `SELECT n.id, n.tipo, n.created_at, n.leido,
         a.nombre AS alumno_nombre, a.apellido AS alumno_apellido,
         t.dia_semana, t.hora, t.titulo AS turno_titulo
        FROM notificaciones n
@@ -939,12 +939,34 @@ app.get('/api/notificaciones', async (req, res) => {
     res.json(rows.map((r) => ({
       id: r.id,
       tipo: r.tipo,
+      leido: !!r.leido,
       alumnoNombre: [r.alumno_apellido, r.alumno_nombre].filter(Boolean).join(', '),
       turnoDia: DIAS_SEMANA_ES[r.dia_semana] ?? `Día ${r.dia_semana}`,
       turnoHora: r.hora,
       turnoTitulo: r.turno_titulo || 'Clase',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/notificaciones/marcar-leidas', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { todas, ids } = req.body || {};
+    if (todas) {
+      await db.query('UPDATE notificaciones SET leido = true WHERE sucursal_id = $1', [sid]);
+    } else if (Array.isArray(ids) && ids.length > 0) {
+      await db.query(
+        'UPDATE notificaciones SET leido = true WHERE sucursal_id = $1 AND id = ANY($2)',
+        [sid, ids]
+      );
+    }
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

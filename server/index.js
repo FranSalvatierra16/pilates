@@ -882,6 +882,10 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
     if (ids.length >= cupo) return res.status(400).json({ error: 'No hay cupo disponible' });
     const nuevosIds = [...ids, alumno.id];
     await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [nuevosIds, turnoId, alumno.sucursal_id]);
+    await db.query(
+      'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+      [crypto.randomUUID(), alumno.sucursal_id, 'inscribio', alumno.id, turnoId]
+    );
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -902,7 +906,45 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const ids = (turnoRows[0].alumno_ids || []).filter((id) => id !== alumno.id);
     await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [ids, turnoId, alumno.sucursal_id]);
+    await db.query(
+      'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+      [crypto.randomUUID(), alumno.sucursal_id, 'liberar', alumno.id, turnoId]
+    );
     res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Notificaciones (panel usuario: anotaciones y cancelaciones) ---
+const DIAS_SEMANA_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+app.get('/api/notificaciones', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { rows } = await db.query(
+      `SELECT n.id, n.tipo, n.created_at,
+        a.nombre AS alumno_nombre, a.apellido AS alumno_apellido,
+        t.dia_semana, t.hora, t.titulo AS turno_titulo
+       FROM notificaciones n
+       JOIN alumnos a ON n.alumno_id = a.id
+       JOIN turnos t ON n.turno_id = t.id
+       WHERE n.sucursal_id = $1
+       ORDER BY n.created_at DESC
+       LIMIT 100`,
+      [sid]
+    );
+    res.json(rows.map((r) => ({
+      id: r.id,
+      tipo: r.tipo,
+      alumnoNombre: [r.alumno_apellido, r.alumno_nombre].filter(Boolean).join(', '),
+      turnoDia: DIAS_SEMANA_ES[r.dia_semana] ?? `Día ${r.dia_semana}`,
+      turnoHora: r.hora,
+      turnoTitulo: r.turno_titulo || 'Clase',
+      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+    })));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

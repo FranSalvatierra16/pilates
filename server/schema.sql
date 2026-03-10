@@ -123,6 +123,17 @@ ALTER TABLE pagos ALTER COLUMN alumno_id DROP NOT NULL;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS link_token TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_link_token ON alumnos(link_token) WHERE link_token IS NOT NULL;
 
+-- Notificaciones: cuando un alumno se anota o libera cupo (panel del usuario)
+CREATE TABLE IF NOT EXISTS notificaciones (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL CHECK (tipo IN ('inscribio', 'liberar')),
+  alumno_id TEXT NOT NULL REFERENCES alumnos(id) ON DELETE CASCADE,
+  turno_id TEXT NOT NULL REFERENCES turnos(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notificaciones_sucursal_created ON notificaciones(sucursal_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha);
 CREATE INDEX IF NOT EXISTS idx_pagos_sucursal_id ON pagos(sucursal_id);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -13,8 +13,10 @@ import {
   GraduationCap,
   AlertCircle,
   Menu,
-  X
+  X,
+  Bell
 } from 'lucide-react';
+import type { NotificacionItem } from '../pages/Notificaciones';
 
 const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 const useApi = () => {
@@ -27,12 +29,28 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
+function formatNotifFecha(iso: string) {
+  try {
+    const d = new Date(iso);
+    const hoy = new Date();
+    const esHoy = d.toDateString() === hoy.toDateString();
+    const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    return esHoy ? `Hoy ${time}` : d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
   const { logout, sucursalNombre, fotoPerfil } = useAuth();
   const navigate = useNavigate();
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notificaciones, setNotificaciones] = useState<NotificacionItem[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!useApi()) {
@@ -44,6 +62,37 @@ const Layout = ({ children }: LayoutProps) => {
       .then((d) => setDbStatus(d.db ? 'connected' : 'disconnected'))
       .catch(() => setDbStatus('disconnected'));
   }, []);
+
+  const fetchNotificaciones = (showLoading = false) => {
+    if (!useApi()) return;
+    if (showLoading) setNotifLoading(true);
+    const token = localStorage.getItem('savia_token');
+    fetch(getApiBase() + '/api/notificaciones', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setNotificaciones(Array.isArray(data) ? data : []))
+      .catch(() => setNotificaciones([]))
+      .finally(() => showLoading && setNotifLoading(false));
+  };
+
+  useEffect(() => {
+    fetchNotificaciones(false);
+  }, []);
+
+  useEffect(() => {
+    if (notifOpen) fetchNotificaciones(true);
+  }, [notifOpen]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+    };
+    if (notifOpen) {
+      document.addEventListener('click', onDocClick);
+      return () => document.removeEventListener('click', onDocClick);
+    }
+  }, [notifOpen]);
 
   const handleLogout = () => {
     logout();
@@ -60,6 +109,7 @@ const Layout = ({ children }: LayoutProps) => {
     { path: '/acceso', label: 'Control de Acceso', icon: DoorOpen },
     { path: '/pagos', label: 'Pagos', icon: CreditCard },
     { path: '/caja', label: 'Caja', icon: Wallet },
+    { path: '/notificaciones', label: 'Notificaciones', icon: Bell },
   ];
 
   return (
@@ -120,7 +170,65 @@ const Layout = ({ children }: LayoutProps) => {
                 })}
               </div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-2">
+              {useApi() && (
+                <div className="relative" ref={notifRef}>
+                  <button
+                    type="button"
+                    onClick={() => setNotifOpen((o) => !o)}
+                    className="relative p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                    aria-label="Notificaciones"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {notificaciones.length > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-primary-500 text-white text-xs font-medium px-1">
+                        {notificaciones.length > 99 ? '99+' : notificaciones.length}
+                      </span>
+                    )}
+                  </button>
+                  {notifOpen && (
+                    <div className="absolute right-0 top-full mt-1 w-[min(360px,90vw)] bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50 max-h-[70vh] flex flex-col">
+                      <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
+                        <span className="font-medium text-gray-800">Notificaciones</span>
+                        <Link
+                          to="/notificaciones"
+                          onClick={() => setNotifOpen(false)}
+                          className="text-sm text-primary-600 hover:underline"
+                        >
+                          Ver todas
+                        </Link>
+                      </div>
+                      <div className="overflow-y-auto">
+                        {notifLoading && (
+                          <div className="flex justify-center py-6">
+                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-500 border-t-transparent" />
+                          </div>
+                        )}
+                        {!notifLoading && notificaciones.length === 0 && (
+                          <p className="text-sm text-gray-500 px-4 py-6 text-center">No hay notificaciones</p>
+                        )}
+                        {!notifLoading &&
+                          notificaciones.slice(0, 10).map((n) => (
+                            <div
+                              key={n.id}
+                              className="px-4 py-2.5 border-b border-gray-50 last:border-0 text-left"
+                            >
+                              <p className="text-sm text-gray-800">
+                                {n.tipo === 'inscribio' ? (
+                                  <span className="text-green-600 font-medium">Se anotó:</span>
+                                ) : (
+                                  <span className="text-amber-600 font-medium">Liberó cupo:</span>
+                                )}{' '}
+                                {n.alumnoNombre} — {n.turnoDia} {n.turnoHora} {n.turnoTitulo}
+                              </p>
+                              <p className="text-xs text-gray-500 mt-0.5">{formatNotifFecha(n.createdAt)}</p>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"

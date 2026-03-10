@@ -113,8 +113,8 @@ const Layout = ({ children }: LayoutProps) => {
   ];
 
   return (
-    <div className="min-h-screen">
-      <nav className="bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200 safe-top">
+    <div className="min-h-screen min-h-dvh flex flex-col">
+      <nav className="flex-shrink-0 bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200 safe-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between min-h-16 h-16 items-center">
             <div className="flex items-center gap-2">
@@ -187,8 +187,8 @@ const Layout = ({ children }: LayoutProps) => {
                     )}
                   </button>
                   {notifOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-[min(360px,90vw)] bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50 max-h-[70vh] flex flex-col">
-                      <div className="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
+                    <div className="absolute right-0 top-full mt-1 w-[min(360px,calc(100vw-2rem))] bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-[100] max-h-[min(70vh,320px)] sm:max-h-[min(70vh,400px)] flex flex-col">
+                      <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 flex items-center justify-between">
                         <span className="font-medium text-gray-800">Notificaciones</span>
                         <Link
                           to="/notificaciones"
@@ -198,7 +198,7 @@ const Layout = ({ children }: LayoutProps) => {
                           Ver todas
                         </Link>
                       </div>
-                      <div className="overflow-y-auto">
+                      <div className="overflow-y-auto min-h-0 flex-1 overscroll-contain max-h-[260px] sm:max-h-[320px]">
                         {notifLoading && (
                           <div className="flex justify-center py-6">
                             <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-500 border-t-transparent" />
@@ -304,8 +304,8 @@ const Layout = ({ children }: LayoutProps) => {
         </>
       )}
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 pb-6 sm:pt-8 sm:pb-8 safe-bottom w-full max-w-[100vw] overflow-x-hidden min-w-0 bg-white min-h-[50vh] rounded-xl shadow-sm border border-gray-100">
-        <div className="relative min-h-0 w-full min-w-0">
+      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 pb-6 sm:pt-8 sm:pb-8 safe-bottom max-w-[100vw] overflow-x-hidden min-w-0 bg-white rounded-t-xl sm:rounded-xl shadow-sm border border-gray-100 border-b-0 sm:border-b">
+        <div className="relative min-h-0 w-full min-w-0 h-full">
           {children}
         </div>
       </main>

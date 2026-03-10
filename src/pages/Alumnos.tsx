@@ -294,9 +294,14 @@ const Alumnos = () => {
       
       await loadAlumnos();
       handleCloseModal();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Error saving alumno:', error);
-      alert('Error al guardar el alumno. Por favor intentá nuevamente.');
+      const msg = error instanceof Error ? error.message : '';
+      if (msg.includes('Ya existe un alumno con este DNI') || msg.includes('409')) {
+        alert('Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.');
+      } else {
+        alert('Error al guardar el alumno. Por favor intentá nuevamente.');
+      }
     }
   };
 

@@ -21,6 +21,12 @@ type PortalData = {
 };
 
 const NOMBRE_DIA = [...DIAS_SEMANA, 'Domingo'];
+const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+const horaToNum = (hora: string): number => {
+  const [h] = hora.split(':').map(Number);
+  return h ?? 0;
+};
 
 const MiClase = () => {
   const [searchParams] = useSearchParams();
@@ -29,6 +35,8 @@ const MiClase = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actioning, setActioning] = useState<string | null>(null);
+  const [filtroDia, setFiltroDia] = useState<number | null>(null);
+  const [filtroHorario, setFiltroHorario] = useState<'todos' | 'manana' | 'tarde'>('todos');
 
   useEffect(() => {
     if (!token.trim()) {
@@ -143,6 +151,26 @@ const MiClase = () => {
 
   const nombreCompleto = [data.alumno.apellido, data.alumno.nombre].filter(Boolean).join(', ') || 'Alumno';
 
+  const turnosFiltrados = data.turnos.filter((t) => {
+    if (filtroDia !== null && t.diaSemana !== filtroDia) return false;
+    const h = horaToNum(t.hora);
+    if (filtroHorario === 'manana') return h >= 7 && h < 12;
+    if (filtroHorario === 'tarde') return h >= 16 && h <= 21;
+    return true;
+  });
+
+  const turnosOrdenados = [...turnosFiltrados].sort(
+    (a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora)
+  );
+
+  const porDia = turnosOrdenados.reduce<Record<number, TurnoPortal[]>>((acc, t) => {
+    if (!acc[t.diaSemana]) acc[t.diaSemana] = [];
+    acc[t.diaSemana].push(t);
+    return acc;
+  }, {});
+
+  const diasConTurnos = Object.keys(porDia).map(Number).sort((a, b) => a - b);
+
   return (
     <div className="min-h-screen bg-gray-100 pb-safe">
       <div className="max-w-lg mx-auto p-4 pt-6">
@@ -154,45 +182,106 @@ const MiClase = () => {
           <p className="text-sm text-gray-600 mt-1">Hola, {nombreCompleto}. Acá podés sumarte a una clase o liberar tu cupo.</p>
         </div>
 
-        <div className="space-y-3">
+        {/* Filtros: día y horario */}
+        <div className="bg-white rounded-xl shadow p-3 mb-4">
+          <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            <button
+              type="button"
+              onClick={() => setFiltroDia(null)}
+              className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroDia === null ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Todos
+            </button>
+            {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setFiltroDia(d)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroDia === d ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                {DIAS_CORTOS[d]}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs font-medium text-gray-500 mb-2">Ver horario</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFiltroHorario('todos')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'todos' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroHorario('manana')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
+            >
+              Mañana (7–12h)
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroHorario('tarde')}
+              className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
+            >
+              Tarde (16–21h)
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-4">
           {data.turnos.length === 0 ? (
             <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500">
               Todavía no hay clases cargadas. Cuando el estudio agregue turnos, van a aparecer acá.
             </div>
+          ) : turnosOrdenados.length === 0 ? (
+            <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500">
+              No hay clases con el filtro elegido. Probá con otro día u horario.
+            </div>
           ) : (
-            data.turnos.map((t) => (
-              <div key={t.id} className="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-gray-900 truncate">{t.titulo || 'Clase'}</p>
-                  <p className="text-sm text-gray-600">
-                    {NOMBRE_DIA[t.diaSemana] ?? `Día ${t.diaSemana}`} — {t.hora}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {t.inscriptos}/{t.cupo} inscriptos
-                  </p>
-                </div>
-                <div className="flex-shrink-0">
-                  {t.yaInscripto ? (
-                    <button
-                      type="button"
-                      onClick={() => liberar(t.id)}
-                      disabled={!!actioning}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
-                    >
-                      {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                      Liberar cupo
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => inscribir(t.id)}
-                      disabled={!!actioning || t.inscriptos >= t.cupo}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
-                    >
-                      {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                      Sumarme
-                    </button>
-                  )}
+            diasConTurnos.map((dia) => (
+              <div key={dia}>
+                <h2 className="text-sm font-semibold text-primary-700 mb-2 px-1">
+                  {NOMBRE_DIA[dia] ?? `Día ${dia}`}
+                </h2>
+                <div className="space-y-2">
+                  {porDia[dia].map((t) => (
+                    <div key={t.id} className="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-900 truncate">{t.titulo || 'Clase'}</p>
+                        <p className="text-sm text-gray-600">
+                          {t.hora}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {t.inscriptos}/{t.cupo} inscriptos
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        {t.yaInscripto ? (
+                          <button
+                            type="button"
+                            onClick={() => liberar(t.id)}
+                            disabled={!!actioning}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                          >
+                            {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                            Liberar cupo
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => inscribir(t.id)}
+                            disabled={!!actioning || t.inscriptos >= t.cupo}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                          >
+                            {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                            Sumarme
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))

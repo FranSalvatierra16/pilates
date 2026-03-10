@@ -207,6 +207,9 @@ app.post('/api/alumnos', async (req, res) => {
     );
     res.status(201).json({ ok: true });
   } catch (e) {
+    if (e.code === '23505' && (e.constraint === 'alumnos_dni_key' || e.constraint === 'alumnos_sucursal_id_dni_key')) {
+      return res.status(409).json({ error: 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.' });
+    }
     console.error(e);
     res.status(500).json({ error: e.message });
   }

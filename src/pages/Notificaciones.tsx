@@ -94,22 +94,23 @@ export default function Notificaciones() {
   const noLeidasCount = list.filter((n) => !n.leido).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-primary-100 text-primary-600">
+    <div className="space-y-6 w-full max-w-3xl mx-auto">
+      {/* Encabezado: en móvil apilado, botón bien visible */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 rounded-xl bg-primary-100 text-primary-600 flex-shrink-0">
             <Bell className="w-6 h-6" />
           </div>
-          <div>
-            <h1 className="page-title text-2xl font-semibold text-gray-800">Notificaciones</h1>
-            <p className="text-sm text-gray-500">Anotaciones y liberaciones de cupo en las clases</p>
+          <div className="min-w-0">
+            <h1 className="page-title text-xl sm:text-2xl font-semibold text-gray-800 truncate">Notificaciones</h1>
+            <p className="text-sm text-gray-500">Anotaciones y liberaciones de cupo</p>
           </div>
         </div>
         {list.length > 0 && noLeidasCount > 0 && (
           <button
             type="button"
             onClick={marcarTodasLeidas}
-            className="btn-secondary text-sm"
+            className="w-full sm:w-auto btn-secondary text-sm py-2.5 touch-manipulation"
           >
             Marcar todas como leídas
           </button>
@@ -129,30 +130,40 @@ export default function Notificaciones() {
       )}
 
       {!loading && !error && list.length === 0 && (
-        <div className="rounded-xl bg-gray-50 border border-gray-200 text-gray-600 px-4 py-8 text-center">
+        <div className="rounded-xl bg-gray-50 border border-gray-200 text-gray-600 px-4 py-8 text-center text-sm sm:text-base">
           No hay notificaciones todavía. Cuando alguien se anote o libere cupo desde el link de clases, aparecerán aquí.
         </div>
       )}
 
       {!loading && !error && list.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="space-y-3 sm:space-y-2 list-none p-0 m-0">
           {list.map((n) => (
             <li
               key={n.id}
-              className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 p-4 rounded-xl border border-gray-200 shadow-sm ${
-                n.leido ? 'bg-gray-50/80' : 'bg-white'
+              className={`flex flex-col gap-2 p-4 rounded-xl border shadow-sm min-w-0 ${
+                n.leido ? 'bg-gray-50 border-gray-200' : 'bg-white border-primary-200'
               }`}
             >
-              <p className={`text-gray-800 ${!n.leido ? 'font-medium' : ''}`}>
-                {!n.leido && <span className="inline-block w-2 h-2 rounded-full bg-primary-500 mr-2 align-middle" aria-hidden />}
-                {n.tipo === 'inscribio' ? (
-                  <span className="text-green-600 font-medium">Se anotó:</span>
-                ) : (
-                  <span className="text-amber-600 font-medium">Liberó cupo:</span>
-                )}{' '}
-                {texto(n)}
-              </p>
-              <span className="text-xs text-gray-500 sm:flex-shrink-0">{formatFecha(n.createdAt)}</span>
+              <div className="flex items-start justify-between gap-3 min-w-0">
+                <p className={`text-sm sm:text-base text-gray-800 min-w-0 flex-1 ${!n.leido ? 'font-semibold' : ''}`}>
+                  <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    {!n.leido && (
+                      <span className="inline-block w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-1.5" aria-hidden />
+                    )}
+                    <span className="break-words">
+                      {n.tipo === 'inscribio' ? (
+                        <span className="text-green-600 font-medium">Se anotó:</span>
+                      ) : (
+                        <span className="text-amber-600 font-medium">Liberó cupo:</span>
+                      )}{' '}
+                      {texto(n)}
+                    </span>
+                  </span>
+                </p>
+                <span className="text-xs sm:text-sm text-gray-500 flex-shrink-0 whitespace-nowrap ml-2" title={n.createdAt}>
+                  {formatFecha(n.createdAt)}
+                </span>
+              </div>
             </li>
           ))}
         </ul>

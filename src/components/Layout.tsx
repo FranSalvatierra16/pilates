@@ -201,15 +201,15 @@ const Layout = ({ children }: LayoutProps) => {
                     )}
                   </button>
                   {notifOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-[min(360px,calc(100vw-2rem))] bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-[100] max-h-[min(70vh,320px)] sm:max-h-[min(70vh,400px)] flex flex-col">
-                      <div className="flex-shrink-0 px-4 py-2 border-b border-gray-100 flex items-center justify-between gap-2">
-                        <span className="font-medium text-gray-800">Notificaciones</span>
+                    <div className="absolute right-0 top-full mt-1 w-[min(360px,calc(100vw-1.5rem))] sm:right-0 bg-white rounded-xl shadow-xl border border-gray-200 py-0 z-[100] flex flex-col max-h-[85vh] sm:max-h-[min(70vh,420px)]">
+                      <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
+                        <span className="font-semibold text-gray-800">Notificaciones</span>
                         <div className="flex items-center gap-2">
                           {noLeidasCount > 0 && (
                             <button
                               type="button"
                               onClick={() => { marcarTodasLeidas(); setNotifOpen(false); }}
-                              className="text-xs text-primary-600 hover:underline whitespace-nowrap"
+                              className="text-xs text-primary-600 hover:underline whitespace-nowrap touch-manipulation"
                             >
                               Marcar leídas
                             </button>
@@ -217,13 +217,16 @@ const Layout = ({ children }: LayoutProps) => {
                           <Link
                             to="/notificaciones"
                             onClick={() => setNotifOpen(false)}
-                            className="text-sm text-primary-600 hover:underline"
+                            className="text-sm font-medium text-primary-600 hover:underline touch-manipulation"
                           >
                             Ver todas
                           </Link>
                         </div>
                       </div>
-                      <div className="overflow-y-auto min-h-0 flex-1 overscroll-contain max-h-[260px] sm:max-h-[320px]">
+                      <div
+                        className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 overscroll-contain py-1"
+                        style={{ WebkitOverflowScrolling: 'touch' }}
+                      >
                         {notifLoading && (
                           <div className="flex justify-center py-6">
                             <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-500 border-t-transparent" />

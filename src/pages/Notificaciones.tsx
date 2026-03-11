@@ -213,8 +213,11 @@ export default function Notificaciones() {
               {pushConfig && (
                 <p className="text-sm mt-2 text-gray-700">
                   {!pushConfig.configured ? (
-                    <span className="text-amber-700">
-                      Para que lleguen al celular, en Railway → Variables agregá <strong>VAPID_PUBLIC_KEY</strong> y <strong>VAPID_PRIVATE_KEY</strong>. Generalas con: <code className="bg-gray-200 px-1 rounded">npx web-push generate-vapid-keys</code>
+                    <span className="text-amber-700 block space-y-1.5">
+                      <span className="block">Para que lleguen al celular, en Railway → Variables agregá:</span>
+                      <span className="block"><strong>VAPID_PUBLIC_KEY</strong> y <strong>VAPID_PRIVATE_KEY</strong></span>
+                      <span className="block">Generalas con:</span>
+                      <code className="block bg-gray-200 px-2 py-1 rounded text-xs break-all font-mono mt-0.5">npx web-push generate-vapid-keys</code>
                     </span>
                   ) : pushConfig.subscriptionsCount === 0 ? (
                     'Activá las notificaciones en el dispositivo donde querés recibirlas (botón abajo).'

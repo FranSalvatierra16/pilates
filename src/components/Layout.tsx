@@ -53,7 +53,7 @@ const Layout = ({ children }: LayoutProps) => {
   const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; right: number } | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; right: number; left?: number } | null>(null);
 
   useEffect(() => {
     if (!useApi()) {
@@ -107,10 +107,12 @@ const Layout = ({ children }: LayoutProps) => {
     const updatePos = () => {
       if (!notifRef.current) return;
       const rect = notifRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 6,
-        right: window.innerWidth - rect.right,
-      });
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+      if (isMobile) {
+        setDropdownPosition({ top: rect.bottom + 6, left: 12, right: 12 });
+      } else {
+        setDropdownPosition({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+      }
     };
     updatePos();
     window.addEventListener('scroll', updatePos, true);
@@ -220,7 +222,12 @@ const Layout = ({ children }: LayoutProps) => {
                       const next = !notifOpen;
                       if (next && notifRef.current) {
                         const rect = notifRef.current.getBoundingClientRect();
-                        setDropdownPosition({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+                        const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+                        if (isMobile) {
+                          setDropdownPosition({ top: rect.bottom + 6, left: 12, right: 12 });
+                        } else {
+                          setDropdownPosition({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+                        }
                       }
                       if (!next) setDropdownPosition(null);
                       setNotifOpen(next);
@@ -240,18 +247,19 @@ const Layout = ({ children }: LayoutProps) => {
                   createPortal(
                     <div
                       ref={dropdownRef}
-                      className="bg-white rounded-xl shadow-2xl border border-gray-200 py-0 flex flex-col w-[min(380px,calc(100vw-1.5rem))] max-h-[min(85vh,420px)]"
+                      className="bg-white rounded-xl shadow-2xl border border-gray-200 py-0 flex flex-col max-h-[min(85vh,420px)] min-w-0"
                       style={{
                         position: 'fixed',
                         top: dropdownPosition.top,
-                        right: dropdownPosition.right,
+                        ...(dropdownPosition.left !== undefined
+                          ? { left: dropdownPosition.left, right: dropdownPosition.right }
+                          : { right: dropdownPosition.right, width: 380, maxWidth: 'calc(100vw - 24px)' }),
                         zIndex: 99999,
-                        transform: 'translateX(0)',
                       }}
                     >
-                      <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
-                        <span className="font-semibold text-gray-800">Notificaciones</span>
-                        <div className="flex items-center gap-2">
+                      <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2 min-w-0 flex-wrap">
+                        <span className="font-semibold text-gray-800 min-w-0 truncate">Notificaciones</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           {noLeidasCount > 0 && (
                             <button
                               type="button"

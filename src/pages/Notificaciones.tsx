@@ -51,6 +51,7 @@ export default function Notificaciones() {
   const [error, setError] = useState<string | null>(null);
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
   const [pushMessage, setPushMessage] = useState<string>('');
+  const [pushConfig, setPushConfig] = useState<{ configured: boolean; subscriptionsCount: number } | null>(null);
 
   useEffect(() => {
     if (!useApi()) {
@@ -76,6 +77,15 @@ export default function Notificaciones() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!useApi()) return;
+    const token = localStorage.getItem('savia_token');
+    fetch(getApiBase() + '/api/push-status', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => data && setPushConfig({ configured: data.configured, subscriptionsCount: data.subscriptionsCount || 0 }))
+      .catch(() => {});
+  }, [pushStatus]);
 
   const texto = (n: NotificacionItem) =>
     n.tipo === 'inscribio'
@@ -124,7 +134,8 @@ export default function Notificaciones() {
       });
       if (!vapidRes.ok) {
         setPushStatus('error');
-        setPushMessage('El servidor no tiene notificaciones push configuradas.');
+        setPushMessage('El servidor no tiene notificaciones push configuradas. En Railway → Variables agregá VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (generalas con: npx web-push generate-vapid-keys).');
+        setPushConfig((c) => (c ? { ...c, configured: false } : null));
         return;
       }
       const { vapidPublicKey } = await vapidRes.json();
@@ -156,6 +167,7 @@ export default function Notificaciones() {
       }
       setPushStatus('ok');
       setPushMessage('Listo: cuando alguien se anote o libere cupo, te llegará una notificación al celular.');
+      setPushConfig((c) => (c ? { ...c, subscriptionsCount: c.subscriptionsCount + 1 } : { configured: true, subscriptionsCount: 1 }));
     } catch (e) {
       setPushStatus('error');
       setPushMessage(e instanceof Error ? e.message : 'Error al activar.');
@@ -198,6 +210,21 @@ export default function Notificaciones() {
               <p className="text-sm text-gray-600 mt-0.5">
                 Cuando un alumno se anote o libere cupo en una clase, te llegará una notificación al celular (aunque no tengas la app abierta).
               </p>
+              {pushConfig && (
+                <p className="text-sm mt-2 text-gray-700">
+                  {!pushConfig.configured ? (
+                    <span className="text-amber-700">
+                      Para que lleguen al celular, en Railway → Variables agregá <strong>VAPID_PUBLIC_KEY</strong> y <strong>VAPID_PRIVATE_KEY</strong>. Generalas con: <code className="bg-gray-200 px-1 rounded">npx web-push generate-vapid-keys</code>
+                    </span>
+                  ) : pushConfig.subscriptionsCount === 0 ? (
+                    'Activá las notificaciones en el dispositivo donde querés recibirlas (botón abajo).'
+                  ) : (
+                    <span className="text-green-700">
+                      Tenés {pushConfig.subscriptionsCount} dispositivo(s) registrado(s). Las notificaciones se envían cuando alguien se anote o libere cupo.
+                    </span>
+                  )}
+                </p>
+              )}
               {pushMessage && (
                 <p className={`text-sm mt-2 ${pushStatus === 'ok' ? 'text-green-700' : pushStatus === 'denied' || pushStatus === 'error' ? 'text-amber-700' : 'text-gray-600'}`}>
                   {pushMessage}

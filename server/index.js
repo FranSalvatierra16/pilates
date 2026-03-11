@@ -1010,12 +1010,20 @@ app.patch('/api/notificaciones/marcar-leidas', async (req, res) => {
 
 // --- Push al celular (Web Push) ---
 async function sendPushToSucursal(db, sucursalId, payload) {
-  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+    console.warn('Push no enviado: faltan VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY en el servidor.');
+    return;
+  }
   const { rows } = await db.query(
     'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE sucursal_id = $1',
     [sucursalId]
   );
+  if (rows.length === 0) {
+    console.warn('Push no enviado: ningún dispositivo registrado para esta sucursal.');
+    return;
+  }
   const body = JSON.stringify(payload);
+  let sent = 0;
   for (const sub of rows) {
     try {
       await webpush.sendNotification(
@@ -1023,17 +1031,41 @@ async function sendPushToSucursal(db, sucursalId, payload) {
         body,
         { TTL: 60 }
       );
+      sent++;
     } catch (err) {
       if (err.statusCode === 410 || err.statusCode === 404) {
         await db.query('DELETE FROM push_subscriptions WHERE id = $1', [sub.id]).catch(() => {});
+        console.warn('Push: suscripción expirada, eliminada.');
+      } else {
+        console.error('Push error:', err.statusCode || err.message, sub.endpoint?.slice(0, 50));
       }
     }
   }
+  if (sent > 0) console.log('Push enviado a', sent, 'dispositivo(s):', payload.title);
 }
 
 app.get('/api/push-vapid-public', (req, res) => {
   if (!VAPID_PUBLIC) return res.status(503).json({ error: 'Notificaciones push no configuradas' });
   res.json({ vapidPublicKey: VAPID_PUBLIC });
+});
+
+app.get('/api/push-status', async (req, res) => {
+  try {
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(401).json({ error: 'No autorizado' });
+    const db = await getPool();
+    if (!db) return res.json({ configured: !!VAPID_PUBLIC, subscriptionsCount: 0 });
+    const { rows } = await db.query(
+      'SELECT COUNT(*) AS n FROM push_subscriptions WHERE sucursal_id = $1',
+      [sid]
+    );
+    res.json({
+      configured: !!(VAPID_PUBLIC && VAPID_PRIVATE),
+      subscriptionsCount: parseInt(rows[0]?.n || '0', 10),
+    });
+  } catch (e) {
+    res.json({ configured: !!VAPID_PUBLIC, subscriptionsCount: 0 });
+  }
 });
 
 app.post('/api/push-subscribe', async (req, res) => {

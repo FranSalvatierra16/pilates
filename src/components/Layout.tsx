@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
@@ -51,6 +52,8 @@ const Layout = ({ children }: LayoutProps) => {
   const [notificaciones, setNotificaciones] = useState<NotificacionItem[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; right: number } | null>(null);
 
   useEffect(() => {
     if (!useApi()) {
@@ -86,12 +89,36 @@ const Layout = ({ children }: LayoutProps) => {
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+      const target = e.target as Node;
+      if (notifRef.current?.contains(target) || dropdownRef.current?.contains(target)) return;
+      setNotifOpen(false);
     };
     if (notifOpen) {
       document.addEventListener('click', onDocClick);
       return () => document.removeEventListener('click', onDocClick);
     }
+  }, [notifOpen]);
+
+  useLayoutEffect(() => {
+    if (!notifOpen || !notifRef.current) {
+      if (!notifOpen) setDropdownPosition(null);
+      return;
+    }
+    const updatePos = () => {
+      if (!notifRef.current) return;
+      const rect = notifRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 6,
+        right: window.innerWidth - rect.right,
+      });
+    };
+    updatePos();
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
   }, [notifOpen]);
 
   const handleLogout = () => {
@@ -189,7 +216,15 @@ const Layout = ({ children }: LayoutProps) => {
                 <div className="relative" ref={notifRef}>
                   <button
                     type="button"
-                    onClick={() => setNotifOpen((o) => !o)}
+                    onClick={() => {
+                      const next = !notifOpen;
+                      if (next && notifRef.current) {
+                        const rect = notifRef.current.getBoundingClientRect();
+                        setDropdownPosition({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+                      }
+                      if (!next) setDropdownPosition(null);
+                      setNotifOpen(next);
+                    }}
                     className="relative p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
                     aria-label="Notificaciones"
                   >
@@ -200,8 +235,20 @@ const Layout = ({ children }: LayoutProps) => {
                       </span>
                     )}
                   </button>
-                  {notifOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-[min(380px,calc(100vw-1.5rem))] sm:right-0 bg-white rounded-xl shadow-2xl border border-gray-200 py-0 z-[200] flex flex-col max-h-[85vh] sm:max-h-[min(70vh,420px)]">
+                  {notifOpen &&
+                  dropdownPosition &&
+                  createPortal(
+                    <div
+                      ref={dropdownRef}
+                      className="bg-white rounded-xl shadow-2xl border border-gray-200 py-0 flex flex-col w-[min(380px,calc(100vw-1.5rem))] max-h-[min(85vh,420px)]"
+                      style={{
+                        position: 'fixed',
+                        top: dropdownPosition.top,
+                        right: dropdownPosition.right,
+                        zIndex: 99999,
+                        transform: 'translateX(0)',
+                      }}
+                    >
                       <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
                         <span className="font-semibold text-gray-800">Notificaciones</span>
                         <div className="flex items-center gap-2">
@@ -253,7 +300,8 @@ const Layout = ({ children }: LayoutProps) => {
                             </div>
                           ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
               )}

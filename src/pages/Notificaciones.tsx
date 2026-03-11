@@ -142,7 +142,7 @@ export default function Notificaciones() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
       });
       const subscribeRes = await fetch(getApiBase() + '/api/push-subscribe', {
         method: 'POST',

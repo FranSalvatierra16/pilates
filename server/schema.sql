@@ -135,6 +135,18 @@ CREATE TABLE IF NOT EXISTS notificaciones (
 CREATE INDEX IF NOT EXISTS idx_notificaciones_sucursal_created ON notificaciones(sucursal_id, created_at DESC);
 ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS leido BOOLEAN DEFAULT FALSE;
 
+-- Suscripciones para notificaciones push al celular (Web Push)
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_push_subscriptions_endpoint ON push_subscriptions(endpoint);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_sucursal ON push_subscriptions(sucursal_id);
+
 CREATE INDEX IF NOT EXISTS idx_pagos_alumno_id ON pagos(alumno_id);
 CREATE INDEX IF NOT EXISTS idx_pagos_fecha ON pagos(fecha);
 CREATE INDEX IF NOT EXISTS idx_pagos_sucursal_id ON pagos(sucursal_id);

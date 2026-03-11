@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, Smartphone } from 'lucide-react';
 
 const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 const useApi = () => {
@@ -7,6 +7,15 @@ const useApi = () => {
   if (import.meta.env.VITE_USE_API === 'true') return true;
   return import.meta.env.PROD;
 };
+
+function urlBase64ToUint8Array(base64: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
 
 export interface NotificacionItem {
   id: string | number;
@@ -40,6 +49,8 @@ export default function Notificaciones() {
   const [list, setList] = useState<NotificacionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
+  const [pushMessage, setPushMessage] = useState<string>('');
 
   useEffect(() => {
     if (!useApi()) {
@@ -93,6 +104,64 @@ export default function Notificaciones() {
 
   const noLeidasCount = list.filter((n) => !n.leido).length;
 
+  const activarPush = async () => {
+    if (!useApi() || !('Notification' in window) || !('serviceWorker' in navigator)) {
+      setPushStatus('unsupported');
+      setPushMessage('Tu navegador no soporta notificaciones push.');
+      return;
+    }
+    setPushStatus('loading');
+    setPushMessage('');
+    try {
+      if (Notification.permission === 'denied') {
+        setPushStatus('denied');
+        setPushMessage('Bloqueaste las notificaciones. Activálas en la configuración del navegador o del celular.');
+        return;
+      }
+      const token = localStorage.getItem('savia_token');
+      const vapidRes = await fetch(getApiBase() + '/api/push-vapid-public', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!vapidRes.ok) {
+        setPushStatus('error');
+        setPushMessage('El servidor no tiene notificaciones push configuradas.');
+        return;
+      }
+      const { vapidPublicKey } = await vapidRes.json();
+      if (!vapidPublicKey) {
+        setPushStatus('error');
+        setPushMessage('Faltan las claves VAPID en el servidor.');
+        return;
+      }
+      const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setPushStatus('denied');
+        setPushMessage('Se necesitan permisos para enviar notificaciones al celular.');
+        return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+      });
+      const subscribeRes = await fetch(getApiBase() + '/api/push-subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ subscription: sub.toJSON() }),
+      });
+      if (!subscribeRes.ok) {
+        setPushStatus('error');
+        setPushMessage('No se pudo registrar el dispositivo.');
+        return;
+      }
+      setPushStatus('ok');
+      setPushMessage('Listo: cuando alguien se anote o libere cupo, te llegará una notificación al celular.');
+    } catch (e) {
+      setPushStatus('error');
+      setPushMessage(e instanceof Error ? e.message : 'Error al activar.');
+    }
+  };
+
   return (
     <div className="space-y-6 w-full max-w-3xl mx-auto">
       {/* Encabezado: en móvil apilado, botón bien visible */}
@@ -116,6 +185,38 @@ export default function Notificaciones() {
           </button>
         )}
       </div>
+
+      {/* Activar notificaciones en el celular */}
+      {useApi() && (
+        <div className="rounded-xl border border-primary-200 bg-primary-50/50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-primary-100 text-primary-600 flex-shrink-0">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-gray-800">Recibir notificaciones en el celular</h3>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Cuando un alumno se anote o libere cupo en una clase, te llegará una notificación al celular (aunque no tengas la app abierta).
+              </p>
+              {pushMessage && (
+                <p className={`text-sm mt-2 ${pushStatus === 'ok' ? 'text-green-700' : pushStatus === 'denied' || pushStatus === 'error' ? 'text-amber-700' : 'text-gray-600'}`}>
+                  {pushMessage}
+                </p>
+              )}
+              {pushStatus !== 'ok' && pushStatus !== 'unsupported' && (
+                <button
+                  type="button"
+                  onClick={activarPush}
+                  disabled={pushStatus === 'loading'}
+                  className="mt-3 btn-primary text-sm py-2 touch-manipulation"
+                >
+                  {pushStatus === 'loading' ? 'Activando…' : 'Activar notificaciones en este dispositivo'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div className="flex justify-center py-12">

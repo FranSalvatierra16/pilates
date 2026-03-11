@@ -5,14 +5,24 @@ import cors from 'cors';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import webpush from 'web-push';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'savia-pilates-secret-cambiar-en-produccion';
 
+// Para notificaciones push al celular: generar claves con `npx web-push generate-vapid-keys`
+// y configurar VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY en Railway (o .env).
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webpush.setVapidDetails('mailto:app@savia.local', VAPID_PUBLIC, VAPID_PRIVATE);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
+const DIAS_SEMANA_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 console.log('PORT desde env:', process.env.PORT, '-> escuchando en', PORT);
 
 const app = express();
@@ -886,6 +896,19 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
       'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
       [crypto.randomUUID(), alumno.sucursal_id, 'inscribio', alumno.id, turnoId]
     );
+    const { rows: info } = await db.query(
+      'SELECT a.apellido, a.nombre, t.dia_semana, t.hora, t.titulo FROM alumnos a, turnos t WHERE a.id = $1 AND t.id = $2',
+      [alumno.id, turnoId]
+    );
+    if (info.length > 0) {
+      const nombre = [info[0].apellido, info[0].nombre].filter(Boolean).join(', ');
+      const dia = DIAS_SEMANA_ES[info[0].dia_semana] ?? '';
+      const turno = `${dia} ${info[0].hora} - ${info[0].titulo || 'Clase'}`;
+      await sendPushToSucursal(db, alumno.sucursal_id, {
+        title: 'Nueva anotación',
+        body: `${nombre} se anotó en ${turno}`,
+      });
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -910,6 +933,19 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
       'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
       [crypto.randomUUID(), alumno.sucursal_id, 'liberar', alumno.id, turnoId]
     );
+    const { rows: info } = await db.query(
+      'SELECT a.apellido, a.nombre, t.dia_semana, t.hora, t.titulo FROM alumnos a, turnos t WHERE a.id = $1 AND t.id = $2',
+      [alumno.id, turnoId]
+    );
+    if (info.length > 0) {
+      const nombre = [info[0].apellido, info[0].nombre].filter(Boolean).join(', ');
+      const dia = DIAS_SEMANA_ES[info[0].dia_semana] ?? '';
+      const turno = `${dia} ${info[0].hora} - ${info[0].titulo || 'Clase'}`;
+      await sendPushToSucursal(db, alumno.sucursal_id, {
+        title: 'Cupo liberado',
+        body: `${nombre} liberó cupo en ${turno}`,
+      });
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -918,7 +954,6 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
 });
 
 // --- Notificaciones (panel usuario: anotaciones y cancelaciones) ---
-const DIAS_SEMANA_ES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 app.get('/api/notificaciones', async (req, res) => {
   try {
     const db = await getPool();
@@ -966,6 +1001,57 @@ app.patch('/api/notificaciones/marcar-leidas', async (req, res) => {
         [sid, ids]
       );
     }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Push al celular (Web Push) ---
+async function sendPushToSucursal(db, sucursalId, payload) {
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
+  const { rows } = await db.query(
+    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE sucursal_id = $1',
+    [sucursalId]
+  );
+  const body = JSON.stringify(payload);
+  for (const sub of rows) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        body,
+        { TTL: 60 }
+      );
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        await db.query('DELETE FROM push_subscriptions WHERE id = $1', [sub.id]).catch(() => {});
+      }
+    }
+  }
+}
+
+app.get('/api/push-vapid-public', (req, res) => {
+  if (!VAPID_PUBLIC) return res.status(503).json({ error: 'Notificaciones push no configuradas' });
+  res.json({ vapidPublicKey: VAPID_PUBLIC });
+});
+
+app.post('/api/push-subscribe', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { subscription } = req.body || {};
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      return res.status(400).json({ error: 'Suscripción inválida' });
+    }
+    const id = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO push_subscriptions (id, sucursal_id, endpoint, p256dh, auth)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, p256dh = $4, auth = $5`,
+      [id, sid, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
+    );
     res.json({ ok: true });
   } catch (e) {
     console.error(e);

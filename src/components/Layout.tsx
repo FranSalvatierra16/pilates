@@ -128,7 +128,7 @@ const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className="min-h-screen min-h-dvh flex flex-col">
-      <nav className="flex-shrink-0 bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200 safe-top">
+      <nav className="relative z-40 flex-shrink-0 bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200 safe-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between min-h-16 h-16 items-center">
             <div className="flex items-center gap-2">
@@ -201,7 +201,7 @@ const Layout = ({ children }: LayoutProps) => {
                     )}
                   </button>
                   {notifOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-[min(360px,calc(100vw-1.5rem))] sm:right-0 bg-white rounded-xl shadow-xl border border-gray-200 py-0 z-[100] flex flex-col max-h-[85vh] sm:max-h-[min(70vh,420px)]">
+                    <div className="absolute right-0 top-full mt-1 w-[min(380px,calc(100vw-1.5rem))] sm:right-0 bg-white rounded-xl shadow-2xl border border-gray-200 py-0 z-[200] flex flex-col max-h-[85vh] sm:max-h-[min(70vh,420px)]">
                       <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-2">
                         <span className="font-semibold text-gray-800">Notificaciones</span>
                         <div className="flex items-center gap-2">
@@ -239,9 +239,9 @@ const Layout = ({ children }: LayoutProps) => {
                           notificaciones.slice(0, 10).map((n) => (
                             <div
                               key={n.id}
-                              className={`px-4 py-2.5 border-b border-gray-50 last:border-0 text-left ${!n.leido ? 'bg-primary-50/50' : ''}`}
+                              className={`px-4 py-2.5 border-b border-gray-50 last:border-0 text-left min-w-0 ${!n.leido ? 'bg-primary-50/50' : ''}`}
                             >
-                              <p className={`text-sm text-gray-800 ${!n.leido ? 'font-medium' : ''}`}>
+                              <p className={`text-sm text-gray-800 min-w-0 break-words ${!n.leido ? 'font-medium' : ''}`}>
                                 {n.tipo === 'inscribio' ? (
                                   <span className="text-green-600 font-medium">Se anotó:</span>
                                 ) : (

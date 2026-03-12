@@ -92,22 +92,16 @@ export default function AdminSucursales() {
                   </span>
                 </div>
                 <p className="text-sm text-gray-500">Usuario: {s.usuario}</p>
-                {(s.pagoMensual != null || s.fechaVencimientoCuenta) && (
-                  <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-600">
-                    {s.pagoMensual != null && (
-                      <span className="inline-flex items-center gap-1">
-                        <DollarSign className="w-4 h-4" />
-                        ${Number(s.pagoMensual).toLocaleString('es-AR')}/mes
-                      </span>
-                    )}
-                    {s.fechaVencimientoCuenta && (
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        Vence: {new Date(s.fechaVencimientoCuenta + 'T12:00:00').toLocaleDateString('es-AR')}
-                      </span>
-                    )}
-                  </div>
-                )}
+                <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-600">
+                  <span className="inline-flex items-center gap-1">
+                    <DollarSign className="w-4 h-4" />
+                    {s.pagoMensual != null ? `$${Number(s.pagoMensual).toLocaleString('es-AR')}/mes` : '—'}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar className="w-4 h-4" />
+                    {s.fechaVencimientoCuenta ? `Vence: ${new Date(s.fechaVencimientoCuenta + 'T12:00:00').toLocaleDateString('es-AR')}` : 'Sin vencimiento'}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-2 text-center">

@@ -40,7 +40,7 @@ export default function AdminSucursales() {
         <p className="font-medium">{error}</p>
         {isUnauth && (
           <p className="mt-2 text-sm">
-            Cerrando sesión y volvé a entrar con usuario <strong>adminF</strong> para usar el panel admin.
+            Cerrando sesión y volvé a entrar con tu usuario administrador para usar el panel admin.
           </p>
         )}
       </div>

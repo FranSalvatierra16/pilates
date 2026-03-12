@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "start": "node server/index.js",
     "seed-demo": "node server/seed-demo.js",
-    "db:schema": "node server/run-schema.js"
+    "db:schema": "node server/run-schema.js",
+    "admin:update": "node server/update-admin.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.0",

@@ -46,18 +46,24 @@ async function run() {
     await pool.query(schema);
     console.log('Schema aplicado.');
 
-    // Seed admin
-    const { rows: adminRows } = await pool.query('SELECT id FROM admin WHERE usuario = $1', ['adminF']);
+    // Seed / actualizar admin (ADMIN_USER y ADMIN_PASSWORD en .env o Railway)
+    const adminUser = (process.env.ADMIN_USER || 'adminF').trim();
+    const adminPassword = process.env.ADMIN_PASSWORD || '2401';
+    const { rows: adminRows } = await pool.query('SELECT id FROM admin WHERE usuario = $1', [adminUser]);
     if (adminRows.length === 0) {
-      const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD || '2401', 10);
+      const hash = await bcrypt.hash(adminPassword, 10);
       await pool.query('INSERT INTO admin (id, usuario, clave_hash) VALUES ($1, $2, $3)', [
         crypto.randomUUID(),
-        'adminF',
+        adminUser,
         hash,
       ]);
-      console.log('Cuenta admin creada (usuario: adminF).');
+      console.log('Cuenta admin creada (usuario: ' + adminUser + ').');
+    } else if (process.env.ADMIN_PASSWORD !== undefined && process.env.ADMIN_PASSWORD !== '') {
+      const hash = await bcrypt.hash(adminPassword, 10);
+      await pool.query('UPDATE admin SET clave_hash = $1 WHERE usuario = $2', [hash, adminUser]);
+      console.log('Admin "' + adminUser + '" actualizado (contraseña).');
     } else {
-      console.log('Admin adminF ya existe.');
+      console.log('Admin "' + adminUser + '" ya existe (para cambiar contraseña: npm run admin:update con ADMIN_PASSWORD).');
     }
 
     // Seed sucursal Savia

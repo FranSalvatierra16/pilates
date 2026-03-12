@@ -95,11 +95,17 @@ function ensureSchemaReady() {
 }
 
 async function seedAdminAndSucursal(db) {
-  const { rows: adminRows } = await db.query('SELECT id FROM admin WHERE usuario = $1', ['adminF']);
+  const adminUser = (process.env.ADMIN_USER || 'adminF').trim();
+  const adminPassword = process.env.ADMIN_PASSWORD || '2401';
+  const { rows: adminRows } = await db.query('SELECT id FROM admin WHERE usuario = $1', [adminUser]);
   if (adminRows.length === 0) {
-    const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD || '2401', 10);
-    await db.query('INSERT INTO admin (id, usuario, clave_hash) VALUES ($1, $2, $3)', [crypto.randomUUID(), 'adminF', hash]);
-    console.log('Cuenta admin creada (usuario: adminF).');
+    const hash = await bcrypt.hash(adminPassword, 10);
+    await db.query('INSERT INTO admin (id, usuario, clave_hash) VALUES ($1, $2, $3)', [crypto.randomUUID(), adminUser, hash]);
+    console.log('Cuenta admin creada (usuario: ' + adminUser + ').');
+  } else if (process.env.ADMIN_PASSWORD !== undefined && process.env.ADMIN_PASSWORD !== '') {
+    const hash = await bcrypt.hash(adminPassword, 10);
+    await db.query('UPDATE admin SET clave_hash = $1 WHERE usuario = $2', [hash, adminUser]);
+    console.log('Contraseña admin actualizada (usuario: ' + adminUser + ').');
   }
   const { rows: sucRows } = await db.query('SELECT id FROM sucursales WHERE usuario = $1', ['Savia']);
   let saviaId = sucRows.length > 0 ? sucRows[0].id : null;
@@ -1266,7 +1272,8 @@ app.post('/api/auth/login', async (req, res) => {
     const { usuario, password } = req.body || {};
     if (!usuario || !password) return res.status(400).json({ ok: false, error: 'Faltan usuario o contraseña' });
     const u = usuario.trim();
-    const isAdminUser = u === 'adminF';
+    const adminUserEnv = (process.env.ADMIN_USER || 'adminF').trim();
+    const isAdminUser = u === adminUserEnv;
     const { rows: adminRows } = await db.query('SELECT id, clave_hash FROM admin WHERE usuario = $1', [u]);
     if (adminRows.length > 0) {
       const valid = await bcrypt.compare(password, adminRows[0].clave_hash);
@@ -1277,7 +1284,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (isAdminUser) {
       return res.status(401).json({
         ok: false,
-        error: 'Cuenta admin no configurada en la base de datos. Ejecutá en el proyecto: npm run db:schema (con DATABASE_URL en .env o en Railway).',
+        error: 'Cuenta admin no configurada en la base de datos. Ejecutá: npm run db:schema (con DATABASE_URL). Para actualizar usuario/contraseña: npm run admin:update (con ADMIN_USER y ADMIN_PASSWORD).',
       });
     }
     const { rows: sucRows } = await db.query(

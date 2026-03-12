@@ -3,6 +3,12 @@ export interface Sucursal {
   nombreLugar: string;
   usuario: string;
   fotoPerfil: string | null;
+  /** Monto que paga la cuenta mensualmente (uso del sistema) */
+  pagoMensual: number | null;
+  /** Fecha en que se vence el acceso de la cuenta */
+  fechaVencimientoCuenta: string | null;
+  /** Si false, la sucursal no puede iniciar sesión (desactivada temporalmente) */
+  activa: boolean;
   createdAt: string;
   cantidadAlumnos: number;
   cantidadActividades: number;

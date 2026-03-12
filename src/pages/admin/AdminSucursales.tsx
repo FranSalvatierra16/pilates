@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { storageApi } from '../../utils/storage-api';
 import { Sucursal } from '../../types';
-import { Plus, Pencil, Building2, Users, Activity, GraduationCap } from 'lucide-react';
+import { Plus, Pencil, Building2, Users, Activity, GraduationCap, DollarSign, Calendar } from 'lucide-react';
 
 export default function AdminSucursales() {
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
@@ -79,10 +79,35 @@ export default function AdminSucursales() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="font-semibold text-lg text-gray-900 truncate">
-                  {s.nombreLugar || 'Sin nombre'}
-                </h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-semibold text-lg text-gray-900 truncate">
+                    {s.nombreLugar || 'Sin nombre'}
+                  </h2>
+                  <span
+                    className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      s.activa !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {s.activa !== false ? 'Activa' : 'Desactivada'}
+                  </span>
+                </div>
                 <p className="text-sm text-gray-500">Usuario: {s.usuario}</p>
+                {(s.pagoMensual != null || s.fechaVencimientoCuenta) && (
+                  <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-600">
+                    {s.pagoMensual != null && (
+                      <span className="inline-flex items-center gap-1">
+                        <DollarSign className="w-4 h-4" />
+                        ${Number(s.pagoMensual).toLocaleString('es-AR')}/mes
+                      </span>
+                    )}
+                    {s.fechaVencimientoCuenta && (
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        Vence: {new Date(s.fechaVencimientoCuenta + 'T12:00:00').toLocaleDateString('es-AR')}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-2 text-center">

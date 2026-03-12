@@ -150,7 +150,15 @@ export const storageApi = {
       request('/api/admin/sucursales', { method: 'POST', body: JSON.stringify(data) }),
     updateSucursal: (
       id: string,
-      data: { nombreLugar?: string; usuario?: string; password?: string; fotoPerfil?: string | null }
+      data: {
+        nombreLugar?: string;
+        usuario?: string;
+        password?: string;
+        fotoPerfil?: string | null;
+        pagoMensual?: number | null;
+        fechaVencimientoCuenta?: string | null;
+        activa?: boolean;
+      }
     ): Promise<void> =>
       request(`/api/admin/sucursales/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   },

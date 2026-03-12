@@ -1240,11 +1240,26 @@ app.post('/api/auth/login', async (req, res) => {
         error: 'Cuenta admin no configurada en la base de datos. Ejecutá en el proyecto: npm run db:schema (con DATABASE_URL en .env o en Railway).',
       });
     }
-    const { rows: sucRows } = await db.query('SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil FROM sucursales WHERE usuario = $1', [u]);
+    const { rows: sucRows } = await db.query(
+      'SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil, activa, fecha_vencimiento_cuenta FROM sucursales WHERE usuario = $1',
+      [u]
+    );
     if (sucRows.length === 0) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
     const valid = await bcrypt.compare(password, sucRows[0].clave_hash);
     if (!valid) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
     const s = sucRows[0];
+    if (s.activa === false) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Cuenta desactivada temporalmente. Contactá al administrador.',
+      });
+    }
+    if (s.fecha_vencimiento_cuenta && new Date(s.fecha_vencimiento_cuenta) < new Date()) {
+      return res.status(403).json({
+        ok: false,
+        error: 'El acceso a esta cuenta venció. Contactá al administrador para renovar.',
+      });
+    }
     const token = jwt.sign(
       { role: 'sucursal', sub: s.id, sucursalId: s.id },
       JWT_SECRET,
@@ -1371,7 +1386,7 @@ app.get('/api/admin/sucursales', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query(
-      `SELECT s.id, s.nombre_lugar, s.usuario, s.foto_perfil, s.created_at,
+      `SELECT s.id, s.nombre_lugar, s.usuario, s.foto_perfil, s.pago_mensual, s.fecha_vencimiento_cuenta, s.activa, s.created_at,
         (SELECT COUNT(*) FROM alumnos a WHERE a.sucursal_id = s.id) AS cantidad_alumnos,
         (SELECT COUNT(*) FROM actividades ac WHERE ac.sucursal_id = s.id) AS cantidad_actividades,
         (SELECT COUNT(*) FROM profesores p WHERE p.sucursal_id = s.id) AS cantidad_profesores
@@ -1382,6 +1397,9 @@ app.get('/api/admin/sucursales', async (req, res) => {
       nombreLugar: r.nombre_lugar,
       usuario: r.usuario,
       fotoPerfil: r.foto_perfil,
+      pagoMensual: r.pago_mensual != null ? Number(r.pago_mensual) : null,
+      fechaVencimientoCuenta: r.fecha_vencimiento_cuenta ? r.fecha_vencimiento_cuenta.toISOString().slice(0, 10) : null,
+      activa: r.activa !== false,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
       cantidadAlumnos: Number(r.cantidad_alumnos ?? 0),
       cantidadActividades: Number(r.cantidad_actividades ?? 0),
@@ -1401,8 +1419,17 @@ app.post('/api/admin/sucursales', async (req, res) => {
     const id = crypto.randomUUID();
     const hash = await bcrypt.hash(b.password || '1234', 10);
     await db.query(
-      'INSERT INTO sucursales (id, nombre_lugar, usuario, clave_hash, foto_perfil) VALUES ($1, $2, $3, $4, $5)',
-      [id, (b.nombreLugar || b.nombre_lugar || '').trim(), (b.usuario || '').trim(), hash, b.fotoPerfil || b.foto_perfil || null]
+      `INSERT INTO sucursales (id, nombre_lugar, usuario, clave_hash, foto_perfil, pago_mensual, fecha_vencimiento_cuenta, activa)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+      [
+        id,
+        (b.nombreLugar || b.nombre_lugar || '').trim(),
+        (b.usuario || '').trim(),
+        hash,
+        b.fotoPerfil || b.foto_perfil || null,
+        b.pagoMensual != null ? b.pagoMensual : null,
+        b.fechaVencimientoCuenta || null,
+      ]
     );
     res.status(201).json({ ok: true, id });
   } catch (e) {
@@ -1427,6 +1454,9 @@ app.patch('/api/admin/sucursales/:id', async (req, res) => {
       values.push(hash);
     }
     if (b.fotoPerfil !== undefined) { updates.push(`foto_perfil = $${i++}`); values.push(b.fotoPerfil); }
+    if (b.pagoMensual !== undefined) { updates.push(`pago_mensual = $${i++}`); values.push(b.pagoMensual === '' || b.pagoMensual == null ? null : Number(b.pagoMensual)); }
+    if (b.fechaVencimientoCuenta !== undefined) { updates.push(`fecha_vencimiento_cuenta = $${i++}`); values.push(b.fechaVencimientoCuenta || null); }
+    if (typeof b.activa === 'boolean') { updates.push(`activa = $${i++}`); values.push(b.activa); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id);
     await db.query(`UPDATE sucursales SET ${updates.join(', ')} WHERE id = $${i}`, values);

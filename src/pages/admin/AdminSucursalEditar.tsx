@@ -12,6 +12,9 @@ export default function AdminSucursalEditar() {
   const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
+  const [pagoMensual, setPagoMensual] = useState<string>('');
+  const [fechaVencimientoCuenta, setFechaVencimientoCuenta] = useState<string>('');
+  const [activa, setActiva] = useState(true);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
@@ -27,6 +30,9 @@ export default function AdminSucursalEditar() {
           setNombreLugar(s.nombreLugar);
           setUsuario(s.usuario);
           setFotoPreview(s.fotoPerfil || null);
+          setPagoMensual(s.pagoMensual != null ? String(s.pagoMensual) : '');
+          setFechaVencimientoCuenta(s.fechaVencimientoCuenta || '');
+          setActiva(s.activa !== false);
         } else {
           setLoadError('Sucursal no encontrada');
         }
@@ -54,12 +60,23 @@ export default function AdminSucursalEditar() {
     e.preventDefault();
     if (!id) return;
     setError('');
-    const updates: { nombreLugar?: string; usuario?: string; password?: string; fotoPerfil?: string | null } = {
+    const updates: {
+      nombreLugar?: string;
+      usuario?: string;
+      password?: string;
+      fotoPerfil?: string | null;
+      pagoMensual?: number | null;
+      fechaVencimientoCuenta?: string | null;
+      activa?: boolean;
+    } = {
       nombreLugar: nombreLugar.trim(),
       usuario: usuario.trim(),
+      activa,
     };
     if (password.trim()) updates.password = password.trim();
     if (fotoPreview !== undefined) updates.fotoPerfil = fotoPreview;
+    updates.pagoMensual = pagoMensual.trim() === '' ? null : Number(pagoMensual);
+    updates.fechaVencimientoCuenta = fechaVencimientoCuenta.trim() || null;
     setLoading(true);
     try {
       await storageApi.admin.updateSucursal(id, updates);
@@ -135,6 +152,40 @@ export default function AdminSucursalEditar() {
               className="input-field"
               placeholder="Dejar en blanco = sin cambios"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pago mensual ($)</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={pagoMensual}
+              onChange={(e) => setPagoMensual(e.target.value)}
+              className="input-field"
+              placeholder="Ej: 5000 (dejá vacío si no aplica)"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha vencimiento cuenta</label>
+            <input
+              type="date"
+              value={fechaVencimientoCuenta}
+              onChange={(e) => setFechaVencimientoCuenta(e.target.value)}
+              className="input-field"
+            />
+            <p className="text-xs text-gray-500 mt-0.5">Fecha en que se vence el acceso al sistema (opcional)</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="activa"
+              checked={activa}
+              onChange={(e) => setActiva(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <label htmlFor="activa" className="text-sm font-medium text-gray-700">
+              Cuenta activa (si la desactivás, no podrá iniciar sesión hasta que la reactives)
+            </label>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Foto de perfil</label>

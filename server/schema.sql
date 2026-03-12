@@ -6,9 +6,15 @@ CREATE TABLE IF NOT EXISTS sucursales (
   usuario TEXT NOT NULL UNIQUE,
   clave_hash TEXT NOT NULL,
   foto_perfil TEXT,
+  pago_mensual NUMERIC,
+  fecha_vencimiento_cuenta DATE,
+  activa BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_sucursales_usuario ON sucursales(usuario);
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS pago_mensual NUMERIC;
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS fecha_vencimiento_cuenta DATE;
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS activa BOOLEAN DEFAULT true;
 
 -- Admin (una cuenta para gestionar todas las sucursales)
 CREATE TABLE IF NOT EXISTS admin (

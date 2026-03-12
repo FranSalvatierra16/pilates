@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LogIn } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -14,13 +14,15 @@ const Login = () => {
     e.preventDefault();
     setError('');
 
-    const role = await login(username, password);
-    if (role) {
-      navigate(role === 'admin' ? '/admin' : '/dashboard');
+    const result = await login(username, password);
+    if ('role' in result && result.role) {
+      navigate(result.role === 'admin' ? '/admin' : '/dashboard');
     } else {
-      setError('Usuario o contraseña incorrectos');
+      setError('error' in result ? result.error : 'Usuario o contraseña incorrectos');
     }
   };
+
+  const esCuentaDesactivada = error && error.toLowerCase().includes('desactivada por falta de pago');
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -64,8 +66,17 @@ const Login = () => {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-              {error}
+            <div
+              className={`px-4 py-3 rounded-lg flex items-start gap-3 ${
+                esCuentaDesactivada
+                  ? 'bg-amber-50 border border-amber-300 text-amber-900'
+                  : 'bg-red-50 border border-red-200 text-red-700'
+              }`}
+            >
+              {esCuentaDesactivada && (
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden />
+              )}
+              <span className="font-medium">{error}</span>
             </div>
           )}
 

@@ -17,7 +17,7 @@ interface AuthContextType {
   sucursalNombre: string | null;
   fotoPerfil: string | null;
   isAdmin: boolean;
-  login: (username: string, password: string) => Promise<Role | false>;
+  login: (username: string, password: string) => Promise<{ role: Role } | { error: string }>;
   logout: () => void;
 }
 
@@ -77,7 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [state.isAuthenticated, state.token, state.role, state.sucursalId, state.sucursalNombre, state.fotoPerfil]);
 
-  const login = useCallback(async (username: string, password: string): Promise<Role | false> => {
+  const login = useCallback(async (username: string, password: string): Promise<{ role: Role } | { error: string }> => {
     if (useApi()) {
       try {
         const res = await fetch(getApiBase() + '/api/auth/login', {
@@ -105,11 +105,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             sucursalNombre: data.sucursalNombre ?? null,
             fotoPerfil: data.fotoPerfil ?? null,
           });
-          return role;
+          return { role };
         }
-        return false;
+        return { error: data.error || 'Usuario o contraseña incorrectos' };
       } catch {
-        return false;
+        return { error: 'Usuario o contraseña incorrectos' };
       }
     }
     if (username === 'Savia' && password === '2286') {
@@ -121,9 +121,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         sucursalNombre: 'Savia',
         fotoPerfil: null,
       });
-      return 'sucursal';
+      return { role: 'sucursal' };
     }
-    return false;
+    return { error: 'Usuario o contraseña incorrectos' };
   }, []);
 
   const logout = useCallback(() => {

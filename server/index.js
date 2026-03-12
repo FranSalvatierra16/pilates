@@ -1298,13 +1298,13 @@ app.post('/api/auth/login', async (req, res) => {
     if (s.activa === false) {
       return res.status(403).json({
         ok: false,
-        error: 'Cuenta desactivada temporalmente. Contactá al administrador.',
+        error: 'Cuenta desactivada por falta de pago. Contactá al administrador para regularizar.',
       });
     }
     if (s.fecha_vencimiento_cuenta && new Date(s.fecha_vencimiento_cuenta) < new Date()) {
       return res.status(403).json({
         ok: false,
-        error: 'El acceso a esta cuenta venció. Contactá al administrador para renovar.',
+        error: 'Cuenta desactivada por falta de pago. Contactá al administrador para regularizar.',
       });
     }
     const token = jwt.sign(

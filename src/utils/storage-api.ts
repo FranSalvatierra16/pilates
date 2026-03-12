@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, RegistroLink, Sucursal } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -39,6 +39,8 @@ export const storageApi = {
       const data = await request<Alumno | null>(`/api/alumnos/findByDni?dni=${encodeURIComponent(dni)}`);
       return data ?? undefined;
     },
+    getAsistencias: (alumnoId: string): Promise<AsistenciaHistorialItem[]> =>
+      request<AsistenciaHistorialItem[]>(`/api/alumnos/${encodeURIComponent(alumnoId)}/asistencias`),
   },
   registroLink: {
     getAll: (): Promise<RegistroLink[]> => request<RegistroLink[]>('/api/registro-link'),

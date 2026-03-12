@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2 } from 'lucide-react';
-import { Alumno, Pago, MetodoPago, Actividad } from '../types';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar } from 'lucide-react';
+import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
+import { storageApi } from '../utils/storage-api';
+import { DIAS_SEMANA } from '../types';
 import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
@@ -76,6 +78,8 @@ const Alumnos = () => {
   const [showModalHistorial, setShowModalHistorial] = useState(false);
   const [alumnoHistorial, setAlumnoHistorial] = useState<Alumno | null>(null);
   const [historialPagos, setHistorialPagos] = useState<Pago[]>([]);
+  const [historialAsistencias, setHistorialAsistencias] = useState<AsistenciaHistorialItem[]>([]);
+  const [historialAsistenciasLoading, setHistorialAsistenciasLoading] = useState(false);
   /** IDs de alumnos que tienen al menos un pago (para no mostrar "Al día" si nunca pagó) */
   const [alumnoIdsConPago, setAlumnoIdsConPago] = useState<Set<string>>(new Set());
   const [formData, setFormData] = useState({
@@ -405,6 +409,7 @@ const Alumnos = () => {
   const handleOpenHistorial = async (alumno: Alumno) => {
     setAlumnoHistorial(alumno);
     setShowModalHistorial(true);
+    setHistorialAsistencias([]);
     try {
       const todos = await storageHybrid.pagos.getAll();
       const delAlumno = todos
@@ -417,6 +422,15 @@ const Alumnos = () => {
         .filter((p) => p.alumnoId === alumno.id)
         .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       setHistorialPagos(delAlumno);
+    }
+    setHistorialAsistenciasLoading(true);
+    try {
+      const asis = await storageApi.alumnos.getAsistencias(alumno.id);
+      setHistorialAsistencias(asis);
+    } catch {
+      setHistorialAsistencias([]);
+    } finally {
+      setHistorialAsistenciasLoading(false);
     }
   };
 
@@ -1014,7 +1028,7 @@ const Alumnos = () => {
               </h2>
               <button
                 type="button"
-                onClick={() => { setShowModalHistorial(false); setAlumnoHistorial(null); setHistorialPagos([]); }}
+                onClick={() => { setShowModalHistorial(false); setAlumnoHistorial(null); setHistorialPagos([]); setHistorialAsistencias([]); }}
                 className="p-2 -m-2 text-gray-400 hover:text-gray-600 rounded-lg touch-manipulation flex-shrink-0"
                 aria-label="Cerrar"
               >
@@ -1047,11 +1061,52 @@ const Alumnos = () => {
                   </div>
                 </>
               )}
+
+              {/* Historial de asistencias */}
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-primary-500" />
+                  Historial de asistencias
+                </h3>
+                {historialAsistenciasLoading ? (
+                  <p className="text-sm text-gray-500">Cargando...</p>
+                ) : historialAsistencias.length === 0 ? (
+                  <p className="text-sm text-gray-500">Sin asistencias registradas.</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Este mes: {(() => {
+                        const now = new Date();
+                        const thisYear = now.getFullYear();
+                        const thisMonth = now.getMonth();
+                        const inMonth = historialAsistencias.filter((a) => {
+                          const d = new Date(a.createdAt);
+                          return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
+                        });
+                        const distinctClases = new Set(inMonth.map((a) => `${a.turnoId}-${a.semana}`)).size;
+                        return distinctClases;
+                      })()} clases (mismo criterio que la lista)
+                    </p>
+                    <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {historialAsistencias.map((a) => (
+                        <li key={a.id} className="text-sm flex items-center gap-2 text-gray-700">
+                          <span className="text-gray-500 shrink-0 w-24">
+                            {new Date(a.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                          </span>
+                          <span className="shrink-0">{DIAS_SEMANA[a.diaSemana] ?? '—'}</span>
+                          <span className="shrink-0">{a.hora}</span>
+                          <span className="truncate">{a.titulo}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
             </div>
             <div className="p-4 border-t border-gray-200">
               <button
                 type="button"
-                onClick={() => { setShowModalHistorial(false); setAlumnoHistorial(null); setHistorialPagos([]); }}
+                onClick={() => { setShowModalHistorial(false); setAlumnoHistorial(null); setHistorialPagos([]); setHistorialAsistencias([]); }}
                 className="btn-secondary w-full"
               >
                 Cerrar

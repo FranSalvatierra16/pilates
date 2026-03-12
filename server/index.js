@@ -170,11 +170,14 @@ app.get('/api/alumnos', async (req, res) => {
     const { rows } = await db.query(
       `SELECT a.*,
         COALESCE((
-          SELECT COUNT(*)::int FROM asistencias asi
-          JOIN turnos t ON asi.turno_id = t.id AND t.sucursal_id = a.sucursal_id
-          WHERE asi.alumno_id = a.id AND asi.estado = 'asistio'
-            AND asi.created_at >= date_trunc('month', CURRENT_DATE)
-            AND asi.created_at < date_trunc('month', CURRENT_DATE) + interval '1 month'
+          SELECT COUNT(*)::int FROM (
+            SELECT 1 FROM asistencias asi
+            JOIN turnos t ON asi.turno_id = t.id AND t.sucursal_id = a.sucursal_id
+            WHERE asi.alumno_id = a.id AND asi.estado = 'asistio'
+              AND asi.created_at >= date_trunc('month', CURRENT_DATE)
+              AND asi.created_at < date_trunc('month', CURRENT_DATE) + interval '1 month'
+            GROUP BY asi.turno_id, asi.semana
+          ) u
         ), 0) AS clases_este_mes
        FROM alumnos a
        WHERE a.sucursal_id = $1
@@ -276,6 +279,40 @@ app.delete('/api/alumnos/:id', async (req, res) => {
   }
 });
 
+// Historial de asistencias de un alumno (solo las marcadas como "asistió")
+app.get('/api/alumnos/:id/asistencias', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const alumnoId = req.params.id;
+    const { rows: alumnoRows } = await db.query('SELECT id FROM alumnos WHERE id = $1 AND sucursal_id = $2', [alumnoId, sid]);
+    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Alumno no encontrado' });
+    const { rows } = await db.query(
+      `SELECT asi.id, asi.turno_id, asi.semana, asi.created_at,
+        t.dia_semana, t.hora, t.titulo
+       FROM asistencias asi
+       JOIN turnos t ON asi.turno_id = t.id AND t.sucursal_id = $1
+       WHERE asi.alumno_id = $2 AND asi.estado = 'asistio'
+       ORDER BY asi.created_at DESC
+       LIMIT 200`,
+      [sid, alumnoId]
+    );
+    res.json(rows.map((r) => ({
+      id: r.id,
+      turnoId: r.turno_id,
+      semana: r.semana,
+      diaSemana: r.dia_semana,
+      hora: r.hora,
+      titulo: r.titulo || 'Clase',
+      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+    })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/alumnos/findByDni', async (req, res) => {
   try {
     const db = await getPool();
@@ -284,11 +321,14 @@ app.get('/api/alumnos/findByDni', async (req, res) => {
     const { rows } = await db.query(
       `SELECT a.*,
         COALESCE((
-          SELECT COUNT(*)::int FROM asistencias asi
-          JOIN turnos t ON asi.turno_id = t.id AND t.sucursal_id = a.sucursal_id
-          WHERE asi.alumno_id = a.id AND asi.estado = 'asistio'
-            AND asi.created_at >= date_trunc('month', CURRENT_DATE)
-            AND asi.created_at < date_trunc('month', CURRENT_DATE) + interval '1 month'
+          SELECT COUNT(*)::int FROM (
+            SELECT 1 FROM asistencias asi
+            JOIN turnos t ON asi.turno_id = t.id AND t.sucursal_id = a.sucursal_id
+            WHERE asi.alumno_id = a.id AND asi.estado = 'asistio'
+              AND asi.created_at >= date_trunc('month', CURRENT_DATE)
+              AND asi.created_at < date_trunc('month', CURRENT_DATE) + interval '1 month'
+            GROUP BY asi.turno_id, asi.semana
+          ) u
         ), 0) AS clases_este_mes
        FROM alumnos a WHERE a.dni = $1 AND a.sucursal_id = $2`,
       [req.query.dni, sid]

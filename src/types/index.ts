@@ -86,6 +86,17 @@ export interface Asistencia {
   createdAt: string;
 }
 
+/** Item del historial de asistencias de un alumno (solo asistió) */
+export interface AsistenciaHistorialItem {
+  id: string;
+  turnoId: string;
+  semana: string;
+  diaSemana: number;
+  hora: string;
+  titulo: string;
+  createdAt: string;
+}
+
 export interface EstadisticasAsistencia {
   alumnoId: string;
   totalClases: number; // Total de clases a las que está asignado

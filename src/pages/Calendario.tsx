@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star } from 'lucide-react';
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -55,6 +55,7 @@ const Calendario = () => {
     titulo: '',
     profesorId: '',
     cupo: CUPO_DEFAULT,
+    destacado: false,
   });
   const [showModalAumentarCupo, setShowModalAumentarCupo] = useState(false);
   const [showModalHorarios, setShowModalHorarios] = useState(false);
@@ -205,6 +206,7 @@ const Calendario = () => {
         titulo: turno.titulo || '',
         profesorId: turno.profesorId || '',
         cupo: turno.cupo ?? CUPO_DEFAULT,
+        destacado: turno.destacado ?? false,
       });
     } else {
       setTurnoParaEditar({
@@ -221,6 +223,7 @@ const Calendario = () => {
         titulo: '',
         profesorId: '',
         cupo: CUPO_DEFAULT,
+        destacado: false,
       });
     }
     setShowModalEditarTurno(true);
@@ -337,6 +340,7 @@ const Calendario = () => {
           titulo: formDataTurno.titulo,
           profesorId: formDataTurno.profesorId,
           cupo: formDataTurno.cupo,
+          destacado: formDataTurno.destacado,
         });
       } else {
         await storageHybrid.turnos.add({
@@ -344,6 +348,7 @@ const Calendario = () => {
           titulo: formDataTurno.titulo,
           profesorId: formDataTurno.profesorId,
           cupo: formDataTurno.cupo,
+          destacado: formDataTurno.destacado,
         });
       }
       
@@ -414,6 +419,32 @@ const Calendario = () => {
     } catch (error) {
       console.error('Error moviendo alumno:', error);
       alert('Error al mover el alumno. Por favor intentá nuevamente.');
+    }
+  };
+
+  const handleToggleDestacado = async (diaSemana: number, hora: string) => {
+    const turno = getTurnoDelDia(diaSemana, hora);
+    try {
+      if (turno) {
+        await storageHybrid.turnos.update(turno.id, { destacado: !turno.destacado });
+      } else {
+        const nuevoTurno: Turno = {
+          id: Date.now().toString(),
+          diaSemana,
+          hora,
+          titulo: '',
+          profesorId: '',
+          alumnoIds: [],
+          cupo: CUPO_DEFAULT,
+          destacado: true,
+          createdAt: new Date().toISOString(),
+        };
+        await storageHybrid.turnos.add(nuevoTurno);
+      }
+      await loadTurnos();
+    } catch (error) {
+      console.error('Error al destacar:', error);
+      alert('Error al marcar el horario. Reintentá.');
     }
   };
 
@@ -722,14 +753,23 @@ const Calendario = () => {
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = turno?.cupo ?? CUPO_DEFAULT;
                       const lleno = alumnosTurno.length >= cupo;
+                      const destacado = turno?.destacado ?? false;
                       return (
                         <div
                           key={hora}
-                          className="border border-gray-200 rounded-xl p-3 bg-gray-50/80"
+                          className={`border rounded-xl p-3 ${destacado ? 'border-amber-300 bg-amber-100' : 'border-gray-200 bg-gray-50/80'}`}
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <span className="font-semibold text-gray-900">{hora}</span>
                             <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleDestacado(diaIndex, hora)}
+                                className={`p-2 rounded-lg touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600'}`}
+                                title={destacado ? 'Quitar destacado' : 'Destacar horario importante'}
+                              >
+                                <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleEditarTurno(diaIndex, hora)}
@@ -787,14 +827,23 @@ const Calendario = () => {
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = turno?.cupo ?? CUPO_DEFAULT;
                       const lleno = alumnosTurno.length >= cupo;
+                      const destacado = turno?.destacado ?? false;
                       return (
                         <div
                           key={hora}
-                          className="border border-gray-200 rounded-xl p-3 bg-gray-50/80"
+                          className={`border rounded-xl p-3 ${destacado ? 'border-amber-300 bg-amber-100' : 'border-gray-200 bg-gray-50/80'}`}
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <span className="font-semibold text-gray-900">{hora}</span>
                             <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleDestacado(diaIndex, hora)}
+                                className={`p-2 rounded-lg touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600'}`}
+                                title={destacado ? 'Quitar destacado' : 'Destacar horario importante'}
+                              >
+                                <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleEditarTurno(diaIndex, hora)}
@@ -878,10 +927,11 @@ const Calendario = () => {
                       const turno = getTurnoDelDia(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
+                      const destacado = turno?.destacado ?? false;
                       return (
                         <div
                           key={`${diaIndex}-${hora}`}
-                          className="p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group hover:bg-gray-50"
+                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${destacado ? 'bg-amber-100' : 'hover:bg-gray-50'}`}
                         >
                           <button
                             onClick={(e) => { e.stopPropagation(); handleEditarTurno(diaIndex, hora); }}
@@ -889,6 +939,13 @@ const Calendario = () => {
                             title="Editar título y profesor"
                           >
                             <GraduationCap className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleToggleDestacado(diaIndex, hora); }}
+                            className={`absolute top-1 right-9 sm:right-8 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity rounded z-20 touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600 hover:bg-amber-200 hover:text-amber-700'}`}
+                            title={destacado ? 'Quitar destacado' : 'Destacar horario importante'}
+                          >
+                            <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
                           </button>
                           {turno && (
                             <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
@@ -942,10 +999,11 @@ const Calendario = () => {
                       const turno = getTurnoDelDia(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
+                      const destacado = turno?.destacado ?? false;
                       return (
                         <div
                           key={`${diaIndex}-${hora}`}
-                          className="p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group hover:bg-gray-50"
+                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${destacado ? 'bg-amber-100' : 'hover:bg-gray-50'}`}
                         >
                           <button
                             onClick={(e) => { e.stopPropagation(); handleEditarTurno(diaIndex, hora); }}
@@ -953,6 +1011,13 @@ const Calendario = () => {
                             title="Editar título y profesor"
                           >
                             <GraduationCap className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleToggleDestacado(diaIndex, hora); }}
+                            className={`absolute top-1 right-9 sm:right-8 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity rounded z-20 touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600 hover:bg-amber-200 hover:text-amber-700'}`}
+                            title={destacado ? 'Quitar destacado' : 'Destacar horario importante'}
+                          >
+                            <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
                           </button>
                           {turno && (
                             <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
@@ -1322,6 +1387,14 @@ const Calendario = () => {
                   ))}
                 </select>
               </div>
+              <button
+                type="button"
+                onClick={() => setFormDataTurno({ ...formDataTurno, destacado: !formDataTurno.destacado })}
+                className={`w-full flex items-center gap-2 p-3 rounded-lg border-2 transition-colors ${formDataTurno.destacado ? 'border-amber-500 bg-amber-50' : 'border-gray-200 bg-gray-50 hover:border-amber-300'}`}
+              >
+                <Star className={`w-5 h-5 flex-shrink-0 ${formDataTurno.destacado ? 'fill-amber-500 text-amber-600' : 'text-gray-400'}`} />
+                <span className="text-sm font-medium text-gray-700">Horario importante (destacado)</span>
+              </button>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Cupo (máx. alumnos por clase)

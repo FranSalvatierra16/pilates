@@ -756,6 +756,7 @@ app.get('/api/turnos', async (req, res) => {
       profesorId: r.profesor_id || '',
       alumnoIds: r.alumno_ids || [],
       cupo: r.cupo != null ? Number(r.cupo) : 6,
+      destacado: !!r.destacado,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {
@@ -770,9 +771,10 @@ app.post('/api/turnos', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     const cupo = b.cupo != null ? Math.max(1, Number(b.cupo)) : 6;
+    const destacado = !!b.destacado;
     await db.query(
-      'INSERT INTO turnos (id, sucursal_id, dia_semana, hora, titulo, profesor_id, alumno_ids, cupo, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      [b.id, req.user.sucursalId, b.diaSemana, b.hora, b.titulo || null, b.profesorId || null, b.alumnoIds || [], cupo, b.createdAt || new Date().toISOString()]
+      'INSERT INTO turnos (id, sucursal_id, dia_semana, hora, titulo, profesor_id, alumno_ids, cupo, destacado, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+      [b.id, req.user.sucursalId, b.diaSemana, b.hora, b.titulo || null, b.profesorId || null, b.alumnoIds || [], cupo, destacado, b.createdAt || new Date().toISOString()]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -795,6 +797,7 @@ app.patch('/api/turnos/:id', async (req, res) => {
     if (b.profesorId !== undefined) { updates.push(`profesor_id = $${i++}`); values.push(b.profesorId || null); }
     if (b.alumnoIds !== undefined) { updates.push(`alumno_ids = $${i++}`); values.push(b.alumnoIds); }
     if (b.cupo !== undefined) { updates.push(`cupo = $${i++}`); values.push(Math.max(1, Number(b.cupo))); }
+    if (b.destacado !== undefined) { updates.push(`destacado = $${i++}`); values.push(!!b.destacado); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);
     await db.query(`UPDATE turnos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
@@ -855,6 +858,7 @@ app.get('/api/turnos/by-dia/:diaSemana', async (req, res) => {
       profesorId: r.profesor_id || '',
       alumnoIds: r.alumno_ids || [],
       cupo: r.cupo != null ? Number(r.cupo) : 6,
+      destacado: !!r.destacado,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {
@@ -879,6 +883,7 @@ app.get('/api/turnos/by-dia-hora', async (req, res) => {
       profesorId: r.profesor_id || '',
       alumnoIds: r.alumno_ids || [],
       cupo: r.cupo != null ? Number(r.cupo) : 6,
+      destacado: !!r.destacado,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     });
   } catch (e) {
@@ -900,6 +905,7 @@ app.get('/api/turnos/by-alumno/:alumnoId', async (req, res) => {
       profesorId: r.profesor_id || '',
       alumnoIds: r.alumno_ids || [],
       cupo: r.cupo != null ? Number(r.cupo) : 6,
+      destacado: !!r.destacado,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {

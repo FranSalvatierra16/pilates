@@ -123,6 +123,16 @@ const Calendario = () => {
   // Días de la semana: 0 = Lunes, 1 = Martes, ..., 5 = Sábado (sin domingo)
   const diasSemana = [0, 1, 2, 3, 4, 5];
 
+  // Etiquetas dinámicas según horarios de la sucursal (ej. Nes 9–13h, Savia 7–12h)
+  const labelManana = horariosManana.length ? `${horariosManana[0]} - ${horariosManana[horariosManana.length - 1]}` : 'Mañana';
+  const labelTarde = horariosTarde.length ? `${horariosTarde[0]} - ${horariosTarde[horariosTarde.length - 1]}` : 'Tarde';
+  const labelMananaShort = horariosManana.length
+    ? `${parseInt(horariosManana[0].split(':')[0], 10)}–${parseInt(horariosManana[horariosManana.length - 1].split(':')[0], 10)}h`
+    : '7–12h';
+  const labelTardeShort = horariosTarde.length
+    ? `${parseInt(horariosTarde[0].split(':')[0], 10)}–${parseInt(horariosTarde[horariosTarde.length - 1].split(':')[0], 10)}h`
+    : '16–21h';
+
   const getTurnoDelDia = (diaSemana: number, hora: string): Turno | undefined => {
     return turnos.find(t => t.diaSemana === diaSemana && t.hora === hora);
   };
@@ -554,14 +564,14 @@ const Calendario = () => {
                 onClick={() => setSelectedBloqueMobile('manana')}
                 className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${selectedBloqueMobile === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
               >
-                Mañana (7–12h)
+                Mañana ({labelMananaShort})
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedBloqueMobile('tarde')}
                 className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${selectedBloqueMobile === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
               >
-                Tarde (16–21h)
+                Tarde ({labelTardeShort})
               </button>
             </div>
           </div>
@@ -575,7 +585,7 @@ const Calendario = () => {
               <div className="space-y-5">
                 {(selectedBloqueMobile === 'todos' || selectedBloqueMobile === 'manana') && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-600 mb-2">Mañana (7:00 - 12:00)</h3>
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2">Mañana ({labelManana})</h3>
                   <div className="space-y-3">
                     {horariosManana.map((hora) => {
                       const turno = getTurnoDelDia(diaIndex, hora);
@@ -640,7 +650,7 @@ const Calendario = () => {
                 )}
                 {(selectedBloqueMobile === 'todos' || selectedBloqueMobile === 'tarde') && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-600 mb-2">Tarde (16:00 - 21:00)</h3>
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2">Tarde ({labelTarde})</h3>
                   <div className="space-y-3">
                     {horariosTarde.map((hora) => {
                       const turno = getTurnoDelDia(diaIndex, hora);
@@ -728,7 +738,7 @@ const Calendario = () => {
               </div>
               <div className="border-b border-gray-300">
                 <div className="bg-gray-50 px-2 sm:px-3 py-2 font-semibold text-gray-700 text-xs sm:text-sm">
-                  Mañana (7:00 - 12:00)
+                  Mañana ({labelManana})
                 </div>
                 {horariosManana.map((hora) => (
                   <div key={hora} className="grid grid-cols-8 border-b border-gray-200 hover:bg-gray-50">
@@ -792,7 +802,7 @@ const Calendario = () => {
               </div>
               <div>
                 <div className="bg-gray-50 px-2 sm:px-3 py-2 font-semibold text-gray-700 text-xs sm:text-sm">
-                  Tarde (16:00 - 21:00)
+                  Tarde ({labelTarde})
                 </div>
                 {horariosTarde.map((hora) => (
                   <div key={hora} className="grid grid-cols-8 border-b border-gray-200 hover:bg-gray-50 last:border-b-0">

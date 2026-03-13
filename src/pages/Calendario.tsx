@@ -511,15 +511,22 @@ const Calendario = () => {
       await storageHybrid.asistencias.add(nuevaAsistencia);
     }
 
+    // Si marcó asistió y es recuperación: se elimina de recuperaciones (ya recuperó)
+    if (estado === 'asistio') {
+      const rec = recuperaciones.find(r => r.turnoId === turnoId && r.alumnoId === alumnoId);
+      if (rec) {
+        await storageHybrid.recuperaciones.delete(rec.id);
+        await loadRecuperaciones();
+      }
+    }
+
     await loadAsistencias();
   };
 
   const handleReiniciarSemana = async () => {
-    if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados a gris y quitará los alumnos en recuperación.')) {
+    if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados a gris. Los alumnos en recuperación se mantienen hasta que marques asistencia.')) {
       await storageHybrid.asistencias.deleteBySemana(semanaActual);
-      await storageHybrid.recuperaciones.deleteBySemana(semanaActual);
       await loadAsistencias();
-      await loadRecuperaciones();
     }
   };
 

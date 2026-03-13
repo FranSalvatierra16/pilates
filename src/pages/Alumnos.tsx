@@ -1,10 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar } from 'lucide-react';
-import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '../types';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Check, XCircle, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem, Turno, DIAS_SEMANA } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal } from '../utils/date';
+import { storageApi } from '../utils/storage-api';
+
+const horariosManana_DEFAULT = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
+const horariosTarde_DEFAULT = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+const useApi = () => import.meta.env.VITE_USE_API === 'true' || (import.meta.env.VITE_USE_API !== 'false' && import.meta.env.PROD);
+import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal, getSemanaActual, getSemanaAnterior, getSemanaSiguiente, getRangoSemana, getSemanaFromDate, getFechaFromSemanaYDia } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
 /** Normaliza teléfono para WhatsApp (Argentina: 54 9 área número). Devuelve null si no hay número válido. */
@@ -78,6 +83,10 @@ const Alumnos = () => {
   const [historialPagos, setHistorialPagos] = useState<Pago[]>([]);
   const [historialAsistencias, setHistorialAsistencias] = useState<AsistenciaHistorialItem[]>([]);
   const [historialAsistenciasLoading, setHistorialAsistenciasLoading] = useState(false);
+  const [historialSemanaVista, setHistorialSemanaVista] = useState(getSemanaActual);
+  const [turnosHistorial, setTurnosHistorial] = useState<Turno[]>([]);
+  const [horariosMananaHistorial, setHorariosMananaHistorial] = useState<string[]>(horariosManana_DEFAULT);
+  const [horariosTardeHistorial, setHorariosTardeHistorial] = useState<string[]>(horariosTarde_DEFAULT);
   /** IDs de alumnos que tienen al menos un pago (para no mostrar "Al día" si nunca pagó) */
   const [alumnoIdsConPago, setAlumnoIdsConPago] = useState<Set<string>>(new Set());
   const [formData, setFormData] = useState({
@@ -404,6 +413,17 @@ const Alumnos = () => {
     setShowModalDescripcion(true);
   };
 
+  const handleEliminarAsistenciaHistorial = async (item: AsistenciaHistorialItem) => {
+    if (!alumnoHistorial || !confirm(`¿Eliminar la asistencia del ${formatDate(item.fecha)} ${item.hora}?`)) return;
+    try {
+      await storageHybrid.asistencias.delete(item.id);
+      setHistorialAsistencias((prev) => prev.filter((a) => a.id !== item.id));
+    } catch (e) {
+      console.error(e);
+      alert('No se pudo eliminar.');
+    }
+  };
+
   const handleOpenHistorial = async (alumno: Alumno) => {
     setAlumnoHistorial(alumno);
     setShowModalHistorial(true);
@@ -421,12 +441,31 @@ const Alumnos = () => {
         .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       setHistorialPagos(delAlumno);
     }
+    setHistorialSemanaVista(getSemanaActual);
     setHistorialAsistenciasLoading(true);
     try {
-      const asis = await storageHybrid.alumnos.getAsistencias(alumno.id);
+      const [asis, turnosData] = await Promise.all([
+        storageHybrid.alumnos.getAsistencias(alumno.id),
+        storageHybrid.turnos.getAll(),
+      ]);
       setHistorialAsistencias(asis);
+      setTurnosHistorial(turnosData);
+      if (useApi()) {
+        try {
+          const h = await storageApi.sucursal.getHorarios();
+          setHorariosMananaHistorial(h.manana?.length ? h.manana : horariosManana_DEFAULT);
+          setHorariosTardeHistorial(h.tarde?.length ? h.tarde : horariosTarde_DEFAULT);
+        } catch {
+          setHorariosMananaHistorial(horariosManana_DEFAULT);
+          setHorariosTardeHistorial(horariosTarde_DEFAULT);
+        }
+      } else {
+        setHorariosMananaHistorial(horariosManana_DEFAULT);
+        setHorariosTardeHistorial(horariosTarde_DEFAULT);
+      }
     } catch {
       setHistorialAsistencias([]);
+      setTurnosHistorial([]);
     } finally {
       setHistorialAsistenciasLoading(false);
     }
@@ -1068,95 +1107,178 @@ const Alumnos = () => {
                 </h3>
                 {historialAsistenciasLoading ? (
                   <p className="text-sm text-gray-500">Cargando...</p>
-                ) : historialAsistencias.length === 0 ? (
-                  <p className="text-sm text-gray-500">Sin asistencias registradas.</p>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-500 mb-3">
-                      Este mes: {(() => {
-                        const now = new Date();
-                        const thisYear = now.getFullYear();
-                        const thisMonth = now.getMonth();
-                        const inMonth = historialAsistencias.filter((a) => {
-                          const d = parseFechaLocal(a.fecha);
-                          return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
-                        });
-                        const asistieron = inMonth.filter((a) => (a.estado ?? 'asistio') === 'asistio').length;
-                        const noAsistieron = inMonth.filter((a) => a.estado === 'no_asistio').length;
-                        return `${asistieron} asistieron${noAsistieron > 0 ? `, ${noAsistieron} no asistieron` : ''}`;
-                      })()} · Total: {historialAsistencias.length} clases
-                    </p>
-                    <div className="space-y-4 max-h-64 overflow-y-auto">
-                      {(() => {
-                        const porMes = new Map<string, AsistenciaHistorialItem[]>();
-                        historialAsistencias.forEach((a) => {
-                          const d = parseFechaLocal(a.fecha);
-                          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                          if (!porMes.has(key)) porMes.set(key, []);
-                          porMes.get(key)!.push(a);
-                        });
-                        const meses = Array.from(porMes.entries()).sort(([a], [b]) => b.localeCompare(a));
-                        return meses.map(([key, items]) => {
-                          const [y, m] = key.split('-').map(Number);
-                          const nombreMes = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
-                          const diasDelMes = new Date(y, m, 0).getDate();
-                          const primerDia = new Date(y, m - 1, 1).getDay();
-                          const diasAsistio = new Set(items.filter((i) => (i.estado ?? 'asistio') === 'asistio').map((i) => parseFechaLocal(i.fecha).getDate()));
-                          const diasNoAsistio = new Set(items.filter((i) => i.estado === 'no_asistio').map((i) => parseFechaLocal(i.fecha).getDate()));
-                          const offset = (primerDia + 6) % 7;
-                          return (
-                            <div key={key} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
-                              <p className="text-xs font-semibold text-gray-700 mb-2 capitalize">{nombreMes}</p>
-                              <div className="grid grid-cols-7 gap-0.5 text-center mb-1">
-                                {['L', 'M', 'X', 'J', 'V', 'S'].map((d) => (
-                                  <span key={d} className="text-[10px] text-gray-500 font-medium">{d}</span>
-                                ))}
-                                <span className="hidden" aria-hidden />
-                              </div>
-                              <div className="grid grid-cols-7 gap-0.5 text-center mb-2 [&>span:nth-child(7n)]:hidden">
-                                {Array.from({ length: offset }, (_, i) => (
-                                  <span key={`e-${i}`} />
-                                ))}
-                                {Array.from({ length: diasDelMes }, (_, i) => {
-                                  const dia = i + 1;
-                                  const asiste = diasAsistio.has(dia);
-                                  const noAsiste = diasNoAsistio.has(dia) && !asiste;
-                                  const itemsDia = items.filter((x) => parseFechaLocal(x.fecha).getDate() === dia);
-                                  const tituloAsist = itemsDia.filter((x) => (x.estado ?? 'asistio') === 'asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
-                                  const tituloNoAsist = itemsDia.filter((x) => x.estado === 'no_asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
-                                  const title = asiste ? `${dia} - Asistió: ${tituloAsist}` : noAsiste ? `${dia} - No asistió: ${tituloNoAsist}` : undefined;
-                                  return (
-                                    <span
-                                      key={dia}
-                                      className={`text-xs w-6 h-6 flex items-center justify-center rounded mx-auto ${
-                                        asiste ? 'bg-green-500 text-white font-medium' : noAsiste ? 'bg-red-500 text-white font-medium' : 'text-gray-400'
-                                      }`}
-                                      title={title}
-                                    >
-                                      {dia}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                              <ul className="space-y-1 text-xs">
-                                {items.map((a) => (
-                                  <li key={a.id} className={`flex items-center gap-2 ${(a.estado ?? 'asistio') === 'asistio' ? 'text-green-700' : 'text-red-700'}`}>
-                                    <span className="shrink-0 font-medium w-20">
-                                      {formatDate(a.fecha)}
-                                    </span>
-                                    <span className="shrink-0">{a.hora}</span>
-                                    <span className="truncate">{a.titulo || 'Clase'}</span>
-                                    <span className="shrink-0 text-[10px] font-medium">
-                                      {(a.estado ?? 'asistio') === 'asistio' ? 'Asistió' : 'No asistió'}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          );
-                        });
-                      })()}
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setHistorialSemanaVista(getSemanaAnterior(historialSemanaVista))}
+                        className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+                        title="Semana anterior"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <span className="text-xs font-medium text-gray-700 min-w-[160px] text-center">
+                        {getRangoSemana(historialSemanaVista)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setHistorialSemanaVista(getSemanaSiguiente(historialSemanaVista))}
+                        className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+                        title="Semana siguiente"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      {historialSemanaVista !== getSemanaActual() && (
+                        <button
+                          type="button"
+                          onClick={() => setHistorialSemanaVista(getSemanaActual)}
+                          className="text-xs text-primary-600 hover:underline"
+                        >
+                          Hoy
+                        </button>
+                      )}
+                      <label className="flex items-center gap-1 text-xs text-gray-600">
+                        <Search className="w-3.5 h-3.5" />
+                        <input
+                          type="date"
+                          value={getFechaFromSemanaYDia(historialSemanaVista, 0)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val) setHistorialSemanaVista(getSemanaFromDate(new Date(val)));
+                          }}
+                          className="input-field py-1 px-2 text-xs w-[120px]"
+                          title="Ir a fecha"
+                        />
+                      </label>
                     </div>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Total: {historialAsistencias.length} clases · Verde = asistió, Rojo = no asistió
+                    </p>
+                    <div className="overflow-x-auto -mx-2 sm:mx-0">
+                      <div className="min-w-[520px]">
+                        {(() => {
+                          const diasSemana = [0, 1, 2, 3, 4, 5];
+                          const asisDeSemana = historialAsistencias.filter((a) => a.semana === historialSemanaVista);
+                          const getTurnoDelDia = (dia: number, hora: string) =>
+                            turnosHistorial.find((t) => t.diaSemana === dia && t.hora === hora);
+                          const getAsistenciaEnCelda = (dia: number, hora: string) =>
+                            asisDeSemana.find((a) => a.diaSemana === dia && a.hora === hora) ?? null;
+                          const labelManana = horariosMananaHistorial.length
+                            ? `${horariosMananaHistorial[0]} - ${horariosMananaHistorial[horariosMananaHistorial.length - 1]}`
+                            : 'Mañana';
+                          const labelTarde = horariosTardeHistorial.length
+                            ? `${horariosTardeHistorial[0]} - ${horariosTardeHistorial[horariosTardeHistorial.length - 1]}`
+                            : 'Tarde';
+                          return (
+                            <>
+                              <div className="grid grid-cols-8 border border-gray-200 rounded-t-lg overflow-hidden text-xs">
+                                <div className="p-2 font-semibold text-gray-700 bg-primary-50 border-r border-gray-200">Hora</div>
+                                {diasSemana.map((d) => (
+                                  <div key={d} className="p-2 text-center font-semibold text-gray-700 bg-primary-50 border-r border-gray-200 last:border-r-0">
+                                    {DIAS_SEMANA[d]}
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="border-x border-b border-gray-200">
+                                <div className="bg-gray-50 px-2 py-1.5 font-semibold text-gray-700 text-xs">Mañana ({labelManana})</div>
+                                {horariosMananaHistorial.map((hora) => (
+                                  <div key={hora} className="grid grid-cols-8 border-b border-gray-200 last:border-b-0">
+                                    <div className="p-2 font-medium text-gray-600 bg-gray-50 border-r border-gray-200 text-xs">{hora}</div>
+                                    {diasSemana.map((dia) => {
+                                      const item = getAsistenciaEnCelda(dia, hora);
+                                      const turno = getTurnoDelDia(dia, hora);
+                                      const tieneRegistro = item !== null;
+                                      const titulo = turno?.titulo || item?.titulo || 'Clase';
+                                      return (
+                                        <div
+                                          key={`${dia}-${hora}`}
+                                          className={`p-2 min-h-[48px] border-r border-gray-200 last:border-r-0 flex items-center justify-center ${
+                                            !tieneRegistro ? 'bg-gray-50' : 'bg-white'
+                                          }`}
+                                        >
+                                          {tieneRegistro && (
+                                            item!.estado === 'asistio' ? (
+                                              <span className="p-1.5 rounded bg-green-600 text-white" title={`${titulo} - Asistió`}>
+                                                <Check className="w-4 h-4" />
+                                              </span>
+                                            ) : (
+                                              <span className="p-1.5 rounded bg-red-600 text-white" title={`${titulo} - No asistió`}>
+                                                <XCircle className="w-4 h-4" />
+                                              </span>
+                                            )
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="border-x border-b border-gray-200 rounded-b-lg">
+                                <div className="bg-gray-50 px-2 py-1.5 font-semibold text-gray-700 text-xs">Tarde ({labelTarde})</div>
+                                {horariosTardeHistorial.map((hora) => (
+                                  <div key={hora} className="grid grid-cols-8 border-b border-gray-200 last:border-b-0">
+                                    <div className="p-2 font-medium text-gray-600 bg-gray-50 border-r border-gray-200 text-xs">{hora}</div>
+                                    {diasSemana.map((dia) => {
+                                      const item = getAsistenciaEnCelda(dia, hora);
+                                      const turno = getTurnoDelDia(dia, hora);
+                                      const tieneRegistro = item !== null;
+                                      const titulo = turno?.titulo || item?.titulo || 'Clase';
+                                      return (
+                                        <div
+                                          key={`${dia}-${hora}`}
+                                          className={`p-2 min-h-[48px] border-r border-gray-200 last:border-r-0 flex items-center justify-center ${
+                                            !tieneRegistro ? 'bg-gray-50' : 'bg-white'
+                                          }`}
+                                        >
+                                          {tieneRegistro && (
+                                            item!.estado === 'asistio' ? (
+                                              <span className="p-1.5 rounded bg-green-600 text-white" title={`${titulo} - Asistió`}>
+                                                <Check className="w-4 h-4" />
+                                              </span>
+                                            ) : (
+                                              <span className="p-1.5 rounded bg-red-600 text-white" title={`${titulo} - No asistió`}>
+                                                <XCircle className="w-4 h-4" />
+                                              </span>
+                                            )
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    {historialAsistencias.length > 0 && (
+                      <details className="mt-3">
+                        <summary className="text-xs font-medium text-gray-600 cursor-pointer hover:text-gray-800">Ver lista detallada</summary>
+                        <ul className="mt-2 space-y-1 text-xs max-h-32 overflow-y-auto">
+                          {[...historialAsistencias]
+                            .sort((a, b) => parseFechaLocal(b.fecha).getTime() - parseFechaLocal(a.fecha).getTime())
+                            .map((a) => (
+                              <li key={a.id} className={`flex items-center gap-2 ${(a.estado ?? 'asistio') === 'asistio' ? 'text-green-700' : 'text-red-700'}`}>
+                                <span className="shrink-0 font-medium w-20">{formatDate(a.fecha)}</span>
+                                <span className="shrink-0">{a.hora}</span>
+                                <span className="truncate flex-1">{a.titulo || 'Clase'}</span>
+                                <span className="shrink-0 font-medium">{(a.estado ?? 'asistio') === 'asistio' ? 'Asistió' : 'No asistió'}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEliminarAsistenciaHistorial(a)}
+                                  className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                  title="Eliminar"
+                                  aria-label="Eliminar"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      </details>
+                    )}
                   </>
                 )}
               </div>

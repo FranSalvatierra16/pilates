@@ -1,5 +1,57 @@
 import { format, parseISO, isBefore, isAfter, isSameDay, addMonths } from 'date-fns';
 
+/** Semana actual (YYYY-WW) */
+export function getSemanaActual(): string {
+  const hoy = new Date();
+  const año = hoy.getFullYear();
+  const inicioAño = new Date(año, 0, 1);
+  const dias = Math.floor((hoy.getTime() - inicioAño.getTime()) / (24 * 60 * 60 * 1000));
+  const semana = Math.ceil((dias + inicioAño.getDay() + 1) / 7);
+  return `${año}-${semana.toString().padStart(2, '0')}`;
+}
+
+export function getSemanaAnterior(semana: string): string {
+  const [y, w] = semana.split('-').map(Number);
+  if (w <= 1) return `${y - 1}-52`;
+  return `${y}-${String(w - 1).padStart(2, '0')}`;
+}
+
+export function getSemanaSiguiente(semana: string): string {
+  const [y, w] = semana.split('-').map(Number);
+  if (w >= 52) return `${y + 1}-01`;
+  return `${y}-${String(w + 1).padStart(2, '0')}`;
+}
+
+export function getRangoSemana(semana: string): string {
+  const [y, w] = semana.split('-').map(Number);
+  const jan1 = new Date(y, 0, 1);
+  const dayOfJan1 = jan1.getDay();
+  const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+  const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+  const lunes = new Date(mondayWeek1);
+  lunes.setDate(lunes.getDate() + (w - 1) * 7);
+  const domingo = new Date(lunes);
+  domingo.setDate(domingo.getDate() + 6);
+  return `${lunes.getDate()} ${lunes.toLocaleDateString('es-AR', { month: 'short' })} - ${domingo.getDate()} ${domingo.toLocaleDateString('es-AR', { month: 'short' })} ${domingo.getFullYear()}`;
+}
+
+/** Dado una fecha, devuelve la semana (YYYY-WW) que la contiene */
+export function getSemanaFromDate(fecha: Date): string {
+  const d = new Date(fecha);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const lunes = new Date(d);
+  lunes.setDate(lunes.getDate() - diff);
+  const y = lunes.getFullYear();
+  const jan1 = new Date(y, 0, 1);
+  const dayOfJan1 = jan1.getDay();
+  const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+  const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+  const semanas = Math.floor((lunes.getTime() - mondayWeek1.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return `${y}-${semanas.toString().padStart(2, '0')}`;
+}
+
 /** Parsea YYYY-MM-DD como fecha local (evita problemas de timezone con new Date(string)) */
 export function parseFechaLocal(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);

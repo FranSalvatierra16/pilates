@@ -159,8 +159,8 @@ const Layout = ({ children }: LayoutProps) => {
     <div className="min-h-screen min-h-dvh flex flex-col">
       <nav className="relative z-40 flex-shrink-0 bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200 safe-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between min-h-16 h-16 items-center gap-2">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="flex flex-wrap justify-between min-h-16 py-3 items-center gap-y-2 gap-x-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
               {/* Botón menú móvil: abre panel lateral */}
               <button
                 type="button"
@@ -192,8 +192,8 @@ const Layout = ({ children }: LayoutProps) => {
                   </span>
                 </Link>
               </div>
-              <div className="hidden sm:ml-4 sm:flex sm:min-w-0 sm:overflow-x-auto sm:flex-1">
-                <div className="flex items-center gap-1 sm:gap-2 lg:gap-4">
+              <div className="hidden sm:ml-4 sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3 sm:gap-y-1">
                   {navItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.path;

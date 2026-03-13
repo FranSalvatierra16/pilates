@@ -307,8 +307,8 @@ const Caja = () => {
         </div>
       </div>
 
-      {/* Cards de Resumen - Ingresos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      {/* Cards de Resumen - todos el mismo ancho */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-8">
         <div className="card bg-green-50 border-2 border-green-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-green-700 uppercase tracking-wide">
@@ -390,10 +390,6 @@ const Caja = () => {
             Ingresos - Gastos
           </p>
         </div>
-      </div>
-
-      {/* Estadísticas adicionales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="card bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200">
           <div className="flex items-center gap-3 mb-4">
             <div className="bg-purple-200 p-3 rounded-lg">

@@ -4,7 +4,7 @@ import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profeso
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
-import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy } from '../utils/date';
+import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia } from '../utils/date';
 
 // Horarios por defecto (modo local); en API se cargan desde la sucursal
 const horariosManana_DEFAULT = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
@@ -45,6 +45,23 @@ const getRangoSemana = (semana: string): string => {
   const domingo = new Date(lunes);
   domingo.setDate(domingo.getDate() + 6);
   return `${lunes.getDate()} ${lunes.toLocaleDateString('es-AR', { month: 'short' })} - ${domingo.getDate()} ${domingo.toLocaleDateString('es-AR', { month: 'short' })} ${domingo.getFullYear()}`;
+};
+
+/** Dado una fecha, devuelve la semana (YYYY-WW) que la contiene (lunes a domingo) */
+const getSemanaFromDate = (fecha: Date): string => {
+  const d = new Date(fecha);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const lunes = new Date(d);
+  lunes.setDate(lunes.getDate() - diff);
+  const y = lunes.getFullYear();
+  const jan1 = new Date(y, 0, 1);
+  const dayOfJan1 = jan1.getDay();
+  const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+  const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+  const semanas = Math.floor((lunes.getTime() - mondayWeek1.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return `${y}-${semanas.toString().padStart(2, '0')}`;
 };
 
 const Calendario = () => {
@@ -733,7 +750,7 @@ const Calendario = () => {
             <span className="page-title-accent" aria-hidden />
             <h1 className="page-title">Calendario de Turnos</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setSemanaVista(getSemanaAnterior(semanaVista))}
@@ -762,6 +779,21 @@ const Calendario = () => {
                 Hoy
               </button>
             )}
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <Search className="w-4 h-4 text-gray-500" />
+              <input
+                type="date"
+                value={getFechaFromSemanaYDia(semanaVista, 0)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    setSemanaVista(getSemanaFromDate(new Date(val)));
+                  }
+                }}
+                className="input-field py-1.5 px-2 text-sm w-[140px]"
+                title="Ir a fecha"
+              />
+            </label>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">

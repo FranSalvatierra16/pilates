@@ -1085,22 +1085,41 @@ const Alumnos = () => {
                   <>
                     <p className="text-xs text-gray-500 mb-3">
                       Este mes: {(() => {
+                        const dedup = historialAsistencias.reduce((acc, a) => {
+                          const k = `${a.turnoId}-${a.semana}`;
+                          if (!acc.has(k) || (acc.get(k)!.createdAt < a.createdAt)) acc.set(k, a);
+                          return acc;
+                        }, new Map<string, AsistenciaHistorialItem>());
+                        const asisUnicos = Array.from(dedup.values());
                         const now = new Date();
                         const thisYear = now.getFullYear();
                         const thisMonth = now.getMonth();
-                        const inMonth = historialAsistencias.filter((a) => {
+                        const inMonth = asisUnicos.filter((a) => {
                           const d = parseFechaLocal(a.fecha);
                           return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
                         });
                         const asistieron = inMonth.filter((a) => (a.estado ?? 'asistio') === 'asistio').length;
                         const noAsistieron = inMonth.filter((a) => a.estado === 'no_asistio').length;
                         return `${asistieron} asistieron${noAsistieron > 0 ? `, ${noAsistieron} no asistieron` : ''}`;
-                      })()} · Total: {historialAsistencias.length} clases
+                      })()} · Total: {(() => {
+                        const d = historialAsistencias.reduce((acc, a) => {
+                          const k = `${a.turnoId}-${a.semana}`;
+                          if (!acc.has(k) || (acc.get(k)!.createdAt < a.createdAt)) acc.set(k, a);
+                          return acc;
+                        }, new Map<string, AsistenciaHistorialItem>());
+                        return d.size;
+                      })()} clases
                     </p>
                     <div className="space-y-4 max-h-64 overflow-y-auto">
                       {(() => {
+                        const dedup = historialAsistencias.reduce((acc, a) => {
+                          const k = `${a.turnoId}-${a.semana}`;
+                          if (!acc.has(k) || (acc.get(k)!.createdAt < a.createdAt)) acc.set(k, a);
+                          return acc;
+                        }, new Map<string, AsistenciaHistorialItem>());
+                        const asisUnicos = Array.from(dedup.values());
                         const porMes = new Map<string, AsistenciaHistorialItem[]>();
-                        historialAsistencias.forEach((a) => {
+                        asisUnicos.forEach((a) => {
                           const d = parseFechaLocal(a.fecha);
                           const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                           if (!porMes.has(key)) porMes.set(key, []);

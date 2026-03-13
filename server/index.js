@@ -295,11 +295,11 @@ app.get('/api/alumnos/:id/asistencias', async (req, res) => {
     const { rows: alumnoRows } = await db.query('SELECT id FROM alumnos WHERE id = $1 AND sucursal_id = $2', [alumnoId, sid]);
     if (alumnoRows.length === 0) return res.status(404).json({ error: 'Alumno no encontrado' });
     const { rows } = await db.query(
-      `SELECT asi.id, asi.turno_id, asi.semana, asi.created_at,
+      `SELECT asi.id, asi.turno_id, asi.semana, asi.estado, asi.created_at,
         t.dia_semana, t.hora, t.titulo
        FROM asistencias asi
        JOIN turnos t ON asi.turno_id = t.id AND t.sucursal_id = $1
-       WHERE asi.alumno_id = $2 AND asi.estado = 'asistio'
+       WHERE asi.alumno_id = $2 AND asi.estado IN ('asistio', 'no_asistio')
        ORDER BY asi.created_at DESC
        LIMIT 200`,
       [sid, alumnoId]
@@ -324,6 +324,7 @@ app.get('/api/alumnos/:id/asistencias', async (req, res) => {
         hora: r.hora,
         titulo: r.titulo || 'Clase',
         fecha,
+        estado: r.estado,
         createdAt: r.created_at?.toISOString?.() ?? r.created_at,
       };
     }));

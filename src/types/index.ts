@@ -121,7 +121,7 @@ export interface Recuperacion {
   createdAt: string;
 }
 
-/** Item del historial de asistencias de un alumno (solo asistió) */
+/** Item del historial de asistencias de un alumno */
 export interface AsistenciaHistorialItem {
   id: string;
   turnoId: string;
@@ -131,6 +131,8 @@ export interface AsistenciaHistorialItem {
   titulo: string;
   /** Fecha exacta de la clase (YYYY-MM-DD) calculada desde semana + diaSemana */
   fecha: string;
+  /** asistio = verde, no_asistio = rojo */
+  estado: 'asistio' | 'no_asistio';
   createdAt: string;
 }
 

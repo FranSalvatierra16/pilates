@@ -43,7 +43,7 @@ export const storage = {
       return storage.alumnos.getAll().find(a => a.dni === dni);
     },
     getAsistencias: (alumnoId: string): AsistenciaHistorialItem[] => {
-      const asis = storage.asistencias.getAll().filter(a => a.alumnoId === alumnoId && a.estado === 'asistio');
+      const asis = storage.asistencias.getAll().filter(a => a.alumnoId === alumnoId && a.estado !== null);
       const turnos = storage.turnos.getAll();
       return asis.map(a => {
         const t = turnos.find(x => x.id === a.turnoId);
@@ -51,7 +51,7 @@ export const storage = {
         const hora = t?.hora ?? '';
         const titulo = t?.titulo ?? 'Clase';
         const fecha = getFechaFromSemanaYDia(a.semana, diaSemana);
-        return { id: a.id, turnoId: a.turnoId, semana: a.semana, diaSemana, hora, titulo, fecha, createdAt: a.createdAt };
+        return { id: a.id, turnoId: a.turnoId, semana: a.semana, diaSemana, hora, titulo, fecha, estado: a.estado!, createdAt: a.createdAt };
       }).sort((x, y) => new Date(y.fecha).getTime() - new Date(x.fecha).getTime()).slice(0, 200);
     },
   },

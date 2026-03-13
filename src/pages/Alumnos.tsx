@@ -1081,8 +1081,10 @@ const Alumnos = () => {
                           const d = new Date(a.fecha);
                           return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
                         });
-                        return inMonth.length;
-                      })()} clases · Total: {historialAsistencias.length}
+                        const asistieron = inMonth.filter((a) => (a.estado ?? 'asistio') === 'asistio').length;
+                        const noAsistieron = inMonth.filter((a) => a.estado === 'no_asistio').length;
+                        return `${asistieron} asistieron${noAsistieron > 0 ? `, ${noAsistieron} no asistieron` : ''}`;
+                      })()} · Total: {historialAsistencias.length} clases
                     </p>
                     <div className="space-y-4 max-h-64 overflow-y-auto">
                       {(() => {
@@ -1099,7 +1101,8 @@ const Alumnos = () => {
                           const nombreMes = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
                           const diasDelMes = new Date(y, m, 0).getDate();
                           const primerDia = new Date(y, m - 1, 1).getDay();
-                          const diasConAsistencia = new Set(items.map((i) => new Date(i.fecha).getDate()));
+                          const diasAsistio = new Set(items.filter((i) => (i.estado ?? 'asistio') === 'asistio').map((i) => new Date(i.fecha).getDate()));
+                          const diasNoAsistio = new Set(items.filter((i) => i.estado === 'no_asistio').map((i) => new Date(i.fecha).getDate()));
                           return (
                             <div key={key} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                               <p className="text-xs font-semibold text-gray-700 mb-2 capitalize">{nombreMes}</p>
@@ -1112,14 +1115,19 @@ const Alumnos = () => {
                                 ))}
                                 {Array.from({ length: diasDelMes }, (_, i) => {
                                   const dia = i + 1;
-                                  const asiste = diasConAsistencia.has(dia);
+                                  const asiste = diasAsistio.has(dia);
+                                  const noAsiste = diasNoAsistio.has(dia) && !asiste;
+                                  const itemsDia = items.filter((x) => new Date(x.fecha).getDate() === dia);
+                                  const tituloAsist = itemsDia.filter((x) => (x.estado ?? 'asistio') === 'asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
+                                  const tituloNoAsist = itemsDia.filter((x) => x.estado === 'no_asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
+                                  const title = asiste ? `${dia} - Asistió: ${tituloAsist}` : noAsiste ? `${dia} - No asistió: ${tituloNoAsist}` : undefined;
                                   return (
                                     <span
                                       key={dia}
                                       className={`text-xs w-6 h-6 flex items-center justify-center rounded mx-auto ${
-                                        asiste ? 'bg-green-500 text-white font-medium' : 'text-gray-400'
+                                        asiste ? 'bg-green-500 text-white font-medium' : noAsiste ? 'bg-red-500 text-white font-medium' : 'text-gray-400'
                                       }`}
-                                      title={asiste ? `${dia} - ${items.filter((x) => new Date(x.fecha).getDate() === dia).map((x) => `${x.hora} ${x.titulo}`).join(', ')}` : undefined}
+                                      title={title}
                                     >
                                       {dia}
                                     </span>
@@ -1128,12 +1136,15 @@ const Alumnos = () => {
                               </div>
                               <ul className="space-y-1 text-xs">
                                 {items.map((a) => (
-                                  <li key={a.id} className="flex items-center gap-2 text-gray-700">
-                                    <span className="shrink-0 font-medium text-gray-600 w-20">
+                                  <li key={a.id} className={`flex items-center gap-2 ${(a.estado ?? 'asistio') === 'asistio' ? 'text-green-700' : 'text-red-700'}`}>
+                                    <span className="shrink-0 font-medium w-20">
                                       {formatDate(a.fecha)}
                                     </span>
                                     <span className="shrink-0">{a.hora}</span>
                                     <span className="truncate">{a.titulo || 'Clase'}</span>
+                                    <span className="shrink-0 text-[10px] font-medium">
+                                      {(a.estado ?? 'asistio') === 'asistio' ? 'Asistió' : 'No asistió'}
+                                    </span>
                                   </li>
                                 ))}
                               </ul>

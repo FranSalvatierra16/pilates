@@ -1,4 +1,5 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem } from '../types';
+import { getFechaFromSemanaYDia } from './date';
 
 const STORAGE_KEYS = {
   alumnos: 'savia_alumnos',
@@ -39,6 +40,18 @@ export const storage = {
     },
     findByDni: (dni: string): Alumno | undefined => {
       return storage.alumnos.getAll().find(a => a.dni === dni);
+    },
+    getAsistencias: (alumnoId: string): AsistenciaHistorialItem[] => {
+      const asis = storage.asistencias.getAll().filter(a => a.alumnoId === alumnoId && a.estado === 'asistio');
+      const turnos = storage.turnos.getAll();
+      return asis.map(a => {
+        const t = turnos.find(x => x.id === a.turnoId);
+        const diaSemana = t?.diaSemana ?? 0;
+        const hora = t?.hora ?? '';
+        const titulo = t?.titulo ?? 'Clase';
+        const fecha = getFechaFromSemanaYDia(a.semana, diaSemana);
+        return { id: a.id, turnoId: a.turnoId, semana: a.semana, diaSemana, hora, titulo, fecha, createdAt: a.createdAt };
+      }).sort((x, y) => new Date(y.fecha).getTime() - new Date(x.fecha).getTime()).slice(0, 200);
     },
   },
   

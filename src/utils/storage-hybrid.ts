@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem } from '../types';
 import { storage } from './storage';
 import { storageSupabase } from './storage-supabase';
 import { storageApi } from './storage-api';
@@ -45,6 +45,10 @@ export const storageHybrid = {
       const b = backend();
       if (b) return await b.alumnos.findByDni(dni);
       return storage.alumnos.findByDni(dni);
+    },
+    getAsistencias: async (alumnoId: string): Promise<AsistenciaHistorialItem[]> => {
+      if (useApi()) return await storageApi.alumnos.getAsistencias(alumnoId);
+      return storage.alumnos.getAsistencias(alumnoId);
     },
   },
 

@@ -304,15 +304,29 @@ app.get('/api/alumnos/:id/asistencias', async (req, res) => {
        LIMIT 200`,
       [sid, alumnoId]
     );
-    res.json(rows.map((r) => ({
-      id: r.id,
-      turnoId: r.turno_id,
-      semana: r.semana,
-      diaSemana: r.dia_semana,
-      hora: r.hora,
-      titulo: r.titulo || 'Clase',
-      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
-    })));
+    const getFechaFromSemanaYDia = (semana, diaSemana) => {
+      const [y, w] = semana.split('-').map(Number);
+      const jan1 = new Date(y, 0, 1);
+      const dayOfJan1 = jan1.getDay();
+      const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+      const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+      const d = new Date(mondayWeek1);
+      d.setDate(d.getDate() + (w - 1) * 7 + diaSemana);
+      return d.toISOString().slice(0, 10);
+    };
+    res.json(rows.map((r) => {
+      const fecha = getFechaFromSemanaYDia(r.semana, r.dia_semana);
+      return {
+        id: r.id,
+        turnoId: r.turno_id,
+        semana: r.semana,
+        diaSemana: r.dia_semana,
+        hora: r.hora,
+        titulo: r.titulo || 'Clase',
+        fecha,
+        createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+      };
+    }));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

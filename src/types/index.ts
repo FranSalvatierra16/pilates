@@ -120,6 +120,8 @@ export interface AsistenciaHistorialItem {
   diaSemana: number;
   hora: string;
   titulo: string;
+  /** Fecha exacta de la clase (YYYY-MM-DD) calculada desde semana + diaSemana */
+  fecha: string;
   createdAt: string;
 }
 

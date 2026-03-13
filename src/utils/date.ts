@@ -1,5 +1,17 @@
 import { format, parseISO, isBefore, isAfter, isSameDay, addMonths } from 'date-fns';
 
+/** Calcula la fecha exacta (YYYY-MM-DD) a partir de semana (YYYY-WW) y diaSemana (0=Lun, 5=Sáb) */
+export function getFechaFromSemanaYDia(semana: string, diaSemana: number): string {
+  const [y, w] = semana.split('-').map(Number);
+  const jan1 = new Date(y, 0, 1);
+  const dayOfJan1 = jan1.getDay();
+  const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+  const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+  const d = new Date(mondayWeek1);
+  d.setDate(d.getDate() + (w - 1) * 7 + diaSemana);
+  return d.toISOString().slice(0, 10);
+}
+
 export const formatDate = (dateString: string): string => {
   if (!dateString || dateString.trim() === '') {
     return '-';

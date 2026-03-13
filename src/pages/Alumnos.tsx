@@ -4,8 +4,6 @@ import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '..
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { storageApi } from '../utils/storage-api';
-import { DIAS_SEMANA } from '../types';
 import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
@@ -425,7 +423,7 @@ const Alumnos = () => {
     }
     setHistorialAsistenciasLoading(true);
     try {
-      const asis = await storageApi.alumnos.getAsistencias(alumno.id);
+      const asis = await storageHybrid.alumnos.getAsistencias(alumno.id);
       setHistorialAsistencias(asis);
     } catch {
       setHistorialAsistencias([]);
@@ -1074,31 +1072,76 @@ const Alumnos = () => {
                   <p className="text-sm text-gray-500">Sin asistencias registradas.</p>
                 ) : (
                   <>
-                    <p className="text-xs text-gray-500 mb-2">
+                    <p className="text-xs text-gray-500 mb-3">
                       Este mes: {(() => {
                         const now = new Date();
                         const thisYear = now.getFullYear();
                         const thisMonth = now.getMonth();
                         const inMonth = historialAsistencias.filter((a) => {
-                          const d = new Date(a.createdAt);
+                          const d = new Date(a.fecha);
                           return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
                         });
-                        const distinctClases = new Set(inMonth.map((a) => `${a.turnoId}-${a.semana}`)).size;
-                        return distinctClases;
-                      })()} clases (mismo criterio que la lista)
+                        return inMonth.length;
+                      })()} clases · Total: {historialAsistencias.length}
                     </p>
-                    <ul className="space-y-1.5 max-h-48 overflow-y-auto">
-                      {historialAsistencias.map((a) => (
-                        <li key={a.id} className="text-sm flex items-center gap-2 text-gray-700">
-                          <span className="text-gray-500 shrink-0 w-24">
-                            {new Date(a.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                          </span>
-                          <span className="shrink-0">{DIAS_SEMANA[a.diaSemana] ?? '—'}</span>
-                          <span className="shrink-0">{a.hora}</span>
-                          <span className="truncate">{a.titulo}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="space-y-4 max-h-64 overflow-y-auto">
+                      {(() => {
+                        const porMes = new Map<string, AsistenciaHistorialItem[]>();
+                        historialAsistencias.forEach((a) => {
+                          const d = new Date(a.fecha);
+                          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                          if (!porMes.has(key)) porMes.set(key, []);
+                          porMes.get(key)!.push(a);
+                        });
+                        const meses = Array.from(porMes.entries()).sort(([a], [b]) => b.localeCompare(a));
+                        return meses.map(([key, items]) => {
+                          const [y, m] = key.split('-').map(Number);
+                          const nombreMes = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+                          const diasDelMes = new Date(y, m, 0).getDate();
+                          const primerDia = new Date(y, m - 1, 1).getDay();
+                          const diasConAsistencia = new Set(items.map((i) => new Date(i.fecha).getDate()));
+                          return (
+                            <div key={key} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
+                              <p className="text-xs font-semibold text-gray-700 mb-2 capitalize">{nombreMes}</p>
+                              <div className="grid grid-cols-7 gap-0.5 text-center mb-2">
+                                {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => (
+                                  <span key={d} className="text-[10px] text-gray-500 font-medium">{d}</span>
+                                ))}
+                                {Array.from({ length: (primerDia + 6) % 7 }, (_, i) => (
+                                  <span key={`e-${i}`} />
+                                ))}
+                                {Array.from({ length: diasDelMes }, (_, i) => {
+                                  const dia = i + 1;
+                                  const asiste = diasConAsistencia.has(dia);
+                                  return (
+                                    <span
+                                      key={dia}
+                                      className={`text-xs w-6 h-6 flex items-center justify-center rounded mx-auto ${
+                                        asiste ? 'bg-green-500 text-white font-medium' : 'text-gray-400'
+                                      }`}
+                                      title={asiste ? `${dia} - ${items.filter((x) => new Date(x.fecha).getDate() === dia).map((x) => `${x.hora} ${x.titulo}`).join(', ')}` : undefined}
+                                    >
+                                      {dia}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                              <ul className="space-y-1 text-xs">
+                                {items.map((a) => (
+                                  <li key={a.id} className="flex items-center gap-2 text-gray-700">
+                                    <span className="shrink-0 font-medium text-gray-600 w-20">
+                                      {formatDate(a.fecha)}
+                                    </span>
+                                    <span className="shrink-0">{a.hora}</span>
+                                    <span className="truncate">{a.titulo || 'Clase'}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
                   </>
                 )}
               </div>

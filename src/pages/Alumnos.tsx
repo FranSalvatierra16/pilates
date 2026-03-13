@@ -1138,35 +1138,34 @@ const Alumnos = () => {
                             <div key={key} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                               <p className="text-xs font-semibold text-gray-700 mb-2 capitalize">{nombreMes}</p>
                               <div className="grid grid-cols-7 gap-0.5 text-center mb-1">
-                                {['L', 'M', 'X', 'J', 'V', 'S'].map((d) => (
+                                {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => (
                                   <span key={d} className="text-[10px] text-gray-500 font-medium">{d}</span>
                                 ))}
-                                <span className="hidden" aria-hidden />
                               </div>
-                              <div className="grid grid-cols-7 gap-0.5 text-center mb-2 [&>span:nth-child(7n)]:hidden">
-                                {Array.from({ length: offset }, (_, i) => (
-                                  <span key={`e-${i}`} />
-                                ))}
-                                {Array.from({ length: diasDelMes }, (_, i) => {
-                                  const dia = i + 1;
-                                  const asiste = diasAsistio.has(dia);
-                                  const noAsiste = diasNoAsistio.has(dia) && !asiste;
-                                  const itemsDia = items.filter((x) => parseFechaLocal(x.fecha).getDate() === dia);
-                                  const tituloAsist = itemsDia.filter((x) => (x.estado ?? 'asistio') === 'asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
-                                  const tituloNoAsist = itemsDia.filter((x) => x.estado === 'no_asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
-                                  const title = asiste ? `${dia} - Asistió: ${tituloAsist}` : noAsiste ? `${dia} - No asistió: ${tituloNoAsist}` : undefined;
-                                  return (
-                                    <span
-                                      key={dia}
-                                      className={`text-xs w-6 h-6 flex items-center justify-center rounded mx-auto ${
-                                        asiste ? 'bg-green-500 text-white font-medium' : noAsiste ? 'bg-red-500 text-white font-medium' : 'text-gray-400'
-                                      }`}
-                                      title={title}
-                                    >
-                                      {dia}
-                                    </span>
-                                  );
-                                })}
+                              <div className="grid grid-cols-7 gap-0.5 text-center mb-2">
+                                {Array.from({ length: 6 }, (_, row) =>
+                                  Array.from({ length: 7 }, (_, col) => {
+                                    const dia = row * 7 + col - offset + 1;
+                                    if (dia < 1 || dia > diasDelMes) return <span key={`${row}-${col}`} />;
+                                    const asiste = diasAsistio.has(dia);
+                                    const noAsiste = diasNoAsistio.has(dia) && !asiste;
+                                    const itemsDia = items.filter((x) => parseFechaLocal(x.fecha).getDate() === dia);
+                                    const tituloAsist = itemsDia.filter((x) => (x.estado ?? 'asistio') === 'asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
+                                    const tituloNoAsist = itemsDia.filter((x) => x.estado === 'no_asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
+                                    const title = asiste ? `${dia} - Asistió: ${tituloAsist}` : noAsiste ? `${dia} - No asistió: ${tituloNoAsist}` : undefined;
+                                    return (
+                                      <span
+                                        key={`${row}-${col}`}
+                                        className={`text-xs w-6 h-6 flex items-center justify-center rounded mx-auto ${
+                                          asiste ? 'bg-green-500 text-white font-medium' : noAsiste ? 'bg-red-500 text-white font-medium' : 'text-gray-400'
+                                        }`}
+                                        title={title}
+                                      >
+                                        {dia}
+                                      </span>
+                                    );
+                                  })
+                                )}
                               </div>
                               <ul className="space-y-1 text-xs">
                                 {items.map((a) => (

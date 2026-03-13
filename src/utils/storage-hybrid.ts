@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno } from '../types';
 import { storage } from './storage';
 import { storageSupabase } from './storage-supabase';
 import { storageApi } from './storage-api';
@@ -254,6 +254,21 @@ export const storageHybrid = {
     deleteBySemana: async (semana: string): Promise<void> => {
       if (useApi()) await storageApi.recuperaciones.deleteBySemana(semana);
       else storage.recuperaciones.deleteBySemana(semana);
+    },
+  },
+
+  inscripcionesTurno: {
+    getAll: async (): Promise<InscripcionTurno[]> => {
+      if (useApi()) return await storageApi.inscripcionesTurno.getAll();
+      return storage.inscripcionesTurno.getAll();
+    },
+    add: async (insc: InscripcionTurno): Promise<void> => {
+      if (useApi()) await storageApi.inscripcionesTurno.add(insc);
+      else storage.inscripcionesTurno.add(insc);
+    },
+    deleteByTurnoYAlumno: async (turnoId: string, alumnoId: string): Promise<void> => {
+      if (useApi()) await storageApi.inscripcionesTurno.deleteByTurnoYAlumno(turnoId, alumnoId);
+      else storage.inscripcionesTurno.deleteByTurnoYAlumno(turnoId, alumnoId);
     },
   },
 };

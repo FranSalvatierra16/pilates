@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno } from '../types';
 import { getFechaFromSemanaYDia } from './date';
 
 const STORAGE_KEYS = {
@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   asistencias: 'savia_asistencias',
   profesores: 'savia_profesores',
   recuperaciones: 'savia_recuperaciones',
+  inscripcionesTurno: 'savia_inscripciones_turno',
 } as const;
 
 export const storage = {
@@ -262,6 +263,27 @@ export const storage = {
     deleteBySemana: (semana: string): void => {
       const list = storage.recuperaciones.getAll().filter(r => r.semana !== semana);
       storage.recuperaciones.save(list);
+    },
+  },
+
+  inscripcionesTurno: {
+    getAll: (): InscripcionTurno[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.inscripcionesTurno);
+      return data ? JSON.parse(data) : [];
+    },
+    save: (list: InscripcionTurno[]): void => {
+      localStorage.setItem(STORAGE_KEYS.inscripcionesTurno, JSON.stringify(list));
+    },
+    add: (insc: InscripcionTurno): void => {
+      const list = storage.inscripcionesTurno.getAll();
+      list.push(insc);
+      storage.inscripcionesTurno.save(list);
+    },
+    deleteByTurnoYAlumno: (turnoId: string, alumnoId: string): void => {
+      const list = storage.inscripcionesTurno.getAll().filter(
+        i => !(i.turnoId === turnoId && i.alumnoId === alumnoId)
+      );
+      storage.inscripcionesTurno.save(list);
     },
   },
 };

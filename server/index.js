@@ -1426,6 +1426,62 @@ app.delete('/api/recuperaciones/by-semana/:semana', async (req, res) => {
   }
 });
 
+// Inscripciones turno: alumno en turno desde qué semana (semanas anteriores no lo muestran)
+app.get('/api/inscripciones-turno', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { rows } = await db.query(
+      `SELECT i.id, i.turno_id AS "turnoId", i.alumno_id AS "alumnoId", i.semana_desde AS "semanaDesde", i.created_at AS "createdAt"
+       FROM inscripciones_turno i
+       JOIN turnos t ON i.turno_id = t.id AND t.sucursal_id = $1`,
+      [sid]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/inscripciones-turno', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { turnoId, alumnoId, semanaDesde } = req.body || {};
+    if (!turnoId || !alumnoId || !semanaDesde) return res.status(400).json({ error: 'Faltan turnoId, alumnoId o semanaDesde' });
+    const { rows: turnoRows } = await db.query('SELECT id FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, sid]);
+    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const id = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO inscripciones_turno (id, turno_id, alumno_id, semana_desde, created_at) VALUES ($1, $2, $3, $4, NOW())',
+      [id, turnoId, alumnoId, semanaDesde]
+    );
+    res.status(201).json({ id, turnoId, alumnoId, semanaDesde, createdAt: new Date().toISOString() });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/inscripciones-turno/:turnoId/:alumnoId', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    await db.query(
+      'DELETE FROM inscripciones_turno i USING turnos t WHERE i.turno_id = t.id AND t.sucursal_id = $1 AND i.turno_id = $2 AND i.alumno_id = $3',
+      [sid, req.params.turnoId, req.params.alumnoId]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Auth login (contra la BDD)
 app.post('/api/auth/login', async (req, res) => {
   try {

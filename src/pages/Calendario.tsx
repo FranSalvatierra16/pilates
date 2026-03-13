@@ -75,6 +75,7 @@ const Calendario = () => {
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
   const [esRecuperacion, setEsRecuperacion] = useState(false);
   const [recuperaciones, setRecuperaciones] = useState<{ id: string; turnoId: string; alumnoId: string; semana: string }[]>([]);
+  const [inscripciones, setInscripciones] = useState<{ id: string; turnoId: string; alumnoId: string; semanaDesde: string }[]>([]);
   const CUPO_DEFAULT = 6;
   const [formDataTurno, setFormDataTurno] = useState({
     titulo: '',
@@ -124,6 +125,7 @@ const Calendario = () => {
       await loadProfesores();
       await loadAsistencias();
       await loadRecuperaciones();
+      await loadInscripciones();
     })();
   }, [semanaVista]);
 
@@ -180,6 +182,15 @@ const Calendario = () => {
     }
   };
 
+  const loadInscripciones = async () => {
+    try {
+      const data = await storageHybrid.inscripcionesTurno.getAll();
+      setInscripciones(data);
+    } catch {
+      setInscripciones([]);
+    }
+  };
+
   // Días de la semana: 0 = Lunes, 1 = Martes, ..., 5 = Sábado (sin domingo)
   const diasSemana = [0, 1, 2, 3, 4, 5];
 
@@ -200,7 +211,12 @@ const Calendario = () => {
   type AlumnoEnTurno = { alumno: Alumno; isRecuperacion: boolean; recuperacionId?: string };
   const getAlumnosDelTurno = (turno: Turno | undefined): AlumnoEnTurno[] => {
     if (!turno) return [];
+    // Solo mostrar alumnos cuya inscripción tiene semanaDesde <= semanaVista (semanas anteriores no los muestran)
     const regulares: AlumnoEnTurno[] = turno.alumnoIds
+      .filter(id => {
+        const ins = inscripciones.find(i => i.turnoId === turno.id && i.alumnoId === id);
+        return !ins || ins.semanaDesde <= semanaVista;
+      })
       .map(id => alumnos.find(a => a.id === id))
       .filter((a): a is Alumno => a !== undefined)
       .map(a => ({ alumno: a, isRecuperacion: false }));
@@ -285,7 +301,11 @@ const Calendario = () => {
       const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
       const cupo = turnoExistente?.cupo ?? CUPO_DEFAULT;
       const recsEnTurno = recuperaciones.filter(r => r.turnoId === (turnoExistente?.id ?? ''));
-      const totalEnTurno = (turnoExistente?.alumnoIds.length ?? 0) + recsEnTurno.length;
+      const regularesVisibles = turnoExistente ? turnoExistente.alumnoIds.filter(id => {
+        const ins = inscripciones.find(i => i.turnoId === turnoExistente.id && i.alumnoId === id);
+        return !ins || ins.semanaDesde <= semanaVista;
+      }).length : 0;
+      const totalEnTurno = regularesVisibles + recsEnTurno.length;
 
       if (esRecuperacion) {
         const yaRecuperacion = recsEnTurno.some(r => r.alumnoId === alumnoSeleccionado);
@@ -329,6 +349,13 @@ const Calendario = () => {
             await storageHybrid.turnos.update(turnoExistente.id, {
               alumnoIds: [...turnoExistente.alumnoIds, alumnoSeleccionado],
             });
+            await storageHybrid.inscripcionesTurno.add({
+              id: Date.now().toString(),
+              turnoId: turnoExistente.id,
+              alumnoId: alumnoSeleccionado,
+              semanaDesde: semanaVista,
+              createdAt: new Date().toISOString(),
+            });
           }
         } else {
           const nuevoTurno: Turno = {
@@ -342,10 +369,18 @@ const Calendario = () => {
             createdAt: new Date().toISOString(),
           };
           await storageHybrid.turnos.add(nuevoTurno);
+          await storageHybrid.inscripcionesTurno.add({
+            id: (Date.now() + 1).toString(),
+            turnoId: nuevoTurno.id,
+            alumnoId: alumnoSeleccionado,
+            semanaDesde: semanaVista,
+            createdAt: new Date().toISOString(),
+          });
         }
       }
 
       await loadTurnos();
+      await loadInscripciones();
       await loadRecuperaciones();
       handleCerrarModal();
     } catch (error) {
@@ -396,7 +431,9 @@ const Calendario = () => {
         if (!turno) return;
         const nuevosAlumnoIds = turno.alumnoIds.filter(id => id !== alumnoId);
         await storageHybrid.turnos.update(turnoId, { alumnoIds: nuevosAlumnoIds });
+        await storageHybrid.inscripcionesTurno.deleteByTurnoYAlumno(turnoId, alumnoId);
         await loadTurnos();
+        await loadInscripciones();
       }
       setShowPopupAlumno(null);
     } catch (error) {
@@ -422,6 +459,13 @@ const Calendario = () => {
           await storageHybrid.turnos.update(turnoDestinoExistente.id, {
             alumnoIds: [...turnoDestinoExistente.alumnoIds, showPopupAlumno.alumno.id],
           });
+          await storageHybrid.inscripcionesTurno.add({
+            id: Date.now().toString(),
+            turnoId: turnoDestinoExistente.id,
+            alumnoId: showPopupAlumno.alumno.id,
+            semanaDesde: semanaVista,
+            createdAt: new Date().toISOString(),
+          });
         }
       } else {
         // Crear nuevo turno (sin copiar título ni profesor del turno original)
@@ -435,9 +479,17 @@ const Calendario = () => {
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.turnos.add(nuevoTurno);
+        await storageHybrid.inscripcionesTurno.add({
+          id: (Date.now() + 1).toString(),
+          turnoId: nuevoTurno.id,
+          alumnoId: showPopupAlumno.alumno.id,
+          semanaDesde: semanaVista,
+          createdAt: new Date().toISOString(),
+        });
       }
 
       await loadTurnos();
+      await loadInscripciones();
       setShowPopupAlumno(null);
       setShowMoverAlumno(false);
       setTurnoDestino(null);
@@ -1260,7 +1312,7 @@ const Calendario = () => {
                   <option value="">Seleccionar alumno</option>
                   {alumnosFiltrados.map((alumno) => {
                     const turno = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
-                    const yaEnTurno = turno?.alumnoIds.includes(alumno.id);
+                    const yaEnTurno = getAlumnosDelTurno(turno).some(a => a.alumno.id === alumno.id);
                     const yaRecuperacion = recuperaciones.some(r => r.turnoId === turno?.id && r.alumnoId === alumno.id);
                     const yaAsignado = yaEnTurno || yaRecuperacion;
                     return (

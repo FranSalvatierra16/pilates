@@ -176,3 +176,13 @@ CREATE TABLE IF NOT EXISTS recuperaciones (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_recuperaciones_semana ON recuperaciones(semana);
+
+-- Inscripciones: alumno en turno desde qué semana (semanas anteriores no lo muestran)
+CREATE TABLE IF NOT EXISTS inscripciones_turno (
+  id TEXT PRIMARY KEY,
+  turno_id TEXT NOT NULL REFERENCES turnos(id) ON DELETE CASCADE,
+  alumno_id TEXT NOT NULL REFERENCES alumnos(id) ON DELETE CASCADE,
+  semana_desde TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_inscripciones_turno_turno ON inscripciones_turno(turno_id);

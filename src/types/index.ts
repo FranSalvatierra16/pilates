@@ -103,6 +103,15 @@ export interface Asistencia {
   createdAt: string;
 }
 
+/** Inscripción de alumno a turno: desde qué semana aparece (semanas anteriores no lo muestran) */
+export interface InscripcionTurno {
+  id: string;
+  turnoId: string;
+  alumnoId: string;
+  semanaDesde: string; // YYYY-WW
+  createdAt: string;
+}
+
 /** Inscripción temporal para recuperar clase; desaparece al reiniciar semana o cambiar de semana */
 export interface Recuperacion {
   id: string;

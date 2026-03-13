@@ -312,7 +312,7 @@ app.get('/api/alumnos/:id/asistencias', async (req, res) => {
       const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
       const d = new Date(mondayWeek1);
       d.setDate(d.getDate() + (w - 1) * 7 + diaSemana);
-      return d.toISOString().slice(0, 10);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
     res.json(rows.map((r) => {
       const fecha = getFechaFromSemanaYDia(r.semana, r.dia_semana);

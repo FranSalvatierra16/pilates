@@ -1,5 +1,11 @@
 import { format, parseISO, isBefore, isAfter, isSameDay, addMonths } from 'date-fns';
 
+/** Parsea YYYY-MM-DD como fecha local (evita problemas de timezone con new Date(string)) */
+export function parseFechaLocal(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
 /** Calcula la fecha exacta (YYYY-MM-DD) a partir de semana (YYYY-WW) y diaSemana (0=Lun, 5=Sáb) */
 export function getFechaFromSemanaYDia(semana: string, diaSemana: number): string {
   const [y, w] = semana.split('-').map(Number);
@@ -9,7 +15,7 @@ export function getFechaFromSemanaYDia(semana: string, diaSemana: number): strin
   const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
   const d = new Date(mondayWeek1);
   d.setDate(d.getDate() + (w - 1) * 7 + diaSemana);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export const formatDate = (dateString: string): string => {

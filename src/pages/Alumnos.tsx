@@ -4,7 +4,7 @@ import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '..
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento } from '../utils/date';
+import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
 /** Normaliza teléfono para WhatsApp (Argentina: 54 9 área número). Devuelve null si no hay número válido. */
@@ -1078,7 +1078,7 @@ const Alumnos = () => {
                         const thisYear = now.getFullYear();
                         const thisMonth = now.getMonth();
                         const inMonth = historialAsistencias.filter((a) => {
-                          const d = new Date(a.fecha);
+                          const d = parseFechaLocal(a.fecha);
                           return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
                         });
                         const asistieron = inMonth.filter((a) => (a.estado ?? 'asistio') === 'asistio').length;
@@ -1090,7 +1090,7 @@ const Alumnos = () => {
                       {(() => {
                         const porMes = new Map<string, AsistenciaHistorialItem[]>();
                         historialAsistencias.forEach((a) => {
-                          const d = new Date(a.fecha);
+                          const d = parseFechaLocal(a.fecha);
                           const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                           if (!porMes.has(key)) porMes.set(key, []);
                           porMes.get(key)!.push(a);
@@ -1101,8 +1101,8 @@ const Alumnos = () => {
                           const nombreMes = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
                           const diasDelMes = new Date(y, m, 0).getDate();
                           const primerDia = new Date(y, m - 1, 1).getDay();
-                          const diasAsistio = new Set(items.filter((i) => (i.estado ?? 'asistio') === 'asistio').map((i) => new Date(i.fecha).getDate()));
-                          const diasNoAsistio = new Set(items.filter((i) => i.estado === 'no_asistio').map((i) => new Date(i.fecha).getDate()));
+                          const diasAsistio = new Set(items.filter((i) => (i.estado ?? 'asistio') === 'asistio').map((i) => parseFechaLocal(i.fecha).getDate()));
+                          const diasNoAsistio = new Set(items.filter((i) => i.estado === 'no_asistio').map((i) => parseFechaLocal(i.fecha).getDate()));
                           const offset = (primerDia + 6) % 7;
                           return (
                             <div key={key} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
@@ -1121,7 +1121,7 @@ const Alumnos = () => {
                                   const dia = i + 1;
                                   const asiste = diasAsistio.has(dia);
                                   const noAsiste = diasNoAsistio.has(dia) && !asiste;
-                                  const itemsDia = items.filter((x) => new Date(x.fecha).getDate() === dia);
+                                  const itemsDia = items.filter((x) => parseFechaLocal(x.fecha).getDate() === dia);
                                   const tituloAsist = itemsDia.filter((x) => (x.estado ?? 'asistio') === 'asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
                                   const tituloNoAsist = itemsDia.filter((x) => x.estado === 'no_asistio').map((x) => `${x.hora} ${x.titulo}`).join(', ');
                                   const title = asiste ? `${dia} - Asistió: ${tituloAsist}` : noAsiste ? `${dia} - No asistió: ${tituloNoAsist}` : undefined;

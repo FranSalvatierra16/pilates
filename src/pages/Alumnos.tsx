@@ -1103,14 +1103,18 @@ const Alumnos = () => {
                           const primerDia = new Date(y, m - 1, 1).getDay();
                           const diasAsistio = new Set(items.filter((i) => (i.estado ?? 'asistio') === 'asistio').map((i) => new Date(i.fecha).getDate()));
                           const diasNoAsistio = new Set(items.filter((i) => i.estado === 'no_asistio').map((i) => new Date(i.fecha).getDate()));
+                          const offset = (primerDia + 6) % 7;
                           return (
                             <div key={key} className="border border-gray-200 rounded-lg p-3 bg-gray-50/50">
                               <p className="text-xs font-semibold text-gray-700 mb-2 capitalize">{nombreMes}</p>
-                              <div className="grid grid-cols-7 gap-0.5 text-center mb-2">
-                                {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => (
+                              <div className="grid grid-cols-7 gap-0.5 text-center mb-1">
+                                {['L', 'M', 'X', 'J', 'V', 'S'].map((d) => (
                                   <span key={d} className="text-[10px] text-gray-500 font-medium">{d}</span>
                                 ))}
-                                {Array.from({ length: (primerDia + 6) % 7 }, (_, i) => (
+                                <span className="hidden" aria-hidden />
+                              </div>
+                              <div className="grid grid-cols-7 gap-0.5 text-center mb-2 [&>span:nth-child(7n)]:hidden">
+                                {Array.from({ length: offset }, (_, i) => (
                                   <span key={`e-${i}`} />
                                 ))}
                                 {Array.from({ length: diasDelMes }, (_, i) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap, Users } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap, Users, Settings } from 'lucide-react';
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -9,6 +9,7 @@ import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy } from '.
 // Horarios por defecto (modo local); en API se cargan desde la sucursal
 const horariosManana_DEFAULT = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
 const horariosTarde_DEFAULT = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+const HORAS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0') + ':00');
 const useApi = () => import.meta.env.VITE_USE_API === 'true' || (import.meta.env.VITE_USE_API !== 'false' && import.meta.env.PROD);
 
 // Función para obtener el número de semana (YYYY-WW)
@@ -52,6 +53,14 @@ const Calendario = () => {
     cupo: CUPO_DEFAULT,
   });
   const [showModalAumentarCupo, setShowModalAumentarCupo] = useState(false);
+  const [showModalHorarios, setShowModalHorarios] = useState(false);
+  const [horaInicioManana, setHoraInicioManana] = useState('07:00');
+  const [horaFinManana, setHoraFinManana] = useState('12:00');
+  const [horaInicioTarde, setHoraInicioTarde] = useState('16:00');
+  const [horaFinTarde, setHoraFinTarde] = useState('21:00');
+  const [horariosSaving, setHorariosSaving] = useState(false);
+  const [horariosError, setHorariosError] = useState('');
+  const [horariosSaved, setHorariosSaved] = useState(false);
   const [cupoGlobal, setCupoGlobal] = useState(CUPO_DEFAULT);
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -86,6 +95,17 @@ const Calendario = () => {
       await loadAsistencias();
     })();
   }, [semanaActual]);
+
+  useEffect(() => {
+    if (showModalHorarios && useApi()) {
+      storageApi.sucursal.getHorarios().then((data) => {
+        setHoraInicioManana(data.horaInicioManana || '07:00');
+        setHoraFinManana(data.horaFinManana || '12:00');
+        setHoraInicioTarde(data.horaInicioTarde || '16:00');
+        setHoraFinTarde(data.horaFinTarde || '21:00');
+      }).catch(() => {});
+    }
+  }, [showModalHorarios]);
 
   const loadTurnos = async () => {
     try {
@@ -403,6 +423,34 @@ const Calendario = () => {
     }
   };
 
+  const handleSaveHorarios = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!useApi()) {
+      setHorariosError('En modo local no se pueden guardar horarios.');
+      return;
+    }
+    setHorariosError('');
+    setHorariosSaved(false);
+    setHorariosSaving(true);
+    try {
+      await storageApi.sucursal.updateHorarios({
+        horaInicioManana,
+        horaFinManana,
+        horaInicioTarde,
+        horaFinTarde,
+      });
+      const h = await storageApi.sucursal.getHorarios();
+      setHorariosManana(h.manana?.length ? h.manana : horariosManana_DEFAULT);
+      setHorariosTarde(h.tarde?.length ? h.tarde : horariosTarde_DEFAULT);
+      setHorariosSaved(true);
+      setTimeout(() => setHorariosSaved(false), 3000);
+    } catch (err) {
+      setHorariosError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setHorariosSaving(false);
+    }
+  };
+
   const handleAumentarCupo = async () => {
     const valor = Math.max(1, Math.floor(Number(cupoGlobal)) || CUPO_DEFAULT);
     try {
@@ -506,6 +554,15 @@ const Calendario = () => {
           <h1 className="page-title">Calendario de Turnos</h1>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={() => setShowModalHorarios(true)}
+            className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
+            title="Configurar horarios de clase"
+          >
+            <Settings className="w-4 h-4" />
+            Horarios
+          </button>
           <button
             onClick={handleReiniciarSemana}
             className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
@@ -1049,6 +1106,77 @@ const Calendario = () => {
                   Agregar
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Horarios */}
+      {showModalHorarios && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Horarios</h2>
+              <button
+                type="button"
+                onClick={() => setShowModalHorarios(false)}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 touch-manipulation"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 overflow-y-auto overscroll-contain">
+              {!useApi() ? (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  En modo local no podés configurar horarios. Los horarios se configuran cuando la app está conectada a la base de datos (Railway).
+                </p>
+              ) : (
+                <form onSubmit={handleSaveHorarios} className="space-y-4">
+                  <p className="text-sm text-gray-600">
+                    Definí en qué horarios da clases esta sucursal. En el Calendario solo aparecerán estos bloques.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Mañana: desde</label>
+                      <select value={horaInicioManana} onChange={(e) => setHoraInicioManana(e.target.value)} className="input-field">
+                        {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Mañana: hasta</label>
+                      <select value={horaFinManana} onChange={(e) => setHoraFinManana(e.target.value)} className="input-field">
+                        {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tarde: desde</label>
+                      <select value={horaInicioTarde} onChange={(e) => setHoraInicioTarde(e.target.value)} className="input-field">
+                        {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Tarde: hasta</label>
+                      <select value={horaFinTarde} onChange={(e) => setHoraFinTarde(e.target.value)} className="input-field">
+                        {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  {horariosError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{horariosError}</div>
+                  )}
+                  {horariosSaved && (
+                    <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">Horarios guardados correctamente.</div>
+                  )}
+                  <div className="flex gap-3 pt-2">
+                    <button type="submit" disabled={horariosSaving} className="btn-primary flex items-center gap-2">
+                      <Save className="w-4 h-4" />
+                      {horariosSaving ? 'Guardando...' : 'Guardar horarios'}
+                    </button>
+                    <button type="button" onClick={() => setShowModalHorarios(false)} className="btn-secondary">Cerrar</button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         </div>

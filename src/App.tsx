@@ -34,6 +34,7 @@ import Acceso from './pages/Acceso';
 import Pagos from './pages/Pagos';
 import Caja from './pages/Caja';
 import Notificaciones from './pages/Notificaciones';
+import Configuracion from './pages/Configuracion';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminSucursales from './pages/admin/AdminSucursales';
 import AdminSucursalNueva from './pages/admin/AdminSucursalNueva';
@@ -189,6 +190,16 @@ function App() {
               <ProtectedSucursalRoute>
                 <Layout>
                   <Notificaciones />
+                </Layout>
+              </ProtectedSucursalRoute>
+            }
+          />
+          <Route
+            path="/configuracion"
+            element={
+              <ProtectedSucursalRoute>
+                <Layout>
+                  <Configuracion />
                 </Layout>
               </ProtectedSucursalRoute>
             }

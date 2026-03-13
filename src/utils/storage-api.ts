@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal, HorariosSucursal } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -141,6 +141,16 @@ export const storageApi = {
     deleteBySemana: (semana: string): Promise<void> =>
       request(`/api/asistencias/by-semana/${encodeURIComponent(semana)}`, { method: 'DELETE' }),
   },
+  sucursal: {
+    getHorarios: (): Promise<HorariosSucursal> => request<HorariosSucursal>('/api/sucursal/horarios'),
+    updateHorarios: (data: {
+      horaInicioManana?: string;
+      horaFinManana?: string;
+      horaInicioTarde?: string;
+      horaFinTarde?: string;
+    }): Promise<void> =>
+      request('/api/sucursal/horarios', { method: 'PATCH', body: JSON.stringify(data) }),
+  },
   admin: {
     getSucursales: (): Promise<Sucursal[]> => request<Sucursal[]>('/api/admin/sucursales'),
     createSucursal: (data: {
@@ -160,6 +170,10 @@ export const storageApi = {
         pagoMensual?: number | null;
         fechaVencimientoCuenta?: string | null;
         activa?: boolean;
+        horaInicioManana?: string;
+        horaFinManana?: string;
+        horaInicioTarde?: string;
+        horaFinTarde?: string;
       }
     ): Promise<void> =>
       request(`/api/admin/sucursales/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),

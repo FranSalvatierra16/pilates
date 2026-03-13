@@ -15,6 +15,10 @@ export default function AdminSucursalEditar() {
   const [pagoMensual, setPagoMensual] = useState<string>('');
   const [fechaVencimientoCuenta, setFechaVencimientoCuenta] = useState<string>('');
   const [activa, setActiva] = useState(true);
+  const [horaInicioManana, setHoraInicioManana] = useState('07:00');
+  const [horaFinManana, setHoraFinManana] = useState('12:00');
+  const [horaInicioTarde, setHoraInicioTarde] = useState('16:00');
+  const [horaFinTarde, setHoraFinTarde] = useState('21:00');
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
@@ -33,6 +37,10 @@ export default function AdminSucursalEditar() {
           setPagoMensual(s.pagoMensual != null ? String(s.pagoMensual) : '');
           setFechaVencimientoCuenta(s.fechaVencimientoCuenta || '');
           setActiva(s.activa !== false);
+          setHoraInicioManana(s.horaInicioManana || '07:00');
+          setHoraFinManana(s.horaFinManana || '12:00');
+          setHoraInicioTarde(s.horaInicioTarde || '16:00');
+          setHoraFinTarde(s.horaFinTarde || '21:00');
         } else {
           setLoadError('Sucursal no encontrada');
         }
@@ -68,6 +76,10 @@ export default function AdminSucursalEditar() {
       pagoMensual?: number | null;
       fechaVencimientoCuenta?: string | null;
       activa?: boolean;
+      horaInicioManana?: string;
+      horaFinManana?: string;
+      horaInicioTarde?: string;
+      horaFinTarde?: string;
     } = {
       nombreLugar: nombreLugar.trim(),
       usuario: usuario.trim(),
@@ -77,6 +89,10 @@ export default function AdminSucursalEditar() {
     if (fotoPreview !== undefined) updates.fotoPerfil = fotoPreview;
     updates.pagoMensual = pagoMensual.trim() === '' ? null : Number(pagoMensual);
     updates.fechaVencimientoCuenta = fechaVencimientoCuenta.trim() || null;
+    updates.horaInicioManana = horaInicioManana;
+    updates.horaFinManana = horaFinManana;
+    updates.horaInicioTarde = horaInicioTarde;
+    updates.horaFinTarde = horaFinTarde;
     setLoading(true);
     try {
       await storageApi.admin.updateSucursal(id, updates);
@@ -174,6 +190,44 @@ export default function AdminSucursalEditar() {
               className="input-field"
             />
             <p className="text-xs text-gray-500 mt-0.5">Fecha en que se vence el acceso al sistema (opcional)</p>
+          </div>
+          <div className="border-t border-gray-200 pt-4 mt-4">
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">Horarios de clase</h3>
+            <p className="text-xs text-gray-500 mb-3">Rango de horarios en que esta sucursal da clases (ej. Savia 7–12, Nes 9–13)</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Mañana desde</label>
+                <select value={horaInicioManana} onChange={(e) => setHoraInicioManana(e.target.value)} className="input-field text-sm">
+                  {Array.from({ length: 24 }, (_, i) => (i.toString().padStart(2, '0') + ':00')).map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Mañana hasta</label>
+                <select value={horaFinManana} onChange={(e) => setHoraFinManana(e.target.value)} className="input-field text-sm">
+                  {Array.from({ length: 24 }, (_, i) => (i.toString().padStart(2, '0') + ':00')).map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Tarde desde</label>
+                <select value={horaInicioTarde} onChange={(e) => setHoraInicioTarde(e.target.value)} className="input-field text-sm">
+                  {Array.from({ length: 24 }, (_, i) => (i.toString().padStart(2, '0') + ':00')).map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Tarde hasta</label>
+                <select value={horaFinTarde} onChange={(e) => setHoraFinTarde(e.target.value)} className="input-field text-sm">
+                  {Array.from({ length: 24 }, (_, i) => (i.toString().padStart(2, '0') + ':00')).map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <input

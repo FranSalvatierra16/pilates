@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Menu,
   X,
-  Bell
+  Bell,
+  Settings
 } from 'lucide-react';
 import type { NotificacionItem } from '../pages/Notificaciones';
 
@@ -153,6 +154,7 @@ const Layout = ({ children }: LayoutProps) => {
     { path: '/pagos', label: 'Pagos', icon: CreditCard },
     { path: '/caja', label: 'Caja', icon: Wallet },
     { path: '/notificaciones', label: 'Notif.', icon: Bell },
+    { path: '/configuracion', label: 'Horarios', icon: Settings },
   ];
 
   return (

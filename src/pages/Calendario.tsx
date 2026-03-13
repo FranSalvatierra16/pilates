@@ -3,11 +3,13 @@ import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, Chev
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
+import { storageApi } from '../utils/storage-api';
 import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy } from '../utils/date';
 
-// Horarios disponibles: 7:00-12:00 cada hora, y 16:00-21:00 cada hora
-const HORARIOS_MANANA = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
-const HORARIOS_TARDE = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+// Horarios por defecto (modo local); en API se cargan desde la sucursal
+const horariosManana_DEFAULT = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
+const horariosTarde_DEFAULT = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+const useApi = () => import.meta.env.VITE_USE_API === 'true' || (import.meta.env.VITE_USE_API !== 'false' && import.meta.env.PROD);
 
 // Función para obtener el número de semana (YYYY-WW)
 const getSemanaActual = (): string => {
@@ -20,6 +22,8 @@ const getSemanaActual = (): string => {
 };
 
 const Calendario = () => {
+  const [horariosManana, setHorariosManana] = useState<string[]>(horariosManana_DEFAULT);
+  const [horariosTarde, setHorariosTarde] = useState<string[]>(horariosTarde_DEFAULT);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
@@ -66,6 +70,16 @@ const Calendario = () => {
 
   useEffect(() => {
     (async () => {
+      if (useApi()) {
+        try {
+          const h = await storageApi.sucursal.getHorarios();
+          setHorariosManana(h.manana?.length ? h.manana : horariosManana_DEFAULT);
+          setHorariosTarde(h.tarde?.length ? h.tarde : horariosTarde_DEFAULT);
+        } catch {
+          setHorariosManana(horariosManana_DEFAULT);
+          setHorariosTarde(horariosTarde_DEFAULT);
+        }
+      }
       await loadTurnos();
       await loadAlumnos();
       await loadProfesores();
@@ -563,7 +577,7 @@ const Calendario = () => {
                 <div>
                   <h3 className="text-sm font-semibold text-gray-600 mb-2">Mañana (7:00 - 12:00)</h3>
                   <div className="space-y-3">
-                    {HORARIOS_MANANA.map((hora) => {
+                    {horariosManana.map((hora) => {
                       const turno = getTurnoDelDia(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
@@ -628,7 +642,7 @@ const Calendario = () => {
                 <div>
                   <h3 className="text-sm font-semibold text-gray-600 mb-2">Tarde (16:00 - 21:00)</h3>
                   <div className="space-y-3">
-                    {HORARIOS_TARDE.map((hora) => {
+                    {horariosTarde.map((hora) => {
                       const turno = getTurnoDelDia(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
@@ -716,7 +730,7 @@ const Calendario = () => {
                 <div className="bg-gray-50 px-2 sm:px-3 py-2 font-semibold text-gray-700 text-xs sm:text-sm">
                   Mañana (7:00 - 12:00)
                 </div>
-                {HORARIOS_MANANA.map((hora) => (
+                {horariosManana.map((hora) => (
                   <div key={hora} className="grid grid-cols-8 border-b border-gray-200 hover:bg-gray-50">
                     <div className="sticky left-0 z-10 p-2 sm:p-3 font-medium text-gray-700 border-r border-gray-200 bg-gray-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)] min-w-[52px]">
                       {hora}
@@ -780,7 +794,7 @@ const Calendario = () => {
                 <div className="bg-gray-50 px-2 sm:px-3 py-2 font-semibold text-gray-700 text-xs sm:text-sm">
                   Tarde (16:00 - 21:00)
                 </div>
-                {HORARIOS_TARDE.map((hora) => (
+                {horariosTarde.map((hora) => (
                   <div key={hora} className="grid grid-cols-8 border-b border-gray-200 hover:bg-gray-50 last:border-b-0">
                     <div className="sticky left-0 z-10 p-2 sm:p-3 font-medium text-gray-700 border-r border-gray-200 bg-gray-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)] min-w-[52px]">
                       {hora}
@@ -1270,7 +1284,7 @@ const Calendario = () => {
                       if (dia >= 0 && turnoDestino) {
                         setTurnoDestino({ ...turnoDestino, diaSemana: dia });
                       } else if (dia >= 0) {
-                        setTurnoDestino({ diaSemana: dia, hora: HORARIOS_MANANA[0] });
+                        setTurnoDestino({ diaSemana: dia, hora: horariosManana[0] });
                       }
                     }}
                     className="input-field text-sm"
@@ -1295,12 +1309,12 @@ const Calendario = () => {
                     className="input-field text-sm"
                   >
                     <option value="">Hora</option>
-                    {HORARIOS_MANANA.map((h) => (
+                    {horariosManana.map((h) => (
                       <option key={h} value={h}>
                         {h}
                       </option>
                     ))}
-                    {HORARIOS_TARDE.map((h) => (
+                    {horariosTarde.map((h) => (
                       <option key={h} value={h}>
                         {h}
                       </option>

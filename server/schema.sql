@@ -15,6 +15,11 @@ CREATE INDEX IF NOT EXISTS idx_sucursales_usuario ON sucursales(usuario);
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS pago_mensual NUMERIC;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS fecha_vencimiento_cuenta DATE;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS activa BOOLEAN DEFAULT true;
+-- Horarios configurables por sucursal (ej. Savia 7-12, Nes 9-13)
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_inicio_manana TEXT DEFAULT '07:00';
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_fin_manana TEXT DEFAULT '12:00';
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_inicio_tarde TEXT DEFAULT '16:00';
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_fin_tarde TEXT DEFAULT '21:00';
 
 -- Admin (una cuenta para gestionar todas las sucursales)
 CREATE TABLE IF NOT EXISTS admin (

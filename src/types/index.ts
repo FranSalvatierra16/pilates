@@ -9,10 +9,25 @@ export interface Sucursal {
   fechaVencimientoCuenta: string | null;
   /** Si false, la sucursal no puede iniciar sesión (desactivada temporalmente) */
   activa: boolean;
+  /** Horarios configurables: ej. Savia 7-12, Nes 9-13 */
+  horaInicioManana?: string;
+  horaFinManana?: string;
+  horaInicioTarde?: string;
+  horaFinTarde?: string;
   createdAt: string;
   cantidadAlumnos: number;
   cantidadActividades: number;
   cantidadProfesores: number;
+}
+
+/** Respuesta de GET /api/sucursal/horarios */
+export interface HorariosSucursal {
+  horaInicioManana: string;
+  horaFinManana: string;
+  horaInicioTarde: string;
+  horaFinTarde: string;
+  manana: string[];
+  tarde: string[];
 }
 
 export interface Alumno {

@@ -908,6 +908,74 @@ app.get('/api/turnos/by-alumno/:alumnoId', async (req, res) => {
   }
 });
 
+// --- Horarios de sucursal (configurables por sucursal: ej. Savia 7-12, Nes 9-13) ---
+function generarHorasDesdeHasta(inicio, fin) {
+  const out = [];
+  const [hI, mI] = (inicio || '07:00').split(':').map(Number);
+  const [hF, mF] = (fin || '12:00').split(':').map(Number);
+  let min = hI * 60 + mI;
+  const end = hF * 60 + mF;
+  while (min <= end) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    out.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+    min += 60;
+  }
+  return out;
+}
+
+app.get('/api/sucursal/horarios', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const { rows } = await db.query(
+      'SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde FROM sucursales WHERE id = $1',
+      [sid]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Sucursal no encontrada' });
+    const r = rows[0];
+    const manana = generarHorasDesdeHasta(r.hora_inicio_manana || '07:00', r.hora_fin_manana || '12:00');
+    const tarde = generarHorasDesdeHasta(r.hora_inicio_tarde || '16:00', r.hora_fin_tarde || '21:00');
+    res.json({
+      horaInicioManana: r.hora_inicio_manana || '07:00',
+      horaFinManana: r.hora_fin_manana || '12:00',
+      horaInicioTarde: r.hora_inicio_tarde || '16:00',
+      horaFinTarde: r.hora_fin_tarde || '21:00',
+      manana,
+      tarde,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/sucursal/horarios', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const b = req.body || {};
+    const updates = [];
+    const values = [];
+    let i = 1;
+    if (b.horaInicioManana !== undefined) { updates.push(`hora_inicio_manana = $${i++}`); values.push(b.horaInicioManana || '07:00'); }
+    if (b.horaFinManana !== undefined) { updates.push(`hora_fin_manana = $${i++}`); values.push(b.horaFinManana || '12:00'); }
+    if (b.horaInicioTarde !== undefined) { updates.push(`hora_inicio_tarde = $${i++}`); values.push(b.horaInicioTarde || '16:00'); }
+    if (b.horaFinTarde !== undefined) { updates.push(`hora_fin_tarde = $${i++}`); values.push(b.horaFinTarde || '21:00'); }
+    if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
+    values.push(sid);
+    await db.query(`UPDATE sucursales SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Portal alumno (sin auth: solo sumarse o liberar cupo) ---
 app.get('/api/alumno-portal', async (req, res) => {
   try {
@@ -1433,7 +1501,8 @@ app.get('/api/admin/sucursales', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query(
-      `SELECT s.id, s.nombre_lugar, s.usuario, s.foto_perfil, s.pago_mensual, s.fecha_vencimiento_cuenta, s.activa, s.created_at,
+      `SELECT s.id, s.nombre_lugar, s.usuario, s.foto_perfil, s.pago_mensual, s.fecha_vencimiento_cuenta, s.activa,
+        s.hora_inicio_manana, s.hora_fin_manana, s.hora_inicio_tarde, s.hora_fin_tarde, s.created_at,
         (SELECT COUNT(*) FROM alumnos a WHERE a.sucursal_id = s.id) AS cantidad_alumnos,
         (SELECT COUNT(*) FROM actividades ac WHERE ac.sucursal_id = s.id) AS cantidad_actividades,
         (SELECT COUNT(*) FROM profesores p WHERE p.sucursal_id = s.id) AS cantidad_profesores
@@ -1447,6 +1516,10 @@ app.get('/api/admin/sucursales', async (req, res) => {
       pagoMensual: r.pago_mensual != null ? Number(r.pago_mensual) : null,
       fechaVencimientoCuenta: r.fecha_vencimiento_cuenta ? r.fecha_vencimiento_cuenta.toISOString().slice(0, 10) : null,
       activa: r.activa !== false,
+      horaInicioManana: r.hora_inicio_manana || '07:00',
+      horaFinManana: r.hora_fin_manana || '12:00',
+      horaInicioTarde: r.hora_inicio_tarde || '16:00',
+      horaFinTarde: r.hora_fin_tarde || '21:00',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
       cantidadAlumnos: Number(r.cantidad_alumnos ?? 0),
       cantidadActividades: Number(r.cantidad_actividades ?? 0),
@@ -1504,6 +1577,10 @@ app.patch('/api/admin/sucursales/:id', async (req, res) => {
     if (b.pagoMensual !== undefined) { updates.push(`pago_mensual = $${i++}`); values.push(b.pagoMensual === '' || b.pagoMensual == null ? null : Number(b.pagoMensual)); }
     if (b.fechaVencimientoCuenta !== undefined) { updates.push(`fecha_vencimiento_cuenta = $${i++}`); values.push(b.fechaVencimientoCuenta || null); }
     if (typeof b.activa === 'boolean') { updates.push(`activa = $${i++}`); values.push(b.activa); }
+    if (b.horaInicioManana !== undefined) { updates.push(`hora_inicio_manana = $${i++}`); values.push(b.horaInicioManana || '07:00'); }
+    if (b.horaFinManana !== undefined) { updates.push(`hora_fin_manana = $${i++}`); values.push(b.horaFinManana || '12:00'); }
+    if (b.horaInicioTarde !== undefined) { updates.push(`hora_inicio_tarde = $${i++}`); values.push(b.horaInicioTarde || '16:00'); }
+    if (b.horaFinTarde !== undefined) { updates.push(`hora_fin_tarde = $${i++}`); values.push(b.horaFinTarde || '21:00'); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id);
     await db.query(`UPDATE sucursales SET ${updates.join(', ')} WHERE id = $${i}`, values);

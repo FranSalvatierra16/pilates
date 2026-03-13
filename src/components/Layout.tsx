@@ -159,8 +159,8 @@ const Layout = ({ children }: LayoutProps) => {
     <div className="min-h-screen min-h-dvh flex flex-col">
       <nav className="relative z-40 flex-shrink-0 bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200 safe-top">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between min-h-16 h-16 items-center">
-            <div className="flex items-center gap-2">
+          <div className="flex justify-between min-h-16 h-16 items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               {/* Botón menú móvil: abre panel lateral */}
               <button
                 type="button"
@@ -192,28 +192,30 @@ const Layout = ({ children }: LayoutProps) => {
                   </span>
                 </Link>
               </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'border-primary-500 text-primary-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 mr-2" />
-                      {item.label}
-                    </Link>
-                  );
-                })}
+              <div className="hidden sm:ml-4 sm:flex sm:min-w-0 sm:overflow-x-auto sm:flex-1">
+                <div className="flex items-center gap-1 sm:gap-2 lg:gap-4">
+                  {navItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`inline-flex items-center flex-shrink-0 px-2 py-1 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                          isActive
+                            ? 'bg-primary-50 text-primary-600'
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 mr-1.5 flex-shrink-0" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {useApi() && (
                 <div className="relative" ref={notifRef}>
                   <button

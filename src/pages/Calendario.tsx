@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star } from 'lucide-react';
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -22,6 +22,31 @@ const getSemanaActual = (): string => {
   return `${año}-${semana.toString().padStart(2, '0')}`;
 };
 
+const getSemanaAnterior = (semana: string): string => {
+  const [y, w] = semana.split('-').map(Number);
+  if (w <= 1) return `${y - 1}-52`;
+  return `${y}-${String(w - 1).padStart(2, '0')}`;
+};
+
+const getSemanaSiguiente = (semana: string): string => {
+  const [y, w] = semana.split('-').map(Number);
+  if (w >= 52) return `${y + 1}-01`;
+  return `${y}-${String(w + 1).padStart(2, '0')}`;
+};
+
+const getRangoSemana = (semana: string): string => {
+  const [y, w] = semana.split('-').map(Number);
+  const jan1 = new Date(y, 0, 1);
+  const dayOfJan1 = jan1.getDay();
+  const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+  const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+  const lunes = new Date(mondayWeek1);
+  lunes.setDate(lunes.getDate() + (w - 1) * 7);
+  const domingo = new Date(lunes);
+  domingo.setDate(domingo.getDate() + 6);
+  return `${lunes.getDate()} ${lunes.toLocaleDateString('es-AR', { month: 'short' })} - ${domingo.getDate()} ${domingo.toLocaleDateString('es-AR', { month: 'short' })} ${domingo.getFullYear()}`;
+};
+
 const Calendario = () => {
   const [horariosManana, setHorariosManana] = useState<string[]>(horariosManana_DEFAULT);
   const [horariosTarde, setHorariosTarde] = useState<string[]>(horariosTarde_DEFAULT);
@@ -30,7 +55,7 @@ const Calendario = () => {
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [profesores, setProfesores] = useState<Profesor[]>([]);
   const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
-  const semanaActual = getSemanaActual();
+  const [semanaVista, setSemanaVista] = useState(getSemanaActual);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showModalEditarTurno, setShowModalEditarTurno] = useState(false);
@@ -100,7 +125,7 @@ const Calendario = () => {
       await loadAsistencias();
       await loadRecuperaciones();
     })();
-  }, [semanaActual]);
+  }, [semanaVista]);
 
   useEffect(() => {
     if (showModalHorarios && useApi()) {
@@ -142,13 +167,13 @@ const Calendario = () => {
   };
 
   const loadAsistencias = async () => {
-    const asistenciasSemana = await storageHybrid.asistencias.getBySemana(semanaActual);
+    const asistenciasSemana = await storageHybrid.asistencias.getBySemana(semanaVista);
     setAsistencias(asistenciasSemana);
   };
 
   const loadRecuperaciones = async () => {
     try {
-      const data = await storageHybrid.recuperaciones.getBySemana(semanaActual);
+      const data = await storageHybrid.recuperaciones.getBySemana(semanaVista);
       setRecuperaciones(data);
     } catch {
       setRecuperaciones([]);
@@ -276,7 +301,7 @@ const Calendario = () => {
           id: Date.now().toString(),
           turnoId: turnoExistente?.id ?? '',
           alumnoId: alumnoSeleccionado,
-          semana: semanaActual,
+          semana: semanaVista,
           createdAt: new Date().toISOString(),
         };
         if (!turnoExistente) {
@@ -483,14 +508,14 @@ const Calendario = () => {
 
   const getEstadoAsistencia = (turnoId: string, alumnoId: string): 'asistio' | 'no_asistio' | null => {
     const asistencia = asistencias.find(
-      a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaActual
+      a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaVista
     );
     return asistencia?.estado || null;
   };
 
   const handleMarcarAsistencia = async (turnoId: string, alumnoId: string, estado: 'asistio' | 'no_asistio') => {
     const asistenciaExistente = asistencias.find(
-      a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaActual
+      a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaVista
     );
 
     if (asistenciaExistente) {
@@ -505,27 +530,19 @@ const Calendario = () => {
         turnoId,
         alumnoId,
         estado,
-        semana: semanaActual,
+        semana: semanaVista,
         createdAt: new Date().toISOString(),
       };
       await storageHybrid.asistencias.add(nuevaAsistencia);
     }
 
-    // Si marcó asistió y es recuperación: se elimina de recuperaciones (ya recuperó)
-    if (estado === 'asistio') {
-      const rec = recuperaciones.find(r => r.turnoId === turnoId && r.alumnoId === alumnoId);
-      if (rec) {
-        await storageHybrid.recuperaciones.delete(rec.id);
-        await loadRecuperaciones();
-      }
-    }
-
+    // La recuperación se mantiene para el historial de esa semana (no se elimina al confirmar asistencia)
     await loadAsistencias();
   };
 
   const handleReiniciarSemana = async () => {
-    if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados a gris. Los alumnos en recuperación se mantienen hasta que marques asistencia.')) {
-      await storageHybrid.asistencias.deleteBySemana(semanaActual);
+    if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados (✓/✗) a gris. Los alumnos en recuperación se mantienen.')) {
+      await storageHybrid.asistencias.deleteBySemana(semanaVista);
       await loadAsistencias();
     }
   };
@@ -581,7 +598,7 @@ const Calendario = () => {
 
     turnosDelAlumno.forEach(turno => {
       const asistencia = asistencias.find(
-        a => a.turnoId === turno.id && a.alumnoId === alumnoId && a.semana === semanaActual
+        a => a.turnoId === turno.id && a.alumnoId === alumnoId && a.semana === semanaVista
       );
       if (asistencia?.estado === 'asistio') {
         clasesAsistidas++;
@@ -659,9 +676,41 @@ const Calendario = () => {
   return (
     <div className="pb-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4 sm:mb-8">
-        <div className="page-title-wrap">
-          <span className="page-title-accent" aria-hidden />
-          <h1 className="page-title">Calendario de Turnos</h1>
+        <div className="flex flex-col gap-2">
+          <div className="page-title-wrap">
+            <span className="page-title-accent" aria-hidden />
+            <h1 className="page-title">Calendario de Turnos</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSemanaVista(getSemanaAnterior(semanaVista))}
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 touch-manipulation"
+              title="Semana anterior"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <span className="text-sm font-medium text-gray-700 min-w-[200px] text-center">
+              {getRangoSemana(semanaVista)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSemanaVista(getSemanaSiguiente(semanaVista))}
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 touch-manipulation"
+              title="Semana siguiente"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+            {semanaVista !== getSemanaActual() && (
+              <button
+                type="button"
+                onClick={() => setSemanaVista(getSemanaActual)}
+                className="text-xs text-primary-600 hover:underline"
+              >
+                Hoy
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <button

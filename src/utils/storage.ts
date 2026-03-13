@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion } from '../types';
 
 const STORAGE_KEYS = {
   alumnos: 'savia_alumnos',
@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   gastos: 'savia_gastos',
   asistencias: 'savia_asistencias',
   profesores: 'savia_profesores',
+  recuperaciones: 'savia_recuperaciones',
 } as const;
 
 export const storage = {
@@ -222,6 +223,32 @@ export const storage = {
     },
     getById: (id: string): Profesor | undefined => {
       return storage.profesores.getAll().find(p => p.id === id);
+    },
+  },
+
+  recuperaciones: {
+    getAll: (): Recuperacion[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.recuperaciones);
+      return data ? JSON.parse(data) : [];
+    },
+    save: (recuperaciones: Recuperacion[]): void => {
+      localStorage.setItem(STORAGE_KEYS.recuperaciones, JSON.stringify(recuperaciones));
+    },
+    getBySemana: (semana: string): Recuperacion[] => {
+      return storage.recuperaciones.getAll().filter(r => r.semana === semana);
+    },
+    add: (recuperacion: Recuperacion): void => {
+      const list = storage.recuperaciones.getAll();
+      list.push(recuperacion);
+      storage.recuperaciones.save(list);
+    },
+    delete: (id: string): void => {
+      const list = storage.recuperaciones.getAll().filter(r => r.id !== id);
+      storage.recuperaciones.save(list);
+    },
+    deleteBySemana: (semana: string): void => {
+      const list = storage.recuperaciones.getAll().filter(r => r.semana !== semana);
+      storage.recuperaciones.save(list);
     },
   },
 };

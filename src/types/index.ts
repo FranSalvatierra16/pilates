@@ -101,6 +101,15 @@ export interface Asistencia {
   createdAt: string;
 }
 
+/** Inscripción temporal para recuperar clase; desaparece al reiniciar semana o cambiar de semana */
+export interface Recuperacion {
+  id: string;
+  turnoId: string;
+  alumnoId: string;
+  semana: string; // YYYY-WW
+  createdAt: string;
+}
+
 /** Item del historial de asistencias de un alumno (solo asistió) */
 export interface AsistenciaHistorialItem {
   id: string;

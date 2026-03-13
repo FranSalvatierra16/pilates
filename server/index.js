@@ -1332,6 +1332,80 @@ app.delete('/api/asistencias/by-semana/:semana', async (req, res) => {
   }
 });
 
+// Recuperaciones: alumnos temporales para recuperar clase (desaparecen al reiniciar semana)
+app.get('/api/recuperaciones/by-semana/:semana', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { rows } = await db.query(
+      `SELECT r.id, r.turno_id AS "turnoId", r.alumno_id AS "alumnoId", r.semana, r.created_at AS "createdAt"
+       FROM recuperaciones r
+       JOIN turnos t ON r.turno_id = t.id AND t.sucursal_id = $1
+       WHERE r.semana = $2`,
+      [sid, req.params.semana]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/recuperaciones', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { turnoId, alumnoId, semana } = req.body || {};
+    if (!turnoId || !alumnoId || !semana) return res.status(400).json({ error: 'Faltan turnoId, alumnoId o semana' });
+    const { rows: turnoRows } = await db.query('SELECT id FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, sid]);
+    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const id = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, created_at) VALUES ($1, $2, $3, $4, NOW())',
+      [id, turnoId, alumnoId, semana]
+    );
+    res.status(201).json({ id, turnoId, alumnoId, semana, createdAt: new Date().toISOString() });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/recuperaciones/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { rowCount } = await db.query(
+      'DELETE FROM recuperaciones r USING turnos t WHERE r.turno_id = t.id AND t.sucursal_id = $1 AND r.id = $2',
+      [sid, req.params.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Recuperación no encontrada' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/recuperaciones/by-semana/:semana', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    await db.query(
+      'DELETE FROM recuperaciones r USING turnos t WHERE r.turno_id = t.id AND t.sucursal_id = $1 AND r.semana = $2',
+      [sid, req.params.semana]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Auth login (contra la BDD)
 app.post('/api/auth/login', async (req, res) => {
   try {

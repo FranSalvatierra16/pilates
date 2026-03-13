@@ -165,3 +165,13 @@ CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 CREATE INDEX IF NOT EXISTS idx_turnos_dia_hora ON turnos(dia_semana, hora);
 CREATE INDEX IF NOT EXISTS idx_turnos_profesor_id ON turnos(profesor_id);
 CREATE INDEX IF NOT EXISTS idx_asistencias_semana ON asistencias(semana);
+
+-- Recuperaciones: alumnos agregados temporalmente a una clase para recuperar; desaparecen al reiniciar semana
+CREATE TABLE IF NOT EXISTS recuperaciones (
+  id TEXT PRIMARY KEY,
+  turno_id TEXT NOT NULL REFERENCES turnos(id) ON DELETE CASCADE,
+  alumno_id TEXT NOT NULL REFERENCES alumnos(id) ON DELETE CASCADE,
+  semana TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_recuperaciones_semana ON recuperaciones(semana);

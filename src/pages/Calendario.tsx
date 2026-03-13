@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap, Users, Settings } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw } from 'lucide-react';
 import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -40,12 +40,16 @@ const Calendario = () => {
     turnoId: string;
     diaSemana: number;
     hora: string;
+    isRecuperacion?: boolean;
+    recuperacionId?: string;
     position: { x: number; y: number };
   } | null>(null);
   const [showMoverAlumno, setShowMoverAlumno] = useState(false);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [turnoParaEditar, setTurnoParaEditar] = useState<Turno | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
+  const [esRecuperacion, setEsRecuperacion] = useState(false);
+  const [recuperaciones, setRecuperaciones] = useState<{ id: string; turnoId: string; alumnoId: string; semana: string }[]>([]);
   const CUPO_DEFAULT = 6;
   const [formDataTurno, setFormDataTurno] = useState({
     titulo: '',
@@ -93,6 +97,7 @@ const Calendario = () => {
       await loadAlumnos();
       await loadProfesores();
       await loadAsistencias();
+      await loadRecuperaciones();
     })();
   }, [semanaActual]);
 
@@ -140,6 +145,15 @@ const Calendario = () => {
     setAsistencias(asistenciasSemana);
   };
 
+  const loadRecuperaciones = async () => {
+    try {
+      const data = await storageHybrid.recuperaciones.getBySemana(semanaActual);
+      setRecuperaciones(data);
+    } catch {
+      setRecuperaciones([]);
+    }
+  };
+
   // Días de la semana: 0 = Lunes, 1 = Martes, ..., 5 = Sábado (sin domingo)
   const diasSemana = [0, 1, 2, 3, 4, 5];
 
@@ -157,16 +171,27 @@ const Calendario = () => {
     return turnos.find(t => t.diaSemana === diaSemana && t.hora === hora);
   };
 
-  const getAlumnosDelTurno = (turno: Turno | undefined): Alumno[] => {
+  type AlumnoEnTurno = { alumno: Alumno; isRecuperacion: boolean; recuperacionId?: string };
+  const getAlumnosDelTurno = (turno: Turno | undefined): AlumnoEnTurno[] => {
     if (!turno) return [];
-    return turno.alumnoIds
+    const regulares: AlumnoEnTurno[] = turno.alumnoIds
       .map(id => alumnos.find(a => a.id === id))
-      .filter((a): a is Alumno => a !== undefined);
+      .filter((a): a is Alumno => a !== undefined)
+      .map(a => ({ alumno: a, isRecuperacion: false }));
+    const recs: AlumnoEnTurno[] = recuperaciones
+      .filter(r => r.turnoId === turno.id)
+      .map(r => {
+        const a = alumnos.find(x => x.id === r.alumnoId);
+        return a ? { alumno: a, isRecuperacion: true, recuperacionId: r.id } : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+    return [...regulares, ...recs];
   };
 
   const handleAgregarAlumno = (diaSemana: number, hora: string) => {
     setTurnoSeleccionado({ diaSemana, hora });
     setAlumnoSeleccionado('');
+    setEsRecuperacion(false);
     setFiltroBusqueda('');
     setAlumnosFiltrados(alumnos);
     setShowModal(true);
@@ -205,6 +230,7 @@ const Calendario = () => {
     setShowModal(false);
     setTurnoSeleccionado(null);
     setAlumnoSeleccionado('');
+    setEsRecuperacion(false);
     setFiltroBusqueda('');
   };
 
@@ -230,32 +256,69 @@ const Calendario = () => {
     try {
       const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
       const cupo = turnoExistente?.cupo ?? CUPO_DEFAULT;
+      const recsEnTurno = recuperaciones.filter(r => r.turnoId === (turnoExistente?.id ?? ''));
+      const totalEnTurno = (turnoExistente?.alumnoIds.length ?? 0) + recsEnTurno.length;
 
-      if (turnoExistente) {
-        if (turnoExistente.alumnoIds.length >= cupo) {
-          alert('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (titulo/profesor) o desde "Aumentar cupo".');
+      if (esRecuperacion) {
+        const yaRecuperacion = recsEnTurno.some(r => r.alumnoId === alumnoSeleccionado);
+        if (yaRecuperacion) {
+          handleCerrarModal();
           return;
         }
-        if (!turnoExistente.alumnoIds.includes(alumnoSeleccionado)) {
-          await storageHybrid.turnos.update(turnoExistente.id, {
-            alumnoIds: [...turnoExistente.alumnoIds, alumnoSeleccionado],
-          });
+        if (totalEnTurno >= cupo) {
+          alert('Esta clase ya tiene el cupo completo.');
+          return;
         }
-      } else {
-        const nuevoTurno: Turno = {
+        const rec: { id: string; turnoId: string; alumnoId: string; semana: string; createdAt: string } = {
           id: Date.now().toString(),
-          diaSemana: turnoSeleccionado.diaSemana,
-          hora: turnoSeleccionado.hora,
-          titulo: '',
-          profesorId: '',
-          alumnoIds: [alumnoSeleccionado],
-          cupo: CUPO_DEFAULT,
+          turnoId: turnoExistente?.id ?? '',
+          alumnoId: alumnoSeleccionado,
+          semana: semanaActual,
           createdAt: new Date().toISOString(),
         };
-        await storageHybrid.turnos.add(nuevoTurno);
+        if (!turnoExistente) {
+          const nuevoTurno: Turno = {
+            id: Date.now().toString(),
+            diaSemana: turnoSeleccionado.diaSemana,
+            hora: turnoSeleccionado.hora,
+            titulo: '',
+            profesorId: '',
+            alumnoIds: [],
+            cupo: CUPO_DEFAULT,
+            createdAt: new Date().toISOString(),
+          };
+          await storageHybrid.turnos.add(nuevoTurno);
+          rec.turnoId = nuevoTurno.id;
+        }
+        await storageHybrid.recuperaciones.add(rec);
+      } else {
+        if (turnoExistente) {
+          if (totalEnTurno >= cupo) {
+            alert('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (titulo/profesor) o desde "Aumentar cupo".');
+            return;
+          }
+          if (!turnoExistente.alumnoIds.includes(alumnoSeleccionado)) {
+            await storageHybrid.turnos.update(turnoExistente.id, {
+              alumnoIds: [...turnoExistente.alumnoIds, alumnoSeleccionado],
+            });
+          }
+        } else {
+          const nuevoTurno: Turno = {
+            id: Date.now().toString(),
+            diaSemana: turnoSeleccionado.diaSemana,
+            hora: turnoSeleccionado.hora,
+            titulo: '',
+            profesorId: '',
+            alumnoIds: [alumnoSeleccionado],
+            cupo: CUPO_DEFAULT,
+            createdAt: new Date().toISOString(),
+          };
+          await storageHybrid.turnos.add(nuevoTurno);
+        }
       }
 
       await loadTurnos();
+      await loadRecuperaciones();
       handleCerrarModal();
     } catch (error) {
       console.error('Error guardando turno:', error);
@@ -293,17 +356,18 @@ const Calendario = () => {
     }
   };
 
-  const handleEliminarAlumno = async (turnoId: string, alumnoId: string) => {
-    const turno = turnos.find(t => t.id === turnoId);
-    if (!turno) return;
-
+  const handleEliminarAlumno = async (turnoId: string, alumnoId: string, recuperacionId?: string) => {
     try {
-      const nuevosAlumnoIds = turno.alumnoIds.filter(id => id !== alumnoId);
-      
-      // Actualizar con los alumnos restantes (puede quedar vacío, no importa)
-      await storageHybrid.turnos.update(turnoId, { alumnoIds: nuevosAlumnoIds });
-
-      await loadTurnos();
+      if (recuperacionId) {
+        await storageHybrid.recuperaciones.delete(recuperacionId);
+        await loadRecuperaciones();
+      } else {
+        const turno = turnos.find(t => t.id === turnoId);
+        if (!turno) return;
+        const nuevosAlumnoIds = turno.alumnoIds.filter(id => id !== alumnoId);
+        await storageHybrid.turnos.update(turnoId, { alumnoIds: nuevosAlumnoIds });
+        await loadTurnos();
+      }
       setShowPopupAlumno(null);
     } catch (error) {
       console.error('Error eliminando alumno del turno:', error);
@@ -313,6 +377,7 @@ const Calendario = () => {
 
   const handleMoverAlumno = async () => {
     if (!showPopupAlumno || !turnoDestino) return;
+    if (showPopupAlumno.isRecuperacion) return; // No mover recuperaciones
 
     try {
       // Eliminar del turno original
@@ -352,13 +417,15 @@ const Calendario = () => {
     }
   };
 
-  const handleAbrirPopupAlumno = (e: React.MouseEvent, alumno: Alumno, turno: Turno, diaSemana: number, hora: string) => {
+  const handleAbrirPopupAlumno = (e: React.MouseEvent, item: AlumnoEnTurno, turno: Turno, diaSemana: number, hora: string) => {
     e.stopPropagation();
     setShowPopupAlumno({
-      alumno,
+      alumno: item.alumno,
       turnoId: turno.id,
       diaSemana,
       hora,
+      isRecuperacion: item.isRecuperacion,
+      recuperacionId: item.recuperacionId,
       position: { x: e.clientX, y: e.clientY },
     });
     setShowMoverAlumno(false);
@@ -417,9 +484,11 @@ const Calendario = () => {
   };
 
   const handleReiniciarSemana = async () => {
-    if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados a gris.')) {
+    if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados a gris y quitará los alumnos en recuperación.')) {
       await storageHybrid.asistencias.deleteBySemana(semanaActual);
+      await storageHybrid.recuperaciones.deleteBySemana(semanaActual);
       await loadAsistencias();
+      await loadRecuperaciones();
     }
   };
 
@@ -491,25 +560,28 @@ const Calendario = () => {
     };
   };
 
-  const renderAlumnoEnTurno = (alumno: Alumno, turno: Turno | undefined, diaSemana: number, hora: string) => {
+  const renderAlumnoEnTurno = (item: AlumnoEnTurno, turno: Turno | undefined, diaSemana: number, hora: string) => {
     if (!turno) return null;
+    const { alumno, isRecuperacion } = item;
     
     const estadoAsistencia = getEstadoAsistencia(turno.id, alumno.id);
     const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
     const vencido = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
     const porVencer = tieneFecha && !vencido && (isCuotaVenceHoy(alumno.fechaVencimientoCuota) || isCuotaPorVencer(alumno.fechaVencimientoCuota, 3));
-    // Cuadro: solo rojo/ámbar si está vencido o por vencer; si está al día, todos el mismo color (asistencia solo en los íconos ✓/X)
+    // Recuperación: amarillo + ícono; sino rojo/ámbar si vencido o por vencer; al día: primary
     let bgColor = 'bg-primary-100 text-primary-900';
-    if (vencido) bgColor = 'bg-red-200 text-red-900 border-l-4 border-red-600';
+    if (isRecuperacion) bgColor = 'bg-amber-200 text-amber-900 border-l-4 border-amber-500';
+    else if (vencido) bgColor = 'bg-red-200 text-red-900 border-l-4 border-red-600';
     else if (porVencer) bgColor = 'bg-amber-100 text-amber-900 border-l-4 border-amber-500';
     
     return (
       <div
-        key={alumno.id}
+        key={isRecuperacion ? `rec-${item.recuperacionId}` : alumno.id}
         className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors cursor-pointer`}
-        onClick={(e) => handleAbrirPopupAlumno(e, alumno, turno, diaSemana, hora)}
+        onClick={(e) => handleAbrirPopupAlumno(e, item, turno, diaSemana, hora)}
       >
-        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}>
+        {isRecuperacion && <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 text-amber-700" aria-label="Recuperación" />}
+        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}${isRecuperacion ? ' (recuperación)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}>
           {alumno.nombre} {alumno.apellido}
         </span>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -1067,7 +1139,9 @@ const Calendario = () => {
                   <option value="">Seleccionar alumno</option>
                   {alumnosFiltrados.map((alumno) => {
                     const turno = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
-                    const yaAsignado = turno?.alumnoIds.includes(alumno.id);
+                    const yaEnTurno = turno?.alumnoIds.includes(alumno.id);
+                    const yaRecuperacion = recuperaciones.some(r => r.turnoId === turno?.id && r.alumnoId === alumno.id);
+                    const yaAsignado = yaEnTurno || yaRecuperacion;
                     return (
                       <option
                         key={alumno.id}
@@ -1089,6 +1163,15 @@ const Calendario = () => {
                     Mostrando {alumnosFiltrados.length} de {alumnos.length} alumnos
                   </p>
                 )}
+                <label className="flex items-center gap-2 mt-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={esRecuperacion}
+                    onChange={(e) => setEsRecuperacion(e.target.checked)}
+                    className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Es para recuperar (temporal, desaparece al reiniciar semana)</span>
+                </label>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 flex-shrink-0">
                 <button
@@ -1325,9 +1408,17 @@ const Calendario = () => {
           }}
         >
           <div className="mb-3">
-            <h3 className="font-bold text-gray-900 text-lg mb-1">
-              {showPopupAlumno.alumno.nombre} {showPopupAlumno.alumno.apellido}
-            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-gray-900 text-lg mb-1">
+                {showPopupAlumno.alumno.nombre} {showPopupAlumno.alumno.apellido}
+              </h3>
+              {showPopupAlumno.isRecuperacion && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-900">
+                  <RefreshCw className="w-3 h-3" />
+                  Recuperación
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-600">DNI: {showPopupAlumno.alumno.dni}</p>
             <p className="text-xs text-gray-500 mt-1">
               Turno actual: {DIAS_SEMANA[showPopupAlumno.diaSemana]} {showPopupAlumno.hora}
@@ -1387,25 +1478,30 @@ const Calendario = () => {
                   );
                 })()}
               </div>
+              {!showPopupAlumno.isRecuperacion && (
+                <button
+                  onClick={() => {
+                    setShowMoverAlumno(true);
+                  }}
+                  className="w-full btn-secondary flex items-center justify-center gap-2 text-sm"
+                >
+                  <Move className="w-4 h-4" />
+                  Mover a otro turno
+                </button>
+              )}
               <button
                 onClick={() => {
-                  setShowMoverAlumno(true);
-                }}
-                className="w-full btn-secondary flex items-center justify-center gap-2 text-sm"
-              >
-                <Move className="w-4 h-4" />
-                Mover a otro turno
-              </button>
-              <button
-                onClick={() => {
-                  if (confirm(`¿Estás seguro de que querés eliminar a ${showPopupAlumno.alumno.nombre} ${showPopupAlumno.alumno.apellido} de este turno?`)) {
-                    handleEliminarAlumno(showPopupAlumno.turnoId, showPopupAlumno.alumno.id);
+                  const msg = showPopupAlumno.isRecuperacion
+                    ? `¿Quitar a ${showPopupAlumno.alumno.nombre} ${showPopupAlumno.alumno.apellido} de esta recuperación?`
+                    : `¿Estás seguro de que querés eliminar a ${showPopupAlumno.alumno.nombre} ${showPopupAlumno.alumno.apellido} de este turno?`;
+                  if (confirm(msg)) {
+                    handleEliminarAlumno(showPopupAlumno.turnoId, showPopupAlumno.alumno.id, showPopupAlumno.recuperacionId);
                   }
                 }}
                 className="w-full btn-danger flex items-center justify-center gap-2 text-sm"
               >
                 <Trash2 className="w-4 h-4" />
-                Eliminar del turno
+                {showPopupAlumno.isRecuperacion ? 'Quitar de recuperación' : 'Eliminar del turno'}
               </button>
             </div>
           ) : (

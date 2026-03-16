@@ -781,7 +781,7 @@ const Alumnos = () => {
                           <button onClick={() => handlePagarCuota(alumno)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Pagar cuota"><CreditCard className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenDescripcion(alumno)} className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`} title="Descripción / Notas"><FileText className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenHistorial(alumno)} className="p-1 rounded text-gray-600 hover:text-gray-900" title="Historial de pagos"><History className="w-4 h-4" /></button>
-                          <button onClick={() => handleCopiarLinkClases(alumno)} className="p-1 rounded text-indigo-600 hover:text-indigo-900" title="Link para clases (sumarse/liberar cupo)"><Link2 className="w-4 h-4" /></button>
+                         
                           <button onClick={() => handleOpenModal(alumno)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit className="w-4 h-4" /></button>
                           <button onClick={() => handleDelete(alumno.id)} className="text-red-600 hover:text-red-900" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
                         </div>

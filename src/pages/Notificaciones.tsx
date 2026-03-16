@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Smartphone } from 'lucide-react';
+import { Bell, Smartphone, Info } from 'lucide-react';
 
 const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 const useApi = () => {
@@ -7,6 +7,11 @@ const useApi = () => {
   if (import.meta.env.VITE_USE_API === 'true') return true;
   return import.meta.env.PROD;
 };
+
+function isIos(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -45,6 +50,12 @@ function formatFecha(iso: string) {
   }
 }
 
+const fetchWithTimeout = (url: string, options: RequestInit = {}, ms = 15000): Promise<Response> => {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(id));
+};
+
 export default function Notificaciones() {
   const [list, setList] = useState<NotificacionItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +63,11 @@ export default function Notificaciones() {
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
   const [pushMessage, setPushMessage] = useState<string>('');
   const [pushConfig, setPushConfig] = useState<{ configured: boolean; subscriptionsCount: number } | null>(null);
+  const [isIosDevice, setIsIosDevice] = useState(false);
+
+  useEffect(() => {
+    setIsIosDevice(isIos());
+  }, []);
 
   useEffect(() => {
     if (!useApi()) {
@@ -60,10 +76,10 @@ export default function Notificaciones() {
       return;
     }
     const token = localStorage.getItem('savia_token');
-    fetch(getApiBase() + '/api/notificaciones', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    const url = getApiBase() + '/api/notificaciones';
+    fetchWithTimeout(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} }, 15000)
       .then((r) => {
+        if (r.status === 401) throw new Error('Sesión expirada. Volvé a iniciar sesión.');
         if (!r.ok) throw new Error('Error al cargar notificaciones');
         return r.json();
       })
@@ -72,7 +88,10 @@ export default function Notificaciones() {
         setError(null);
       })
       .catch((e) => {
-        setError(e.message || 'Error de conexión');
+        const msg = e.name === 'AbortError'
+          ? 'La conexión está tardando mucho. Revisá tu internet o probá más tarde.'
+          : (e.message || 'Error de conexión');
+        setError(msg);
         setList([]);
       })
       .finally(() => setLoading(false));
@@ -117,7 +136,7 @@ export default function Notificaciones() {
   const activarPush = async () => {
     if (!useApi() || !('Notification' in window) || !('serviceWorker' in navigator)) {
       setPushStatus('unsupported');
-      setPushMessage('Tu navegador no soporta notificaciones push.');
+      setPushMessage('Tu navegador no soporta notificaciones push. En el celular probá instalando la app (agregar a inicio) y abrila desde ahí.');
       return;
     }
     setPushStatus('loading');
@@ -129,12 +148,14 @@ export default function Notificaciones() {
         return;
       }
       const token = localStorage.getItem('savia_token');
-      const vapidRes = await fetch(getApiBase() + '/api/push-vapid-public', {
+      const base = getApiBase();
+
+      const vapidRes = await fetchWithTimeout(base + '/api/push-vapid-public', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      }, 10000);
       if (!vapidRes.ok) {
         setPushStatus('error');
-        setPushMessage('El servidor no tiene notificaciones push configuradas. En Railway → Variables agregá VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (generalas con: npx web-push generate-vapid-keys).');
+        setPushMessage('El servidor no tiene notificaciones push configuradas.');
         setPushConfig((c) => (c ? { ...c, configured: false } : null));
         return;
       }
@@ -150,16 +171,21 @@ export default function Notificaciones() {
         setPushMessage('Se necesitan permisos para enviar notificaciones al celular.');
         return;
       }
-      const reg = await navigator.serviceWorker.ready;
+
+      const readyPromise = navigator.serviceWorker.ready;
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 20000)
+      );
+      const reg = await Promise.race([readyPromise, timeoutPromise]);
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
       });
-      const subscribeRes = await fetch(getApiBase() + '/api/push-subscribe', {
+      const subscribeRes = await fetchWithTimeout(base + '/api/push-subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ subscription: sub.toJSON() }),
-      });
+      }, 10000);
       if (!subscribeRes.ok) {
         setPushStatus('error');
         setPushMessage('No se pudo registrar el dispositivo.');
@@ -170,13 +196,16 @@ export default function Notificaciones() {
       setPushConfig((c) => (c ? { ...c, subscriptionsCount: c.subscriptionsCount + 1 } : { configured: true, subscriptionsCount: 1 }));
     } catch (e) {
       setPushStatus('error');
-      setPushMessage(e instanceof Error ? e.message : 'Error al activar.');
+      if (e instanceof Error && e.message === 'timeout') {
+        setPushMessage('Está tardando mucho. En iPhone: agregá la app al inicio y abrila desde el ícono, no desde Safari.');
+      } else {
+        setPushMessage(e instanceof Error ? e.message : 'Error al activar.');
+      }
     }
   };
 
   return (
     <div className="space-y-6 w-full max-w-3xl mx-auto">
-      {/* Encabezado: en móvil apilado, botón bien visible */}
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2.5 rounded-xl bg-primary-100 text-primary-600 flex-shrink-0">
@@ -198,6 +227,24 @@ export default function Notificaciones() {
         )}
       </div>
 
+      {/* En iPhone: instrucciones para que lleguen las notificaciones */}
+      {isIosDevice && useApi() && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4">
+          <div className="flex gap-3">
+            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-blue-900">En iPhone las notificaciones solo funcionan así:</h3>
+              <ol className="text-sm text-blue-800 mt-2 space-y-1.5 list-decimal list-inside">
+                <li><strong>Agregar a la pantalla de inicio:</strong> En Safari, tocá el botón compartir (cuadro con flecha) y elegí «Agregar a pantalla de inicio».</li>
+                <li><strong>Abrir desde el ícono:</strong> Entrá a la app tocando el ícono en la pantalla de inicio (no abras el sitio desde Safari en una pestaña).</li>
+                <li><strong>Activar notificaciones:</strong> En esta pantalla tocá «Activar notificaciones en este dispositivo» y aceptá cuando el iPhone lo pida.</li>
+              </ol>
+              <p className="text-xs text-blue-700 mt-2">Necesitás iOS 16.4 o posterior. Si ya lo hiciste y no te llegan, probá cerrar la app, abrirla de nuevo desde el ícono y activar de nuevo.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Activar notificaciones en el celular */}
       {useApi() && (
         <div className="rounded-xl border border-primary-200 bg-primary-50/50 p-4">
@@ -213,12 +260,7 @@ export default function Notificaciones() {
               {pushConfig && (
                 <p className="text-sm mt-2 text-gray-700">
                   {!pushConfig.configured ? (
-                    <span className="text-amber-700 block space-y-1.5">
-                      <span className="block">Para que lleguen al celular, en Railway → Variables agregá:</span>
-                      <span className="block"><strong>VAPID_PUBLIC_KEY</strong> y <strong>VAPID_PRIVATE_KEY</strong></span>
-                      <span className="block">Generalas con:</span>
-                      <code className="block bg-gray-200 px-2 py-1 rounded text-xs break-all font-mono mt-0.5">npx web-push generate-vapid-keys</code>
-                    </span>
+                    <span className="text-amber-700 block">El servidor no tiene notificaciones push configuradas (VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY).</span>
                   ) : pushConfig.subscriptionsCount === 0 ? (
                     'Activá las notificaciones en el dispositivo donde querés recibirlas (botón abajo).'
                   ) : (

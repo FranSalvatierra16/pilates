@@ -58,7 +58,7 @@ function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { ur
 }
 
 const Alumnos = () => {
-  const { sucursalNombre } = useAuth();
+  const { sucursalNombre, sucursalId } = useAuth();
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
@@ -467,12 +467,13 @@ const Alumnos = () => {
   };
 
   const handleCopiarLinkGeneralClases = () => {
-    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/mi-clase`;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const url = sucursalId ? `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}` : `${origin}/mi-clase`;
     try {
       navigator.clipboard.writeText(url);
-      alert('Link general copiado. Compartilo donde quieras (Instagram, WhatsApp, etc.). Cada persona ingresa su DNI para ver sus clases.');
+      alert('Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.');
     } catch {
-      prompt('Copiá este link (es el mismo para todos; cada uno ingresa su DNI):', url);
+      prompt('Copiá este link:', url);
     }
   };
 

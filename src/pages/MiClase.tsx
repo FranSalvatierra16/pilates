@@ -36,6 +36,7 @@ type PortalAuth = { type: 'token'; token: string } | { type: 'dni'; dni: string;
 const MiClase = () => {
   const [searchParams] = useSearchParams();
   const tokenFromUrl = searchParams.get('token') || '';
+  const sucursalIdFromUrl = searchParams.get('sucursalId') || '';
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -80,13 +81,14 @@ const MiClase = () => {
     }
   }, [tokenFromUrl]);
 
-  const cargarPorDni = async (dni: string, sucursalId?: string) => {
+  const cargarPorDni = async (dni: string, sucursalIdElegida?: string) => {
     setEnviandoDni(true);
     setError('');
     try {
       const base = getBase();
+      const sid = sucursalIdElegida?.trim() || sucursalIdFromUrl.trim();
       let url = `${base}/api/alumno-portal?dni=${encodeURIComponent(dni.trim())}`;
-      if (sucursalId?.trim()) url += `&sucursalId=${encodeURIComponent(sucursalId.trim())}`;
+      if (sid) url += `&sucursalId=${encodeURIComponent(sid)}`;
       const res = await fetch(url);
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -99,7 +101,7 @@ const MiClase = () => {
         return;
       }
       setData(json);
-      setPortalAuth({ type: 'dni', dni: dni.trim(), sucursalId: json.sucursalId || '' });
+      setPortalAuth({ type: 'dni', dni: dni.trim(), sucursalId: json.sucursalId || sid || '' });
       setSucursales([]);
     } catch (e) {
       setError('No se pudo cargar. Revisá tu conexión.');
@@ -186,6 +188,7 @@ const MiClase = () => {
   }
 
   if (!data) {
+    const sinSede = !tokenFromUrl && !sucursalIdFromUrl.trim();
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
         <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
@@ -193,19 +196,22 @@ const MiClase = () => {
             <Calendar className="w-5 h-5 text-primary-600" />
             Mis clases
           </h1>
-          <p className="text-sm text-gray-600 mb-2">
-            Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Es el mismo link para todos.
-          </p>
-          <p className="text-xs text-primary-600 mb-4">
-            Sirve para cualquier sede (Savia, Nerea, etc.). Si tu DNI está en más de una sede, te pedimos que elijas después.
-          </p>
-          {error && (
+          {sinSede ? (
+            <p className="text-sm text-gray-600">
+              Este link no indica la sede. Pedile al estudio que te comparta el link de tu sede (el mismo para todos los alumnos de esa sede).
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-gray-600 mb-2">
+                Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Se busca solo en la sede de este link.
+              </p>
+          {!sinSede && error && (
             <div className="mb-3">
               <p className="text-red-600 text-sm">{error}</p>
               {tokenFromUrl && <p className="text-gray-500 text-xs mt-1">Podés ingresar tu DNI acá o pedir un link nuevo al estudio.</p>}
             </div>
           )}
-          {sucursales.length > 0 ? (
+          {sinSede ? null : sucursales.length > 0 ? (
             <div className="space-y-2">
               <p className="text-sm font-medium text-gray-700">Elegí tu sede:</p>
               <div className="flex flex-col gap-1.5">
@@ -249,7 +255,9 @@ const MiClase = () => {
               </button>
             </form>
           )}
-          <p className="text-xs text-gray-500 mt-4">Si tenés un link con token, usalo directamente desde ahí.</p>
+          {!sinSede && <p className="text-xs text-gray-500 mt-4">Si tenés un link con token, usalo directamente desde ahí.</p>}
+            </>
+          )}
         </div>
       </div>
     );

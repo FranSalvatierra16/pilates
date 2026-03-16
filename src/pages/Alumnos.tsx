@@ -466,6 +466,16 @@ const Alumnos = () => {
     }
   };
 
+  const handleCopiarLinkGeneralClases = () => {
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/mi-clase`;
+    try {
+      navigator.clipboard.writeText(url);
+      alert('Link general copiado. Compartilo donde quieras (Instagram, WhatsApp, etc.). Cada persona ingresa su DNI para ver sus clases.');
+    } catch {
+      prompt('Copiá este link (es el mismo para todos; cada uno ingresa su DNI):', url);
+    }
+  };
+
   const handleGuardarDescripcion = async () => {
     if (!alumnoDescripcion) return;
     try {
@@ -498,13 +508,24 @@ const Alumnos = () => {
           <span className="page-title-accent" aria-hidden />
           <h1 className="page-title">Alumnos</h1>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
-        >
-          <Plus className="w-5 h-5" />
-          Nuevo Alumno
-        </button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={handleCopiarLinkGeneralClases}
+            className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
+            title="Un solo link para todos; cada alumno ingresa su DNI"
+          >
+            <Link2 className="w-5 h-5" />
+            Link general (por DNI)
+          </button>
+          <button
+            onClick={() => handleOpenModal()}
+            className="btn-primary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
+          >
+            <Plus className="w-5 h-5" />
+            Nuevo Alumno
+          </button>
+        </div>
       </div>
 
       {/* Búsqueda y filtros por vencimiento */}

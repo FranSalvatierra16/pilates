@@ -18,7 +18,10 @@ type TurnoPortal = {
 type PortalData = {
   alumno: { id: string; nombre: string; apellido: string };
   turnos: TurnoPortal[];
+  sucursalId?: string;
 };
+
+type SucursalOption = { id: string; nombre_lugar: string };
 
 const NOMBRE_DIA = [...DIAS_SEMANA, 'Domingo'];
 const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -28,55 +31,95 @@ const horaToNum = (hora: string): number => {
   return h ?? 0;
 };
 
+type PortalAuth = { type: 'token'; token: string } | { type: 'dni'; dni: string; sucursalId: string };
+
 const MiClase = () => {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token') || '';
+  const tokenFromUrl = searchParams.get('token') || '';
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [portalAuth, setPortalAuth] = useState<PortalAuth | null>(null);
   const [actioning, setActioning] = useState<string | null>(null);
   const [filtroDia, setFiltroDia] = useState<number | null>(null);
   const [filtroHorario, setFiltroHorario] = useState<'todos' | 'manana' | 'tarde'>('todos');
+  // Formulario por DNI (link general)
+  const [dniInput, setDniInput] = useState('');
+  const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
+  const [enviandoDni, setEnviandoDni] = useState(false);
 
   useEffect(() => {
-    if (!token.trim()) {
-      setError('Faltó el link. Pedile al estudio el link para gestionar tus clases.');
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const base = getBase();
-        const res = await fetch(`${base}/api/alumno-portal?token=${encodeURIComponent(token)}`);
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          if (!cancelled) setError(err.error || 'Link inválido o expirado.');
+    if (tokenFromUrl.trim()) {
+      let cancelled = false;
+      (async () => {
+        try {
+          const base = getBase();
+          const res = await fetch(`${base}/api/alumno-portal?token=${encodeURIComponent(tokenFromUrl)}`);
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            if (!cancelled) setError(err.error || 'Link inválido o expirado.');
+            if (!cancelled) setLoading(false);
+            return;
+          }
+          const json = await res.json();
+          if (!cancelled) {
+            setData(json);
+            setPortalAuth({ type: 'token', token: tokenFromUrl });
+            setError('');
+          }
+        } catch (e) {
+          if (!cancelled) setError('No se pudo cargar. Revisá tu conexión.');
+        } finally {
           if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => { cancelled = true; };
+    } else {
+      setLoading(false);
+      setError('');
+    }
+  }, [tokenFromUrl]);
+
+  const cargarPorDni = async (dni: string, sucursalId?: string) => {
+    setEnviandoDni(true);
+    setError('');
+    try {
+      const base = getBase();
+      let url = `${base}/api/alumno-portal?dni=${encodeURIComponent(dni.trim())}`;
+      if (sucursalId?.trim()) url += `&sucursalId=${encodeURIComponent(sucursalId.trim())}`;
+      const res = await fetch(url);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 400 && json.sucursales?.length) {
+          setSucursales(json.sucursales);
+          setError(json.error || 'Elegí tu sede');
           return;
         }
-        const json = await res.json();
-        if (!cancelled) {
-          setData(json);
-          setError('');
-        }
-      } catch (e) {
-        if (!cancelled) setError('No se pudo cargar. Revisá tu conexión.');
-      } finally {
-        if (!cancelled) setLoading(false);
+        setError(json.error || 'No se pudo cargar.');
+        return;
       }
-    })();
-    return () => { cancelled = true; };
-  }, [token]);
+      setData(json);
+      setPortalAuth({ type: 'dni', dni: dni.trim(), sucursalId: json.sucursalId || '' });
+      setSucursales([]);
+    } catch (e) {
+      setError('No se pudo cargar. Revisá tu conexión.');
+    } finally {
+      setEnviandoDni(false);
+    }
+  };
 
   const inscribir = async (turnoId: string) => {
+    if (!portalAuth) return;
     setActioning(turnoId);
     try {
       const base = getBase();
+      const body = portalAuth.type === 'token'
+        ? { token: portalAuth.token, turnoId }
+        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId };
       const res = await fetch(`${base}/api/alumno-portal/inscribir`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, turnoId }),
+        body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -99,13 +142,17 @@ const MiClase = () => {
   };
 
   const liberar = async (turnoId: string) => {
+    if (!portalAuth) return;
     setActioning(turnoId);
     try {
       const base = getBase();
+      const body = portalAuth.type === 'token'
+        ? { token: portalAuth.token, turnoId }
+        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId };
       const res = await fetch(`${base}/api/alumno-portal/liberar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, turnoId }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
@@ -138,12 +185,68 @@ const MiClase = () => {
     );
   }
 
-  if (error || !data) {
+  if (!data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full text-center">
-          <p className="text-red-600 font-medium">{error}</p>
-          <p className="text-sm text-gray-500 mt-2">Si el link se venció, pedile al estudio que te envíe uno nuevo.</p>
+        <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
+          <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
+            <Calendar className="w-5 h-5 text-primary-600" />
+            Mis clases
+          </h1>
+          <p className="text-sm text-gray-600 mb-4">
+            Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Es el mismo link para todos.
+          </p>
+          {error && (
+            <div className="mb-3">
+              <p className="text-red-600 text-sm">{error}</p>
+              {tokenFromUrl && <p className="text-gray-500 text-xs mt-1">Podés ingresar tu DNI acá o pedir un link nuevo al estudio.</p>}
+            </div>
+          )}
+          {sucursales.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Elegí tu sede:</p>
+              <div className="flex flex-col gap-1.5">
+                {sucursales.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => cargarPorDni(dniInput, s.id)}
+                    disabled={enviandoDni}
+                    className="px-4 py-2 rounded-lg bg-primary-100 text-primary-800 hover:bg-primary-200 font-medium text-sm disabled:opacity-50"
+                  >
+                    {s.nombre_lugar}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (dniInput.trim()) cargarPorDni(dniInput);
+              }}
+              className="space-y-3"
+            >
+              <label className="block text-sm font-medium text-gray-700">DNI</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Ej. 12345678"
+                value={dniInput}
+                onChange={(e) => setDniInput(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                autoFocus
+              />
+              <button
+                type="submit"
+                disabled={enviandoDni || !dniInput.trim()}
+                className="w-full py-3 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {enviandoDni ? 'Cargando...' : 'Entrar'}
+              </button>
+            </form>
+          )}
+          <p className="text-xs text-gray-500 mt-4">Si tenés un link con token, usalo directamente desde ahí.</p>
         </div>
       </div>
     );

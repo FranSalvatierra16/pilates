@@ -997,18 +997,45 @@ app.patch('/api/sucursal/horarios', async (req, res) => {
   }
 });
 
-// --- Portal alumno (sin auth: solo sumarse o liberar cupo) ---
+// --- Portal alumno (sin auth: por token o por DNI) ---
+// Resuelve alumno por token o por dni (+ sucursalId opcional). Retorna { alumno, sucursalId } o error.
+async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
+  if (token && token.trim()) {
+    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE link_token = $1', [token.trim()]);
+    if (rows.length === 0) return { error: 404, message: 'Link inválido o expirado' };
+    return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
+  }
+  const dniTrim = (dni || '').toString().trim();
+  if (!dniTrim) return { error: 400, message: 'Ingresá tu DNI' };
+  if (sucursalId && sucursalId.trim()) {
+    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE dni = $1 AND sucursal_id = $2', [dniTrim, sucursalId.trim()]);
+    if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI en esta sede' };
+    return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
+  }
+  const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE dni = $1', [dniTrim]);
+  if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI' };
+  if (rows.length === 1) return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
+  const { rows: sucursales } = await db.query(
+    'SELECT s.id, s.nombre_lugar FROM sucursales s WHERE s.id = ANY($1)',
+    [rows.map((r) => r.sucursal_id)]
+  );
+  return { error: 400, sucursales, message: 'Hay varias sedes con ese DNI. Elegí tu sede.' };
+}
+
 app.get('/api/alumno-portal', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const token = (req.query.token || '').toString().trim();
-    if (!token) return res.status(400).json({ error: 'Faltó el token' });
-    const { rows: alumnoRows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE link_token = $1', [token]);
-    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Link inválido o expirado' });
-    const alumno = alumnoRows[0];
-    const sucursalId = alumno.sucursal_id;
-    const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora, titulo, alumno_ids, cupo FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora', [sucursalId]);
+    const dni = (req.query.dni || '').toString().trim();
+    const sucursalId = (req.query.sucursalId || '').toString().trim();
+    const resolved = await resolveAlumnoPortal(db, { token, dni, sucursalId });
+    if (resolved.error) {
+      if (resolved.sucursales) return res.status(400).json({ error: resolved.message, sucursales: resolved.sucursales });
+      return res.status(resolved.error).json({ error: resolved.message });
+    }
+    const { alumno, sucursalId: sid } = resolved;
+    const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora, titulo, alumno_ids, cupo FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora', [sid]);
     const turnos = turnoRows.map((r) => {
       const alumnoIds = r.alumno_ids || [];
       const cupo = r.cupo != null ? Number(r.cupo) : 6;
@@ -1025,6 +1052,7 @@ app.get('/api/alumno-portal', async (req, res) => {
     res.json({
       alumno: { id: alumno.id, nombre: alumno.nombre, apellido: alumno.apellido },
       turnos,
+      sucursalId: sid, // para que el front use dni+sucursalId en inscribir/liberar
     });
   } catch (e) {
     console.error(e);
@@ -1036,11 +1064,15 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { token, turnoId } = req.body || {};
-    if (!token || !turnoId) return res.status(400).json({ error: 'Faltan token o turnoId' });
-    const { rows: alumnoRows } = await db.query('SELECT id, sucursal_id FROM alumnos WHERE link_token = $1', [token]);
-    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Link inválido' });
-    const alumno = alumnoRows[0];
+    const { token, dni, sucursalId, turnoId } = req.body || {};
+    if (!turnoId) return res.status(400).json({ error: 'Falta turnoId' });
+    const resolved = await resolveAlumnoPortal(db, {
+      token: (token || '').toString().trim(),
+      dni: (dni || '').toString().trim(),
+      sucursalId: (sucursalId || '').toString().trim(),
+    });
+    if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
+    const alumno = resolved.alumno;
     const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const t = turnoRows[0];
@@ -1078,11 +1110,15 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { token, turnoId } = req.body || {};
-    if (!token || !turnoId) return res.status(400).json({ error: 'Faltan token o turnoId' });
-    const { rows: alumnoRows } = await db.query('SELECT id, sucursal_id FROM alumnos WHERE link_token = $1', [token]);
-    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Link inválido' });
-    const alumno = alumnoRows[0];
+    const { token, dni, sucursalId, turnoId } = req.body || {};
+    if (!turnoId) return res.status(400).json({ error: 'Falta turnoId' });
+    const resolved = await resolveAlumnoPortal(db, {
+      token: (token || '').toString().trim(),
+      dni: (dni || '').toString().trim(),
+      sucursalId: (sucursalId || '').toString().trim(),
+    });
+    if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
+    const alumno = resolved.alumno;
     const { rows: turnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const ids = (turnoRows[0].alumno_ids || []).filter((id) => id !== alumno.id);

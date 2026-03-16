@@ -58,7 +58,16 @@ function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { ur
 }
 
 const Alumnos = () => {
-  const { sucursalNombre, sucursalId } = useAuth();
+  const { sucursalNombre, sucursalId: sucursalIdContext, token, role } = useAuth();
+  // Si la sesión es vieja puede no tener sucursalId guardado; lo sacamos del JWT
+  const sucursalId = sucursalIdContext || (role === 'sucursal' && token ? (() => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sucursalId || payload.sub || null;
+    } catch {
+      return null;
+    }
+  })() : null);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
@@ -468,7 +477,11 @@ const Alumnos = () => {
 
   const handleCopiarLinkGeneralClases = () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const url = sucursalId ? `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}` : `${origin}/mi-clase`;
+    if (!sucursalId) {
+      alert('No se pudo detectar la sede. Cerrando sesión y volvé a entrar para que el link general incluya tu sede.');
+      return;
+    }
+    const url = `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}`;
     try {
       navigator.clipboard.writeText(url);
       alert('Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.');

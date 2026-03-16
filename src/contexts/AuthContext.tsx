@@ -43,11 +43,22 @@ function loadStored(): AuthState {
   const token = localStorage.getItem(TOKEN_KEY);
   const role = localStorage.getItem(ROLE_KEY) as Role | null;
   if (!token || !role) return { isAuthenticated: false, role: null, token: null, sucursalId: null, sucursalNombre: null, fotoPerfil: null };
+  let sucursalId = localStorage.getItem(SUCURSAL_ID_KEY);
+  // Sesiones antiguas pueden no tener sucursalId; lo obtenemos del JWT
+  if (!sucursalId && role === 'sucursal') {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      sucursalId = payload.sucursalId || payload.sub || null;
+      if (sucursalId) localStorage.setItem(SUCURSAL_ID_KEY, sucursalId);
+    } catch {
+      // ignore
+    }
+  }
   return {
     isAuthenticated: true,
     role,
     token,
-    sucursalId: localStorage.getItem(SUCURSAL_ID_KEY),
+    sucursalId,
     sucursalNombre: localStorage.getItem(SUCURSAL_NOMBRE_KEY),
     fotoPerfil: localStorage.getItem(FOTO_PERFIL_KEY),
   };

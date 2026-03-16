@@ -193,8 +193,11 @@ const MiClase = () => {
             <Calendar className="w-5 h-5 text-primary-600" />
             Mis clases
           </h1>
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm text-gray-600 mb-2">
             Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Es el mismo link para todos.
+          </p>
+          <p className="text-xs text-primary-600 mb-4">
+            Sirve para cualquier sede (Savia, Nerea, etc.). Si tu DNI está en más de una sede, te pedimos que elijas después.
           </p>
           {error && (
             <div className="mb-3">

@@ -15,10 +15,18 @@ type TurnoPortal = {
   yaInscripto: boolean;
 };
 
+type HorariosPortal = {
+  horaInicioManana: string;
+  horaFinManana: string;
+  horaInicioTarde: string;
+  horaFinTarde: string;
+};
+
 type PortalData = {
   alumno: { id: string; nombre: string; apellido: string };
   turnos: TurnoPortal[];
   sucursalId?: string;
+  horarios?: HorariosPortal;
 };
 
 type SucursalOption = { id: string; nombre_lugar: string };
@@ -31,7 +39,21 @@ const horaToNum = (hora: string): number => {
   return h ?? 0;
 };
 
+/** Formatea "07:00"-"12:00" como "7–12h" para etiquetas */
+function formatRangoHorario(ini: string, fin: string): string {
+  const a = horaToNum(ini);
+  const b = horaToNum(fin);
+  return `${a}–${b}h`;
+}
+
 type PortalAuth = { type: 'token'; token: string } | { type: 'dni'; dni: string; sucursalId: string };
+
+const DEFAULT_HORARIOS: HorariosPortal = {
+  horaInicioManana: '07:00',
+  horaFinManana: '12:00',
+  horaInicioTarde: '16:00',
+  horaFinTarde: '21:00',
+};
 
 const MiClase = () => {
   const [searchParams] = useSearchParams();
@@ -44,7 +66,6 @@ const MiClase = () => {
   const [actioning, setActioning] = useState<string | null>(null);
   const [filtroDia, setFiltroDia] = useState<number | null>(null);
   const [filtroHorario, setFiltroHorario] = useState<'todos' | 'manana' | 'tarde'>('todos');
-  // Formulario por DNI (link general)
   const [dniInput, setDniInput] = useState('');
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
   const [enviandoDni, setEnviandoDni] = useState(false);
@@ -205,57 +226,57 @@ const MiClase = () => {
               <p className="text-sm text-gray-600 mb-2">
                 Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Se busca solo en la sede de este link.
               </p>
-          {!sinSede && error && (
-            <div className="mb-3">
-              <p className="text-red-600 text-sm">{error}</p>
-              {tokenFromUrl && <p className="text-gray-500 text-xs mt-1">Podés ingresar tu DNI acá o pedir un link nuevo al estudio.</p>}
-            </div>
-          )}
-          {sinSede ? null : sucursales.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-700">Elegí tu sede:</p>
-              <div className="flex flex-col gap-1.5">
-                {sucursales.map((s) => (
+              {error && (
+                <div className="mb-3">
+                  <p className="text-red-600 text-sm">{error}</p>
+                  {tokenFromUrl && <p className="text-gray-500 text-xs mt-1">Podés ingresar tu DNI acá o pedir un link nuevo al estudio.</p>}
+                </div>
+              )}
+              {sucursales.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">Elegí tu sede:</p>
+                  <div className="flex flex-col gap-1.5">
+                    {sucursales.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => cargarPorDni(dniInput, s.id)}
+                        disabled={enviandoDni}
+                        className="px-4 py-2 rounded-lg bg-primary-100 text-primary-800 hover:bg-primary-200 font-medium text-sm disabled:opacity-50"
+                      >
+                        {s.nombre_lugar}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (dniInput.trim()) cargarPorDni(dniInput);
+                  }}
+                  className="space-y-3"
+                >
+                  <label className="block text-sm font-medium text-gray-700">DNI</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Ej. 12345678"
+                    value={dniInput}
+                    onChange={(e) => setDniInput(e.target.value.replace(/\D/g, ''))}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    autoFocus
+                  />
                   <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => cargarPorDni(dniInput, s.id)}
-                    disabled={enviandoDni}
-                    className="px-4 py-2 rounded-lg bg-primary-100 text-primary-800 hover:bg-primary-200 font-medium text-sm disabled:opacity-50"
+                    type="submit"
+                    disabled={enviandoDni || !dniInput.trim()}
+                    className="w-full py-3 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {s.nombre_lugar}
+                    {enviandoDni ? 'Cargando...' : 'Entrar'}
                   </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (dniInput.trim()) cargarPorDni(dniInput);
-              }}
-              className="space-y-3"
-            >
-              <label className="block text-sm font-medium text-gray-700">DNI</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Ej. 12345678"
-                value={dniInput}
-                onChange={(e) => setDniInput(e.target.value.replace(/\D/g, ''))}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                autoFocus
-              />
-              <button
-                type="submit"
-                disabled={enviandoDni || !dniInput.trim()}
-                className="w-full py-3 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {enviandoDni ? 'Cargando...' : 'Entrar'}
-              </button>
-            </form>
-          )}
-          {!sinSede && <p className="text-xs text-gray-500 mt-4">Si tenés un link con token, usalo directamente desde ahí.</p>}
+                </form>
+              )}
+              {!sinSede && <p className="text-xs text-gray-500 mt-4">Si tenés un link con token, usalo directamente desde ahí.</p>}
             </>
           )}
         </div>
@@ -263,13 +284,17 @@ const MiClase = () => {
     );
   }
 
-  const nombreCompleto = [data.alumno.apellido, data.alumno.nombre].filter(Boolean).join(', ') || 'Alumno';
+  const horarios = data.horarios || DEFAULT_HORARIOS;
+  const iniManana = horaToNum(horarios.horaInicioManana);
+  const finManana = horaToNum(horarios.horaFinManana);
+  const iniTarde = horaToNum(horarios.horaInicioTarde);
+  const finTarde = horaToNum(horarios.horaFinTarde);
 
   const turnosFiltrados = data.turnos.filter((t) => {
     if (filtroDia !== null && t.diaSemana !== filtroDia) return false;
     const h = horaToNum(t.hora);
-    if (filtroHorario === 'manana') return h >= 7 && h < 12;
-    if (filtroHorario === 'tarde') return h >= 16 && h <= 21;
+    if (filtroHorario === 'manana') return h >= iniManana && h <= finManana;
+    if (filtroHorario === 'tarde') return h >= iniTarde && h <= finTarde;
     return true;
   });
 
@@ -284,6 +309,9 @@ const MiClase = () => {
   }, {});
 
   const diasConTurnos = Object.keys(porDia).map(Number).sort((a, b) => a - b);
+  const nombreCompleto = [data.alumno.apellido, data.alumno.nombre].filter(Boolean).join(', ') || 'Alumno';
+  const labelManana = formatRangoHorario(horarios.horaInicioManana, horarios.horaFinManana);
+  const labelTarde = formatRangoHorario(horarios.horaInicioTarde, horarios.horaFinTarde);
 
   return (
     <div className="min-h-screen bg-gray-100 pb-safe">
@@ -296,7 +324,6 @@ const MiClase = () => {
           <p className="text-sm text-gray-600 mt-1">Hola, {nombreCompleto}. Acá podés sumarte a una clase o liberar tu cupo.</p>
         </div>
 
-        {/* Filtros: día y horario */}
         <div className="bg-white rounded-xl shadow p-3 mb-4">
           <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
           <div className="flex flex-wrap gap-1.5 mb-3">
@@ -318,7 +345,7 @@ const MiClase = () => {
               </button>
             ))}
           </div>
-          <p className="text-xs font-medium text-gray-500 mb-2">Ver horario</p>
+          <p className="text-xs font-medium text-gray-500 mb-2">Ver horario (según tu sede)</p>
           <div className="flex flex-wrap gap-1.5">
             <button
               type="button"
@@ -332,16 +359,17 @@ const MiClase = () => {
               onClick={() => setFiltroHorario('manana')}
               className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
             >
-              Mañana (7–12h)
+              Mañana ({labelManana})
             </button>
             <button
               type="button"
               onClick={() => setFiltroHorario('tarde')}
               className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
             >
-              Tarde (16–21h)
+              Tarde ({labelTarde})
             </button>
           </div>
+          <p className="text-xs text-gray-500 mt-2">Si no ves una clase, probá con «Todos».</p>
         </div>
 
         <div className="space-y-4">
@@ -364,9 +392,7 @@ const MiClase = () => {
                     <div key={t.id} className="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-gray-900 truncate">{t.titulo || 'Clase'}</p>
-                        <p className="text-sm text-gray-600">
-                          {t.hora}
-                        </p>
+                        <p className="text-sm text-gray-600">{t.hora}</p>
                         <p className="text-xs text-gray-500">
                           {t.inscriptos}/{t.cupo} inscriptos
                         </p>

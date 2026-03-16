@@ -1036,6 +1036,11 @@ app.get('/api/alumno-portal', async (req, res) => {
     }
     const { alumno, sucursalId: sid } = resolved;
     const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora, titulo, alumno_ids, cupo FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora', [sid]);
+    const { rows: horRows } = await db.query(
+      'SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde FROM sucursales WHERE id = $1',
+      [sid]
+    );
+    const hor = horRows[0] || {};
     const turnos = turnoRows.map((r) => {
       const alumnoIds = r.alumno_ids || [];
       const cupo = r.cupo != null ? Number(r.cupo) : 6;
@@ -1052,7 +1057,13 @@ app.get('/api/alumno-portal', async (req, res) => {
     res.json({
       alumno: { id: alumno.id, nombre: alumno.nombre, apellido: alumno.apellido },
       turnos,
-      sucursalId: sid, // para que el front use dni+sucursalId en inscribir/liberar
+      sucursalId: sid,
+      horarios: {
+        horaInicioManana: hor.hora_inicio_manana || '07:00',
+        horaFinManana: hor.hora_fin_manana || '12:00',
+        horaInicioTarde: hor.hora_inicio_tarde || '16:00',
+        horaFinTarde: hor.hora_fin_tarde || '21:00',
+      },
     });
   } catch (e) {
     console.error(e);

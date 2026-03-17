@@ -1149,6 +1149,10 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
       'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, created_at) VALUES ($1, $2, $3, $4, NOW())',
       [id, turnoId, alumno.id, semanaVista]
     );
+    await db.query(
+      'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+      [crypto.randomUUID(), alumno.sucursal_id, 'inscribio', alumno.id, turnoId]
+    );
     const { rows: infoRec } = await db.query(
       'SELECT a.apellido, a.nombre, t.dia_semana, t.hora, t.titulo FROM alumnos a, turnos t WHERE a.id = $1 AND t.id = $2',
       [alumno.id, turnoId]
@@ -1201,6 +1205,10 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
       return res.status(400).json({ error: 'Falta turnoId o recuperacionId' });
     }
     if (turnoIdParaPush) {
+      await db.query(
+        'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+        [crypto.randomUUID(), alumno.sucursal_id, 'liberar', alumno.id, turnoIdParaPush]
+      );
       const { rows: infoLib } = await db.query(
         'SELECT a.apellido, a.nombre, t.dia_semana, t.hora, t.titulo FROM alumnos a, turnos t WHERE a.id = $1 AND t.id = $2',
         [alumno.id, turnoIdParaPush]

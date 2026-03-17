@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Calendar, UserPlus, UserMinus, Loader2 } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
+import { getSemanaActual, getSemanaSiguiente, getRangoSemana } from '../utils/date';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -13,6 +14,7 @@ type TurnoPortal = {
   cupo: number;
   inscriptos: number;
   yaInscripto: boolean;
+  recuperacionId?: string;
 };
 
 type HorariosPortal = {
@@ -27,6 +29,8 @@ type PortalData = {
   turnos: TurnoPortal[];
   sucursalId?: string;
   horarios?: HorariosPortal;
+  modo?: 'fijo' | 'recuperar';
+  semanaVista?: string;
 };
 
 type SucursalOption = { id: string; nombre_lugar: string };
@@ -59,6 +63,7 @@ const MiClase = () => {
   const [searchParams] = useSearchParams();
   const tokenFromUrl = searchParams.get('token') || '';
   const sucursalIdFromUrl = searchParams.get('sucursalId') || '';
+  const modoFromUrl = (searchParams.get('modo') || 'fijo').toLowerCase() === 'recuperar' ? 'recuperar' : 'fijo';
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -69,6 +74,10 @@ const MiClase = () => {
   const [dniInput, setDniInput] = useState('');
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
   const [enviandoDni, setEnviandoDni] = useState(false);
+  /** Solo en modo recuperar: 'actual' | 'siguiente' para elegir semana */
+  const [semanaElegida, setSemanaElegida] = useState<'actual' | 'siguiente'>('actual');
+  const [cargandoSemana, setCargandoSemana] = useState(false);
+  const prevSemanaElegida = useRef<'actual' | 'siguiente' | null>(null);
 
   useEffect(() => {
     if (tokenFromUrl.trim()) {
@@ -76,7 +85,12 @@ const MiClase = () => {
       (async () => {
         try {
           const base = getBase();
-          const res = await fetch(`${base}/api/alumno-portal?token=${encodeURIComponent(tokenFromUrl)}`);
+          let url = `${base}/api/alumno-portal?token=${encodeURIComponent(tokenFromUrl)}`;
+          if (modoFromUrl === 'recuperar') {
+            url += '&modo=recuperar';
+            url += `&semana=${encodeURIComponent(semanaElegida === 'actual' ? getSemanaActual() : getSemanaSiguiente(getSemanaActual()))}`;
+          }
+          const res = await fetch(url);
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             if (!cancelled) setError(err.error || 'Link inválido o expirado.');
@@ -100,7 +114,7 @@ const MiClase = () => {
       setLoading(false);
       setError('');
     }
-  }, [tokenFromUrl]);
+  }, [tokenFromUrl, modoFromUrl, semanaElegida]);
 
   const cargarPorDni = async (dni: string, sucursalIdElegida?: string) => {
     setEnviandoDni(true);
@@ -110,6 +124,10 @@ const MiClase = () => {
       const sid = sucursalIdElegida?.trim() || sucursalIdFromUrl.trim();
       let url = `${base}/api/alumno-portal?dni=${encodeURIComponent(dni.trim())}`;
       if (sid) url += `&sucursalId=${encodeURIComponent(sid)}`;
+      if (modoFromUrl === 'recuperar') {
+        url += '&modo=recuperar';
+        url += `&semana=${encodeURIComponent(semanaElegida === 'actual' ? getSemanaActual() : getSemanaSiguiente(getSemanaActual()))}`;
+      }
       const res = await fetch(url);
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -131,15 +149,49 @@ const MiClase = () => {
     }
   };
 
+  const recargarRecuperar = async () => {
+    if (!portalAuth || !data || data.modo !== 'recuperar') return;
+    setCargandoSemana(true);
+    try {
+      const base = getBase();
+      const semana = semanaElegida === 'actual' ? getSemanaActual() : getSemanaSiguiente(getSemanaActual());
+      let url: string;
+      if (portalAuth.type === 'token') {
+        url = `${base}/api/alumno-portal?token=${encodeURIComponent(portalAuth.token)}&modo=recuperar&semana=${encodeURIComponent(semana)}`;
+      } else {
+        url = `${base}/api/alumno-portal?dni=${encodeURIComponent(portalAuth.dni)}&sucursalId=${encodeURIComponent(portalAuth.sucursalId)}&modo=recuperar&semana=${encodeURIComponent(semana)}`;
+      }
+      const res = await fetch(url);
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) setData(json);
+    } finally {
+      setCargandoSemana(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!data || data.modo !== 'recuperar' || !portalAuth || portalAuth.type === 'token') return;
+    if (prevSemanaElegida.current === null) {
+      prevSemanaElegida.current = semanaElegida;
+      return;
+    }
+    if (prevSemanaElegida.current === semanaElegida) return;
+    prevSemanaElegida.current = semanaElegida;
+    recargarRecuperar();
+  }, [semanaElegida, data, portalAuth]);
+
   const inscribir = async (turnoId: string) => {
-    if (!portalAuth) return;
+    if (!portalAuth || !data) return;
     setActioning(turnoId);
     try {
       const base = getBase();
+      const esRecuperar = data.modo === 'recuperar';
+      const semana = data.semanaVista || getSemanaActual();
       const body = portalAuth.type === 'token'
-        ? { token: portalAuth.token, turnoId }
-        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId };
-      const res = await fetch(`${base}/api/alumno-portal/inscribir`, {
+        ? { token: portalAuth.token, turnoId, ...(esRecuperar && { semana }) }
+        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId, ...(esRecuperar && { semana }) };
+      const endpoint = esRecuperar ? '/api/alumno-portal/inscribir-recuperacion' : '/api/alumno-portal/inscribir';
+      const res = await fetch(`${base}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -149,30 +201,49 @@ const MiClase = () => {
         alert(json.error || 'No se pudo inscribir.');
         return;
       }
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              turnos: prev.turnos.map((t) =>
-                t.id === turnoId ? { ...t, yaInscripto: true, inscriptos: t.inscriptos + 1 } : t
-              ),
-            }
-          : null
-      );
+      if (esRecuperar && json.recuperacionId) {
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                turnos: prev.turnos.map((t) =>
+                  t.id === turnoId ? { ...t, yaInscripto: true, inscriptos: t.inscriptos + 1, recuperacionId: json.recuperacionId } : t
+                ),
+              }
+            : null
+        );
+      } else if (!esRecuperar) {
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                turnos: prev.turnos.map((t) =>
+                  t.id === turnoId ? { ...t, yaInscripto: true, inscriptos: t.inscriptos + 1 } : t
+                ),
+              }
+            : null
+        );
+      }
     } finally {
       setActioning(null);
     }
   };
 
-  const liberar = async (turnoId: string) => {
-    if (!portalAuth) return;
+  const liberar = async (turnoId: string, recuperacionId?: string) => {
+    if (!portalAuth || !data) return;
     setActioning(turnoId);
     try {
       const base = getBase();
-      const body = portalAuth.type === 'token'
-        ? { token: portalAuth.token, turnoId }
-        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId };
-      const res = await fetch(`${base}/api/alumno-portal/liberar`, {
+      const esRecuperar = data.modo === 'recuperar';
+      const semana = data.semanaVista || getSemanaActual();
+      const baseBody = portalAuth.type === 'token'
+        ? { token: portalAuth.token }
+        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId };
+      const body = esRecuperar
+        ? { ...baseBody, ...(recuperacionId ? { recuperacionId } : { turnoId, semana }) }
+        : { ...baseBody, turnoId };
+      const endpoint = esRecuperar ? '/api/alumno-portal/liberar-recuperacion' : '/api/alumno-portal/liberar';
+      const res = await fetch(`${base}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -187,7 +258,7 @@ const MiClase = () => {
           ? {
               ...prev,
               turnos: prev.turnos.map((t) =>
-                t.id === turnoId ? { ...t, yaInscripto: false, inscriptos: t.inscriptos - 1 } : t
+                t.id === turnoId ? { ...t, yaInscripto: false, inscriptos: t.inscriptos - 1, recuperacionId: undefined } : t
               ),
             }
           : null
@@ -210,12 +281,13 @@ const MiClase = () => {
 
   if (!data) {
     const sinSede = !tokenFromUrl && !sucursalIdFromUrl.trim();
+    const tituloPortal = modoFromUrl === 'recuperar' ? 'Recuperar clase' : 'Mis clases';
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
         <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
           <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
             <Calendar className="w-5 h-5 text-primary-600" />
-            Mis clases
+            {tituloPortal}
           </h1>
           {sinSede ? (
             <p className="text-sm text-gray-600">
@@ -224,7 +296,9 @@ const MiClase = () => {
           ) : (
             <>
               <p className="text-sm text-gray-600 mb-2">
-                Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Se busca solo en la sede de este link.
+                {modoFromUrl === 'recuperar'
+                  ? 'Ingresá tu DNI para ver la semana actual u otra y elegir día para recuperar.'
+                  : 'Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Se busca solo en la sede de este link.'}
               </p>
               {error && (
                 <div className="mb-3">
@@ -313,16 +387,49 @@ const MiClase = () => {
   const labelManana = formatRangoHorario(horarios.horaInicioManana, horarios.horaFinManana);
   const labelTarde = formatRangoHorario(horarios.horaInicioTarde, horarios.horaFinTarde);
 
+  const esRecuperar = data.modo === 'recuperar';
+  const semanaActualLabel = getRangoSemana(getSemanaActual());
+  const semanaSiguienteLabel = getRangoSemana(getSemanaSiguiente(getSemanaActual()));
+
   return (
     <div className="min-h-screen bg-gray-100 pb-safe">
       <div className="max-w-lg mx-auto p-4 pt-6">
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
           <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-primary-600" />
-            Mis clases
+            {esRecuperar ? 'Recuperar clase' : 'Mis clases'}
           </h1>
-          <p className="text-sm text-gray-600 mt-1">Hola, {nombreCompleto}. Acá podés sumarte a una clase o liberar tu cupo.</p>
+          <p className="text-sm text-gray-600 mt-1">
+            {esRecuperar
+              ? `Hola, ${nombreCompleto}. Elegí la semana y sumate a una clase para recuperar o liberá tu recuperación.`
+              : `Hola, ${nombreCompleto}. Acá podés sumarte a una clase o liberar tu cupo.`}
+          </p>
         </div>
+
+        {esRecuperar && (
+          <div className="bg-white rounded-xl shadow p-3 mb-4">
+            <p className="text-xs font-medium text-gray-500 mb-2">Ver semana</p>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSemanaElegida('actual')}
+                disabled={cargandoSemana}
+                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${semanaElegida === 'actual' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
+              >
+                Semana actual ({semanaActualLabel})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSemanaElegida('siguiente')}
+                disabled={cargandoSemana}
+                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${semanaElegida === 'siguiente' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
+              >
+                Otra semana ({semanaSiguienteLabel})
+              </button>
+            </div>
+            {cargandoSemana && <p className="text-xs text-gray-500 mt-2">Cargando...</p>}
+          </div>
+        )}
 
         <div className="bg-white rounded-xl shadow p-3 mb-4">
           <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
@@ -401,12 +508,12 @@ const MiClase = () => {
                         {t.yaInscripto ? (
                           <button
                             type="button"
-                            onClick={() => liberar(t.id)}
+                            onClick={() => liberar(t.id, t.recuperacionId)}
                             disabled={!!actioning}
                             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
                           >
                             {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                            Liberar cupo
+                            {esRecuperar ? 'Liberar recuperación' : 'Liberar cupo'}
                           </button>
                         ) : (
                           <button
@@ -416,7 +523,7 @@ const MiClase = () => {
                             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                           >
                             {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                            Sumarme
+                            {esRecuperar ? 'Sumarme para recuperar' : 'Sumarme'}
                           </button>
                         )}
                       </div>

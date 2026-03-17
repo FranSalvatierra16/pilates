@@ -193,7 +193,13 @@ export default function Notificaciones() {
       }
       setPushStatus('ok');
       setPushMessage('Listo: cuando alguien se anote o libere cupo, te llegará una notificación al celular.');
-      setPushConfig((c) => (c ? { ...c, subscriptionsCount: c.subscriptionsCount + 1 } : { configured: true, subscriptionsCount: 1 }));
+      const statusRes = await fetch(base + '/api/push-status', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        setPushConfig({ configured: !!statusData.configured, subscriptionsCount: statusData.subscriptionsCount ?? 0 });
+      } else {
+        setPushConfig((c) => (c ? { ...c, subscriptionsCount: c.subscriptionsCount + 1 } : { configured: true, subscriptionsCount: 1 }));
+      }
     } catch (e) {
       setPushStatus('error');
       if (e instanceof Error && e.message === 'timeout') {
@@ -258,17 +264,24 @@ export default function Notificaciones() {
                 Cuando un alumno se anote o libere cupo en una clase, te llegará una notificación al celular (aunque no tengas la app abierta).
               </p>
               {pushConfig && (
-                <p className="text-sm mt-2 text-gray-700">
-                  {!pushConfig.configured ? (
-                    <span className="text-amber-700 block">El servidor no tiene notificaciones push configuradas (VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY).</span>
-                  ) : pushConfig.subscriptionsCount === 0 ? (
-                    'Activá las notificaciones en el dispositivo donde querés recibirlas (botón abajo).'
-                  ) : (
-                    <span className="text-green-700">
-                      Tenés {pushConfig.subscriptionsCount} dispositivo(s) registrado(s). Las notificaciones se envían cuando alguien se anote o libere cupo.
-                    </span>
+                <>
+                  <p className="text-sm mt-2 text-gray-700">
+                    {!pushConfig.configured ? (
+                      <span className="text-amber-700 block">El servidor no tiene notificaciones push configuradas. En Railway (o .env) hay que agregar VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (generar con <code className="text-xs bg-white/80 px-1 rounded">npx web-push generate-vapid-keys</code>).</span>
+                    ) : pushConfig.subscriptionsCount === 0 ? (
+                      <span className="text-amber-700 block">Ningún dispositivo registrado todavía. Tocá el botón de abajo <strong>en el celular donde querés recibir las notificaciones</strong>.</span>
+                    ) : (
+                      <span className="text-green-700">
+                        Tenés {pushConfig.subscriptionsCount} dispositivo(s) registrado(s). Las notificaciones se envían cuando alguien se anote o libere cupo.
+                      </span>
+                    )}
+                  </p>
+                  {(pushConfig.configured && pushConfig.subscriptionsCount === 0) && (
+                    <p className="text-sm mt-2 text-gray-600">
+                      Si no te llegan: activá en <strong>este</strong> dispositivo (cada celular/compu se registra por separado). En iPhone: agregá la app al inicio y abrila desde el ícono.
+                    </p>
                   )}
-                </p>
+                </>
               )}
               {pushMessage && (
                 <p className={`text-sm mt-2 ${pushStatus === 'ok' ? 'text-green-700' : pushStatus === 'denied' || pushStatus === 'error' ? 'text-amber-700' : 'text-gray-600'}`}>

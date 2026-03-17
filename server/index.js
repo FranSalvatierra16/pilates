@@ -1149,6 +1149,19 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
       'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, created_at) VALUES ($1, $2, $3, $4, NOW())',
       [id, turnoId, alumno.id, semanaVista]
     );
+    const { rows: infoRec } = await db.query(
+      'SELECT a.apellido, a.nombre, t.dia_semana, t.hora, t.titulo FROM alumnos a, turnos t WHERE a.id = $1 AND t.id = $2',
+      [alumno.id, turnoId]
+    );
+    if (infoRec.length > 0) {
+      const nombre = [infoRec[0].apellido, infoRec[0].nombre].filter(Boolean).join(', ');
+      const dia = DIAS_SEMANA_ES[infoRec[0].dia_semana] ?? '';
+      const turno = `${dia} ${infoRec[0].hora} - ${infoRec[0].titulo || 'Clase'}`;
+      await sendPushToSucursal(db, alumno.sucursal_id, {
+        title: 'Recuperación: nueva anotación',
+        body: `${nombre} se anotó para recuperar en ${turno}`,
+      });
+    }
     res.json({ ok: true, recuperacionId: id });
   } catch (e) {
     console.error(e);
@@ -1168,7 +1181,10 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
     });
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
+    let turnoIdParaPush = turnoId;
     if (recuperacionId) {
+      const { rows: recRow } = await db.query('SELECT turno_id FROM recuperaciones WHERE id = $1 AND alumno_id = $2', [recuperacionId, alumno.id]);
+      if (recRow.length > 0) turnoIdParaPush = recRow[0].turno_id;
       const { rowCount } = await db.query(
         'DELETE FROM recuperaciones WHERE id = $1 AND alumno_id = $2',
         [recuperacionId, alumno.id]
@@ -1183,6 +1199,21 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
       if (rowCount === 0) return res.status(404).json({ error: 'No estabas anotado para recuperar' });
     } else {
       return res.status(400).json({ error: 'Falta turnoId o recuperacionId' });
+    }
+    if (turnoIdParaPush) {
+      const { rows: infoLib } = await db.query(
+        'SELECT a.apellido, a.nombre, t.dia_semana, t.hora, t.titulo FROM alumnos a, turnos t WHERE a.id = $1 AND t.id = $2',
+        [alumno.id, turnoIdParaPush]
+      );
+      if (infoLib.length > 0) {
+        const nombre = [infoLib[0].apellido, infoLib[0].nombre].filter(Boolean).join(', ');
+        const dia = DIAS_SEMANA_ES[infoLib[0].dia_semana] ?? '';
+        const turno = `${dia} ${infoLib[0].hora} - ${infoLib[0].titulo || 'Clase'}`;
+        await sendPushToSucursal(db, alumno.sucursal_id, {
+          title: 'Recuperación: cupo liberado',
+          body: `${nombre} liberó recuperación en ${turno}`,
+        });
+      }
     }
     res.json({ ok: true });
   } catch (e) {
@@ -1336,7 +1367,7 @@ app.patch('/api/notificaciones/marcar-leidas', async (req, res) => {
 // --- Push al celular (Web Push) ---
 async function sendPushToSucursal(db, sucursalId, payload) {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
-    console.warn('Push no enviado: faltan VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY en el servidor.');
+    console.warn('[Push] No enviado: faltan VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY en el servidor. Configuralas en Railway (o .env).');
     return;
   }
   const { rows } = await db.query(
@@ -1344,7 +1375,7 @@ async function sendPushToSucursal(db, sucursalId, payload) {
     [sucursalId]
   );
   if (rows.length === 0) {
-    console.warn('Push no enviado: ningún dispositivo registrado para esta sucursal.');
+    console.warn('[Push] No enviado: ningún dispositivo registrado para la sucursal', sucursalId, '- Entrá a Notificaciones y tocá "Activar notificaciones en este dispositivo".');
     return;
   }
   const body = JSON.stringify(payload);
@@ -1354,19 +1385,19 @@ async function sendPushToSucursal(db, sucursalId, payload) {
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         body,
-        { TTL: 60 }
+        { TTL: 120 }
       );
       sent++;
     } catch (err) {
       if (err.statusCode === 410 || err.statusCode === 404) {
         await db.query('DELETE FROM push_subscriptions WHERE id = $1', [sub.id]).catch(() => {});
-        console.warn('Push: suscripción expirada, eliminada.');
+        console.warn('[Push] Suscripción expirada, eliminada.');
       } else {
-        console.error('Push error:', err.statusCode || err.message, sub.endpoint?.slice(0, 50));
+        console.error('[Push] Error', err.statusCode || err.message, 'endpoint:', sub.endpoint?.slice(0, 60));
       }
     }
   }
-  if (sent > 0) console.log('Push enviado a', sent, 'dispositivo(s):', payload.title);
+  if (sent > 0) console.log('[Push] Enviado a', sent, 'dispositivo(s):', payload.title);
 }
 
 app.get('/api/push-vapid-public', (req, res) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Calendar } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -58,16 +58,7 @@ function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { ur
 }
 
 const Alumnos = () => {
-  const { sucursalNombre, sucursalId: sucursalIdContext, token, role } = useAuth();
-  // Si la sesión es vieja puede no tener sucursalId guardado; lo sacamos del JWT
-  const sucursalId = sucursalIdContext || (role === 'sucursal' && token ? (() => {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.sucursalId || payload.sub || null;
-    } catch {
-      return null;
-    }
-  })() : null);
+  const { sucursalNombre } = useAuth();
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
@@ -452,50 +443,6 @@ const Alumnos = () => {
     }
   };
 
-  const handleCopiarLinkClases = async (alumno: Alumno, modo: 'fijo' | 'recuperar') => {
-    let token = alumno.linkToken?.trim();
-    if (!token) {
-      token = `${alumno.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      try {
-        await storageHybrid.alumnos.update(alumno.id, { linkToken: token });
-        setAlumnos((prev) => prev.map((a) => (a.id === alumno.id ? { ...a, linkToken: token } : a)));
-        setAlumnosFiltrados((prev) => prev.map((a) => (a.id === alumno.id ? { ...a, linkToken: token } : a)));
-      } catch (e) {
-        console.error(e);
-        alert('No se pudo generar el link. ¿Estás conectado al servidor?');
-        return;
-      }
-    }
-    let url = `${typeof window !== 'undefined' ? window.location.origin : ''}/mi-clase?token=${encodeURIComponent(token)}`;
-    if (modo === 'recuperar') url += '&modo=recuperar';
-    try {
-      await navigator.clipboard.writeText(url);
-      alert(modo === 'recuperar'
-        ? 'Link de recuperar copiado. El alumno podrá ver la semana actual y otra semana para elegir día.'
-        : 'Link copiado. Enviale este link al alumno para que pueda sumarse o liberar cupo en las clases.');
-    } catch {
-      prompt('Copiá este link y envialo al alumno:', url);
-    }
-  };
-
-  const handleCopiarLinkGeneralClases = (modo: 'fijo' | 'recuperar') => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    if (!sucursalId) {
-      alert('No se pudo detectar la sede. Cerrando sesión y volvé a entrar para que el link general incluya tu sede.');
-      return;
-    }
-    let url = `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}`;
-    if (modo === 'recuperar') url += '&modo=recuperar';
-    try {
-      navigator.clipboard.writeText(url);
-      alert(modo === 'recuperar'
-        ? 'Link general de recuperar copiado. Cada persona ingresa su DNI y puede ver semana actual u otra para elegir día.'
-        : 'Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.');
-    } catch {
-      prompt('Copiá este link:', url);
-    }
-  };
-
   const handleGuardarDescripcion = async () => {
     if (!alumnoDescripcion) return;
     try {
@@ -529,24 +476,6 @@ const Alumnos = () => {
           <h1 className="page-title">Alumnos</h1>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => handleCopiarLinkGeneralClases('fijo')}
-            className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
-            title="Link para sumarse o liberar cupo (clase fija)"
-          >
-            <Link2 className="w-5 h-5" />
-            Link general (fijo)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleCopiarLinkGeneralClases('recuperar')}
-            className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
-            title="Link para recuperar: ver semana actual u otra y elegir día"
-          >
-            <Link2 className="w-5 h-5" />
-            Link general (recuperar)
-          </button>
           <button
             onClick={() => handleOpenModal()}
             className="btn-primary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
@@ -683,8 +612,6 @@ const Alumnos = () => {
                     <button onClick={() => handlePagarCuota(alumno)} className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title="Pagar cuota" aria-label="Pagar"><CreditCard className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenHistorial(alumno)} className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation" title="Historial de pagos" aria-label="Historial de pagos"><History className="w-5 h-5" /></button>
-                    <button onClick={() => handleCopiarLinkClases(alumno, 'fijo')} className="p-2 rounded-lg text-indigo-600 hover:bg-indigo-50 touch-manipulation" title="Copiar link fijo (sumarse o liberar cupo)" aria-label="Link fijo"><Link2 className="w-5 h-5" /></button>
-                    <button onClick={() => handleCopiarLinkClases(alumno, 'recuperar')} className="p-2 rounded-lg text-indigo-500 hover:bg-indigo-50 touch-manipulation" title="Copiar link recuperar (ver semana actual u otra)" aria-label="Link recuperar"><Link2 className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-primary-600 hover:bg-primary-50 touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
                     <button onClick={() => handleDelete(alumno.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation" title="Eliminar" aria-label="Eliminar"><Trash2 className="w-5 h-5" /></button>
                   </div>

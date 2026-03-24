@@ -13,15 +13,17 @@ const Dashboard = () => {
     totalAlumnos: 0,
     totalActividades: 0,
     cuotasVencidas: 0,
-    totalCaja: 0,
+    /** Ingresos - gastos (misma lógica que la página Caja) */
+    totalCajaNeto: 0,
   });
 
   useEffect(() => {
     (async () => {
-      const [alumnos, actividades, pagos] = await Promise.all([
+      const [alumnos, actividades, pagos, gastos] = await Promise.all([
         storageHybrid.alumnos.getAll(),
         storageHybrid.actividades.getAll(),
         storageHybrid.pagos.getAll(),
+        storageHybrid.gastos.getAll(),
       ]);
 
       const cuotasVencidas = alumnos.filter(a => isCuotaVencida(a.fechaVencimientoCuota));
@@ -34,11 +36,22 @@ const Dashboard = () => {
         .filter(p => p.metodoPago === 'transferencia')
         .reduce((sum, p) => sum + p.monto, 0);
 
+      const gastosEfectivo = gastos
+        .filter(g => g.metodoPago === 'efectivo')
+        .reduce((sum, g) => sum + g.monto, 0);
+
+      const gastosTransferencia = gastos
+        .filter(g => g.metodoPago === 'transferencia')
+        .reduce((sum, g) => sum + g.monto, 0);
+
+      const totalCajaNeto =
+        totalEfectivo - gastosEfectivo + (totalTransferencia - gastosTransferencia);
+
       setStats({
         totalAlumnos: alumnos.length,
         totalActividades: actividades.length,
         cuotasVencidas: cuotasVencidas.length,
-        totalCaja: totalEfectivo + totalTransferencia,
+        totalCajaNeto,
       });
     })();
   }, []);
@@ -66,8 +79,8 @@ const Dashboard = () => {
       link: '/alumnos',
     },
     {
-      title: 'Total en Caja',
-      value: formatCurrency(stats.totalCaja),
+      title: 'Saldo neto en caja',
+      value: formatCurrency(stats.totalCajaNeto),
       icon: DollarSign,
       color: 'bg-yellow-500',
       link: '/caja',

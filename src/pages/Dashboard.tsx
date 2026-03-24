@@ -13,7 +13,11 @@ const Dashboard = () => {
     totalAlumnos: 0,
     totalActividades: 0,
     cuotasVencidas: 0,
-    /** Ingresos - gastos (misma lógica que la página Caja) */
+    /** Suma de pagos (ingresos) */
+    ingresosCaja: 0,
+    /** Suma de gastos registrados */
+    gastosCaja: 0,
+    /** ingresosCaja - gastosCaja (misma lógica que la página Caja → Saldo final) */
     totalCajaNeto: 0,
   });
 
@@ -44,19 +48,29 @@ const Dashboard = () => {
         .filter(g => g.metodoPago === 'transferencia')
         .reduce((sum, g) => sum + g.monto, 0);
 
-      const totalCajaNeto =
-        totalEfectivo - gastosEfectivo + (totalTransferencia - gastosTransferencia);
+      const ingresosCaja = totalEfectivo + totalTransferencia;
+      const gastosCaja = gastosEfectivo + gastosTransferencia;
+      const totalCajaNeto = ingresosCaja - gastosCaja;
 
       setStats({
         totalAlumnos: alumnos.length,
         totalActividades: actividades.length,
         cuotasVencidas: cuotasVencidas.length,
+        ingresosCaja,
+        gastosCaja,
         totalCajaNeto,
       });
     })();
   }, []);
 
-  const cards = [
+  const cards: Array<{
+    title: string;
+    value: string | number;
+    subtitle?: string;
+    icon: typeof Users;
+    color: string;
+    link: string;
+  }> = [
     {
       title: 'Total Alumnos',
       value: stats.totalAlumnos,
@@ -79,8 +93,9 @@ const Dashboard = () => {
       link: '/alumnos',
     },
     {
-      title: 'Saldo neto en caja',
+      title: 'Saldo en caja',
       value: formatCurrency(stats.totalCajaNeto),
+      subtitle: `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)}`,
       icon: DollarSign,
       color: 'bg-yellow-500',
       link: '/caja',
@@ -111,6 +126,9 @@ const Dashboard = () => {
                   <p className="text-2xl font-bold text-gray-900">
                     {card.value}
                   </p>
+                  {card.subtitle && (
+                    <p className="text-xs text-gray-500 mt-1 leading-snug">{card.subtitle}</p>
+                  )}
                 </div>
                 <div className={`${card.color} p-3 rounded-lg`}>
                   <Icon className="w-6 h-6 text-white" />

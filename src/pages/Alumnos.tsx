@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -58,7 +58,16 @@ function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { ur
 }
 
 const Alumnos = () => {
-  const { sucursalNombre } = useAuth();
+  const { sucursalNombre, sucursalId: sucursalIdContext, token, role } = useAuth();
+  // Si la sesión es vieja puede no tener sucursalId guardado; lo sacamos del JWT
+  const sucursalId = sucursalIdContext || (role === 'sucursal' && token ? (() => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sucursalId || payload.sub || null;
+    } catch {
+      return null;
+    }
+  })() : null);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
@@ -443,6 +452,24 @@ const Alumnos = () => {
     }
   };
 
+  const handleCopiarLinkGeneralClases = (modo: 'fijo' | 'recuperar') => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    if (!sucursalId) {
+      alert('No se pudo detectar la sede. Cerrando sesión y volvé a entrar para que el link general incluya tu sede.');
+      return;
+    }
+    let url = `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}`;
+    if (modo === 'recuperar') url += '&modo=recuperar';
+    try {
+      navigator.clipboard.writeText(url);
+      alert(modo === 'recuperar'
+        ? 'Link general de recuperar copiado. Cada persona ingresa su DNI y puede ver semana actual u otra para elegir día.'
+        : 'Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.');
+    } catch {
+      prompt('Copiá este link:', url);
+    }
+  };
+
   const handleGuardarDescripcion = async () => {
     if (!alumnoDescripcion) return;
     try {
@@ -476,6 +503,24 @@ const Alumnos = () => {
           <h1 className="page-title">Alumnos</h1>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => handleCopiarLinkGeneralClases('fijo')}
+            className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
+            title="Link para sumarse o liberar cupo (clase fija)"
+          >
+            <Link2 className="w-5 h-5" />
+            Link general (fijo)
+          </button>
+          <button
+            type="button"
+            onClick={() => handleCopiarLinkGeneralClases('recuperar')}
+            className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
+            title="Link para recuperar: ver semana actual u otra y elegir día"
+          >
+            <Link2 className="w-5 h-5" />
+            Link general (recuperar)
+          </button>
           <button
             onClick={() => handleOpenModal()}
             className="btn-primary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"

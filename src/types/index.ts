@@ -43,6 +43,8 @@ export interface Alumno {
   descripcion?: string; // Notas o info adicional del alumno (editable)
   /** Token para que el alumno acceda a /mi-clase y solo pueda sumarse o liberar cupo */
   linkToken?: string;
+  /** Si false, el alumno está dado de baja (no se muestra en listas activas) */
+  activo?: boolean;
   createdAt: string;
 }
 

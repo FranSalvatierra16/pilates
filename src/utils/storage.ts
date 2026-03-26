@@ -24,7 +24,7 @@ export const storage = {
     },
     add: (alumno: Alumno): void => {
       const alumnos = storage.alumnos.getAll();
-      alumnos.push(alumno);
+      alumnos.push({ ...alumno, activo: alumno.activo !== false });
       storage.alumnos.save(alumnos);
     },
     update: (id: string, updates: Partial<Alumno>): void => {
@@ -36,11 +36,11 @@ export const storage = {
       }
     },
     delete: (id: string): void => {
-      const alumnos = storage.alumnos.getAll().filter(a => a.id !== id);
+      const alumnos = storage.alumnos.getAll().map(a => a.id === id ? { ...a, activo: false } : a);
       storage.alumnos.save(alumnos);
     },
     findByDni: (dni: string): Alumno | undefined => {
-      return storage.alumnos.getAll().find(a => a.dni === dni);
+      return storage.alumnos.getAll().find(a => a.dni === dni && a.activo !== false);
     },
     getAsistencias: (alumnoId: string): AsistenciaHistorialItem[] => {
       const asis = storage.asistencias.getAll().filter(a => a.alumnoId === alumnoId && a.estado !== null);

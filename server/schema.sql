@@ -50,9 +50,11 @@ CREATE TABLE IF NOT EXISTS alumnos (
   actividad_id TEXT REFERENCES actividades(id),
   clases_asistidas INTEGER DEFAULT 0,
   descripcion TEXT,
+  activo BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS descripcion TEXT;
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 
 -- Pagos

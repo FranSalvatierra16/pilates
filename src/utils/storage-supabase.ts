@@ -21,6 +21,7 @@ const dbToAlumno = (row: any): Alumno => ({
   clasesAsistidas: row.clases_asistidas || 0,
   descripcion: row.descripcion || '',
   linkToken: row.link_token || '',
+  activo: row.activo !== false,
   createdAt: row.created_at,
 });
 
@@ -36,6 +37,7 @@ const alumnoToDb = (alumno: Alumno) => ({
   clases_asistidas: alumno.clasesAsistidas || 0,
   descripcion: alumno.descripcion || null,
   link_token: alumno.linkToken || null,
+  activo: alumno.activo !== false,
   created_at: alumno.createdAt,
 });
 
@@ -114,9 +116,11 @@ const turnoToDb = (turno: Turno) => ({
 
 export const storageSupabase = {
   alumnos: {
-    getAll: async (): Promise<Alumno[]> => {
+    getAll: async (includeInactive = false): Promise<Alumno[]> => {
       if (!useSupabase()) return [];
-      const { data, error } = await supabase.from('alumnos').select('*').order('created_at', { ascending: false });
+      let q = supabase.from('alumnos').select('*').order('created_at', { ascending: false });
+      if (!includeInactive) q = q.neq('activo', false);
+      const { data, error } = await q;
       if (error) {
         console.error('Error fetching alumnos:', error);
         return [];
@@ -144,6 +148,7 @@ export const storageSupabase = {
       if (updates.clasesAsistidas !== undefined) dbUpdates.clases_asistidas = updates.clasesAsistidas;
       if (updates.descripcion !== undefined) dbUpdates.descripcion = updates.descripcion || null;
       if (updates.linkToken !== undefined) dbUpdates.link_token = updates.linkToken || null;
+      if (updates.activo !== undefined) dbUpdates.activo = !!updates.activo;
       const { error } = await supabase.from('alumnos').update(dbUpdates).eq('id', id);
       if (error) {
         console.error('Error updating alumno:', error);
@@ -152,7 +157,7 @@ export const storageSupabase = {
     },
     delete: async (id: string): Promise<void> => {
       if (!useSupabase()) return;
-      const { error } = await supabase.from('alumnos').delete().eq('id', id);
+      const { error } = await supabase.from('alumnos').update({ activo: false }).eq('id', id);
       if (error) {
         console.error('Error deleting alumno:', error);
         throw error;

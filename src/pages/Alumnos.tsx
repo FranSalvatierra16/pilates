@@ -73,6 +73,7 @@ const Alumnos = () => {
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [filtroVencimiento, setFiltroVencimiento] = useState<'todos' | 'mes-vencido' | 'vence-hoy'>('todos');
   const [ordenarPorVencimientoCercano, setOrdenarPorVencimientoCercano] = useState(false);
+  const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [actividades, setActividades] = useState<Actividad[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -133,7 +134,7 @@ const Alumnos = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [mostrarInactivos]);
 
   useEffect(() => {
     // Filtrar por búsqueda
@@ -150,10 +151,12 @@ const Alumnos = () => {
     // Filtrar por vencimiento
     if (filtroVencimiento === 'mes-vencido') {
       filtrados = filtrados.filter(alumno =>
+          alumno.activo !== false &&
         alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '' && isCuotaVencida(alumno.fechaVencimientoCuota)
       );
     } else if (filtroVencimiento === 'vence-hoy') {
       filtrados = filtrados.filter(alumno =>
+          alumno.activo !== false &&
         alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '' && isCuotaVenceHoy(alumno.fechaVencimientoCuota)
       );
     }
@@ -186,7 +189,7 @@ const Alumnos = () => {
     setLoading(true);
     try {
       const [alumnosData, actividadesData, pagosData] = await Promise.all([
-        storageHybrid.alumnos.getAll(),
+        storageHybrid.alumnos.getAll(mostrarInactivos),
         storageHybrid.actividades.getAll(),
         storageHybrid.pagos.getAll().catch(() => [] as Pago[]),
       ]);
@@ -198,7 +201,7 @@ const Alumnos = () => {
       setAlumnoIdsConPago(ids);
     } catch (error) {
       console.error('Error loading data:', error);
-      const alumnosLocal = storage.alumnos.getAll();
+      const alumnosLocal = storage.alumnos.getAll().filter((a) => mostrarInactivos || a.activo !== false);
       setAlumnos(alumnosLocal);
       setAlumnosFiltrados(alumnosLocal);
       setActividades(storage.actividades.getAll());
@@ -217,12 +220,12 @@ const Alumnos = () => {
 
   const loadAlumnos = async () => {
     try {
-      const data = await storageHybrid.alumnos.getAll();
+      const data = await storageHybrid.alumnos.getAll(mostrarInactivos);
       setAlumnos(data);
       setAlumnosFiltrados(data);
     } catch (error) {
       console.error('Error loading alumnos:', error);
-      const alumnosLocal = storage.alumnos.getAll();
+      const alumnosLocal = storage.alumnos.getAll().filter((a) => mostrarInactivos || a.activo !== false);
       setAlumnos(alumnosLocal);
       setAlumnosFiltrados(alumnosLocal);
     }
@@ -298,6 +301,7 @@ const Alumnos = () => {
           fechaVencimientoCuota: '', // Sin fecha hasta que se pague
           clasesAsistidas: 0, // Iniciar contador en 0
           descripcion: formData.descripcion ?? '',
+          activo: true,
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.alumnos.add(nuevoAlumno);
@@ -317,7 +321,7 @@ const Alumnos = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('¿Estás seguro de que querés eliminar este alumno?')) {
+    if (confirm('¿Desactivar alumno? No se borran pagos ni historial, solo deja de aparecer en la lista activa.')) {
       try {
         await storageHybrid.alumnos.delete(id);
         await loadAlumnos();
@@ -325,6 +329,16 @@ const Alumnos = () => {
         console.error('Error deleting alumno:', error);
         alert('Error al eliminar el alumno. Por favor intentá nuevamente.');
       }
+    }
+  };
+
+  const handleActivar = async (id: string) => {
+    try {
+      await storageHybrid.alumnos.update(id, { activo: true });
+      await loadAlumnos();
+    } catch (error) {
+      console.error('Error reactivando alumno:', error);
+      alert('Error al reactivar el alumno. Por favor intentá nuevamente.');
     }
   };
 
@@ -598,6 +612,18 @@ const Alumnos = () => {
             >
               Por vencimiento cercano
             </button>
+            <button
+              type="button"
+              onClick={() => setMostrarInactivos((v) => !v)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                mostrarInactivos
+                  ? 'bg-gray-700 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title="Ver también alumnos inactivos (dados de baja)"
+            >
+              {mostrarInactivos ? 'Ocultar inactivos' : 'Ver inactivos'}
+            </button>
           </div>
           {(filtroBusqueda || filtroVencimiento !== 'todos' || ordenarPorVencimientoCercano) && (
             <p className="text-sm text-gray-500 mt-2">
@@ -658,9 +684,20 @@ const Alumnos = () => {
                     <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenHistorial(alumno)} className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation" title="Historial de pagos" aria-label="Historial de pagos"><History className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-primary-600 hover:bg-primary-50 touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
-                    <button onClick={() => handleDelete(alumno.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation" title="Eliminar" aria-label="Eliminar"><Trash2 className="w-5 h-5" /></button>
+                    {alumno.activo === false ? (
+                      <button onClick={() => handleActivar(alumno.id)} className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50 touch-manipulation" title="Reactivar" aria-label="Reactivar"><Save className="w-5 h-5" /></button>
+                    ) : (
+                      <button onClick={() => handleDelete(alumno.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation" title="Desactivar" aria-label="Desactivar"><Trash2 className="w-5 h-5" /></button>
+                    )}
                   </div>
                 </div>
+                {alumno.activo === false && (
+                  <div className="mb-2">
+                    <span className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
+                      Inactivo
+                    </span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 gap-2 text-sm">
                   <div>
                     <span className="text-gray-500">Contacto: </span>
@@ -771,7 +808,11 @@ const Alumnos = () => {
                           <button onClick={() => handleOpenHistorial(alumno)} className="p-1 rounded text-gray-600 hover:text-gray-900" title="Historial de pagos"><History className="w-4 h-4" /></button>
                          
                           <button onClick={() => handleOpenModal(alumno)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit className="w-4 h-4" /></button>
-                          <button onClick={() => handleDelete(alumno.id)} className="text-red-600 hover:text-red-900" title="Eliminar"><Trash2 className="w-4 h-4" /></button>
+                          {alumno.activo === false ? (
+                            <button onClick={() => handleActivar(alumno.id)} className="text-emerald-600 hover:text-emerald-900" title="Reactivar"><Save className="w-4 h-4" /></button>
+                          ) : (
+                            <button onClick={() => handleDelete(alumno.id)} className="text-red-600 hover:text-red-900" title="Desactivar"><Trash2 className="w-4 h-4" /></button>
+                          )}
                         </div>
                       </td>
                     </tr>

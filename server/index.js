@@ -173,6 +173,7 @@ app.get('/api/alumnos', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
+    const includeInactive = ['1', 'true', 'yes'].includes(String(req.query.includeInactive || '').toLowerCase());
     const { rows } = await db.query(
       `SELECT a.*,
         COALESCE((
@@ -187,8 +188,9 @@ app.get('/api/alumnos', async (req, res) => {
         ), 0) AS clases_este_mes
        FROM alumnos a
        WHERE a.sucursal_id = $1
+         AND ($2::boolean OR a.activo IS DISTINCT FROM false)
        ORDER BY a.created_at DESC`,
-      [sid]
+      [sid, includeInactive]
     );
     const data = rows.map((r) => ({
       id: r.id,
@@ -202,6 +204,7 @@ app.get('/api/alumnos', async (req, res) => {
       clasesAsistidas: r.clases_este_mes ?? 0,
       descripcion: r.descripcion ?? '',
       linkToken: r.link_token ?? '',
+      activo: r.activo !== false,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     }));
     res.json(data);
@@ -218,8 +221,8 @@ app.post('/api/alumnos', async (req, res) => {
     const sid = req.user?.sucursalId;
     const b = req.body;
     await db.query(
-      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, descripcion, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, descripcion, activo, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         b.id,
         sid,
@@ -232,6 +235,7 @@ app.post('/api/alumnos', async (req, res) => {
         b.actividadId || null,
         b.clasesAsistidas ?? 0,
         b.descripcion ?? null,
+        b.activo !== false,
         b.createdAt || new Date().toISOString(),
       ]
     );
@@ -263,6 +267,7 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.clasesAsistidas !== undefined) { updates.push(`clases_asistidas = $${i++}`); values.push(b.clasesAsistidas); }
     if (b.descripcion !== undefined) { updates.push(`descripcion = $${i++}`); values.push(b.descripcion || null); }
     if (b.linkToken !== undefined) { updates.push(`link_token = $${i++}`); values.push(b.linkToken || null); }
+    if (b.activo !== undefined) { updates.push(`activo = $${i++}`); values.push(!!b.activo); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);
     await db.query(`UPDATE alumnos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
@@ -277,7 +282,7 @@ app.delete('/api/alumnos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('DELETE FROM alumnos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
+    await db.query('UPDATE alumnos SET activo = false WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -351,7 +356,7 @@ app.get('/api/alumnos/findByDni', async (req, res) => {
             GROUP BY asi.turno_id, asi.semana
           ) u
         ), 0) AS clases_este_mes
-       FROM alumnos a WHERE a.dni = $1 AND a.sucursal_id = $2`,
+       FROM alumnos a WHERE a.dni = $1 AND a.sucursal_id = $2 AND a.activo IS DISTINCT FROM false`,
       [req.query.dni, sid]
     );
     if (rows.length === 0) return res.json(null);
@@ -367,6 +372,7 @@ app.get('/api/alumnos/findByDni', async (req, res) => {
       actividadId: r.actividad_id,
       clasesAsistidas: r.clases_este_mes ?? 0,
       descripcion: r.descripcion ?? '',
+      activo: r.activo !== false,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     });
   } catch (e) {
@@ -1009,18 +1015,18 @@ function getSemanaActual() {
 // Resuelve alumno por token o por dni (+ sucursalId opcional). Retorna { alumno, sucursalId } o error.
 async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
   if (token && token.trim()) {
-    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE link_token = $1', [token.trim()]);
+    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE link_token = $1 AND activo IS DISTINCT FROM false', [token.trim()]);
     if (rows.length === 0) return { error: 404, message: 'Link inválido o expirado' };
     return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   }
   const dniTrim = (dni || '').toString().trim();
   if (!dniTrim) return { error: 400, message: 'Ingresá tu DNI' };
   if (sucursalId && sucursalId.trim()) {
-    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE dni = $1 AND sucursal_id = $2', [dniTrim, sucursalId.trim()]);
+    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE dni = $1 AND sucursal_id = $2 AND activo IS DISTINCT FROM false', [dniTrim, sucursalId.trim()]);
     if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI en esta sede' };
     return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   }
-  const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE dni = $1', [dniTrim]);
+  const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE dni = $1 AND activo IS DISTINCT FROM false', [dniTrim]);
   if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI' };
   if (rows.length === 1) return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   const { rows: sucursales } = await db.query(

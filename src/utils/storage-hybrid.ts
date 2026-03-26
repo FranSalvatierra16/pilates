@@ -21,10 +21,11 @@ const backend = () => (useApi() ? storageApi : useSupabase() ? storageSupabase :
 
 export const storageHybrid = {
   alumnos: {
-    getAll: async (): Promise<Alumno[]> => {
+    getAll: async (includeInactive = false): Promise<Alumno[]> => {
       const b = backend();
-      if (b) return await b.alumnos.getAll();
-      return storage.alumnos.getAll();
+      if (b) return await b.alumnos.getAll(includeInactive);
+      const all = storage.alumnos.getAll();
+      return includeInactive ? all : all.filter((a) => a.activo !== false);
     },
     add: async (alumno: Alumno): Promise<void> => {
       const b = backend();

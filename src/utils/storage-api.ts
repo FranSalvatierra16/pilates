@@ -29,7 +29,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const storageApi = {
   alumnos: {
-    getAll: (): Promise<Alumno[]> => request<Alumno[]>('/api/alumnos'),
+    getAll: (includeInactive = false): Promise<Alumno[]> =>
+      request<Alumno[]>(`/api/alumnos${includeInactive ? '?includeInactive=1' : ''}`),
     add: (alumno: Alumno): Promise<void> =>
       request('/api/alumnos', { method: 'POST', body: JSON.stringify(alumno) }),
     update: (id: string, updates: Partial<Alumno>): Promise<void> =>

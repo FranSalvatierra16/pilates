@@ -138,10 +138,13 @@ const Alumnos = () => {
 
   useEffect(() => {
     // Filtrar por búsqueda
-    let filtrados = alumnos;
+    let filtrados = mostrarInactivos
+      ? alumnos.filter((alumno) => alumno.activo === false)
+      : alumnos.filter((alumno) => alumno.activo !== false);
+
     if (filtroBusqueda.trim()) {
       const busqueda = filtroBusqueda.toLowerCase().trim();
-      filtrados = alumnos.filter(alumno =>
+      filtrados = filtrados.filter(alumno =>
         alumno.nombre.toLowerCase().includes(busqueda) ||
         alumno.apellido.toLowerCase().includes(busqueda) ||
         alumno.dni.includes(busqueda) ||

@@ -6,6 +6,14 @@ import { formatCurrency } from '../utils/format';
 import { formatDate } from '../utils/date';
 import { Gasto, MetodoPago, Pago } from '../types';
 
+const mesFromFecha = (fecha: string) => (fecha || '').slice(0, 7);
+const labelMes = (mes: string) => {
+  if (!mes) return '';
+  const [y, m] = mes.split('-').map(Number);
+  if (!y || !m) return mes;
+  return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+};
+
 const Caja = () => {
   const [stats, setStats] = useState({
     totalEfectivo: 0,
@@ -29,6 +37,7 @@ const Caja = () => {
     metodoPago: 'efectivo' as MetodoPago,
     fecha: new Date().toISOString().split('T')[0],
   });
+  const [mesDetalle, setMesDetalle] = useState(new Date().toISOString().slice(0, 7));
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   useEffect(() => {
@@ -241,6 +250,39 @@ const Caja = () => {
     }
   };
 
+  const movimientosCaja = [
+    ...pagos.map((p) => ({
+      id: `p-${p.id}`,
+      fecha: p.fecha,
+      createdAt: p.createdAt,
+      tipo: 'ingreso' as const,
+      concepto: p.alumnoId == null ? (p.descripcion || 'Aporte a caja') : `${getAlumnoNombre(p)}${p.descripcion ? ` — ${p.descripcion}` : ''}`,
+      metodoPago: p.metodoPago,
+      monto: p.monto,
+    })),
+    ...gastos.map((g) => ({
+      id: `g-${g.id}`,
+      fecha: g.fecha,
+      createdAt: g.createdAt,
+      tipo: 'gasto' as const,
+      concepto: g.descripcion || 'Gasto',
+      metodoPago: g.metodoPago,
+      monto: g.monto,
+    })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const resumenMensual = Array.from(new Set(movimientosCaja.map((m) => mesFromFecha(m.fecha))))
+    .filter(Boolean)
+    .sort((a, b) => b.localeCompare(a))
+    .map((mes) => {
+      const delMes = movimientosCaja.filter((m) => mesFromFecha(m.fecha) === mes);
+      const ingresos = delMes.filter((m) => m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
+      const egresos = delMes.filter((m) => m.tipo === 'gasto').reduce((sum, m) => sum + m.monto, 0);
+      return { mes, ingresos, egresos, balance: ingresos - egresos, movimientos: delMes.length };
+    });
+
+  const movimientosMesDetalle = movimientosCaja.filter((m) => mesFromFecha(m.fecha) === mesDetalle);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -275,6 +317,79 @@ const Caja = () => {
             Actualizar
           </button>
         </div>
+      </div>
+
+      <div className="card mb-8 overflow-hidden min-w-0">
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-900">Resumen mensual</h2>
+          <p className="text-sm text-gray-500">Tocá un mes para ver el detalle</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Mes</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Ingresos</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Egresos</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Balance</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Mov.</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {resumenMensual.map((r) => (
+                <tr
+                  key={r.mes}
+                  onClick={() => setMesDetalle(r.mes)}
+                  className={`cursor-pointer hover:bg-gray-50 ${mesDetalle === r.mes ? 'bg-primary-50' : 'bg-white'}`}
+                >
+                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{labelMes(r.mes)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-semibold text-green-700">{formatCurrency(r.ingresos)}</td>
+                  <td className="px-4 py-3 text-sm text-right font-semibold text-red-700">{formatCurrency(r.egresos)}</td>
+                  <td className={`px-4 py-3 text-sm text-right font-bold ${r.balance >= 0 ? 'text-primary-700' : 'text-red-700'}`}>{formatCurrency(r.balance)}</td>
+                  <td className="px-4 py-3 text-sm text-right text-gray-700">{r.movimientos}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card mb-8 overflow-hidden min-w-0">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Detalle de {labelMes(mesDetalle)}</h2>
+        {movimientosMesDetalle.length === 0 ? (
+          <p className="text-gray-500">No hay movimientos en este mes.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px]">
+              <thead className="bg-primary-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Fecha</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tipo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Concepto</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Método</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {movimientosMesDetalle.map((m) => (
+                  <tr key={m.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{formatDate(m.fecha)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${m.tipo === 'ingreso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
+                        {m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{m.concepto}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{m.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}</td>
+                    <td className={`px-4 py-3 whitespace-nowrap text-sm font-semibold text-right ${m.tipo === 'ingreso' ? 'text-green-700' : 'text-red-700'}`}>
+                      {m.tipo === 'ingreso' ? '+' : '-'} {formatCurrency(m.monto)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Saldo de Caja - Destacado */}

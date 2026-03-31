@@ -3,8 +3,9 @@ import { Search, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { Alumno, Actividad } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { isCuotaVencida, isCuotaVenceHoy, formatDate } from '../utils/date';
+import { isCuotaVencida, isCuotaVenceHoy, formatDate, getSemanaActual } from '../utils/date';
 import { formatCurrency } from '../utils/format';
+import { Turno } from '../types';
 
 const Acceso = () => {
   const [dni, setDni] = useState('');
@@ -20,6 +21,55 @@ const Acceso = () => {
     } catch (error) {
       console.error('Error loading actividades:', error);
       setActividades(storage.actividades.getAll());
+    }
+  };
+
+  /** Lunes=0 ... Domingo=6 (mismo criterio que Calendario) */
+  const getDiaSemanaApp = (fecha: Date): number => {
+    return (fecha.getDay() + 6) % 7;
+  };
+
+  /** Marca asistencia "asistio" automática en turnos de HOY para la semana actual */
+  const marcarAsistenciaAutomaticaHoy = async (alumnoId: string) => {
+    const semana = getSemanaActual();
+    const hoy = getDiaSemanaApp(new Date());
+    if (hoy < 0 || hoy > 6) return;
+
+    const [turnos, inscripciones, recuperaciones] = await Promise.all([
+      storageHybrid.turnos.getAll(),
+      storageHybrid.inscripcionesTurno.getAll().catch(() => [] as { turnoId: string; alumnoId: string; semanaDesde: string }[]),
+      storageHybrid.recuperaciones.getBySemana(semana).catch(() => [] as { turnoId: string; alumnoId: string; semana: string }[]),
+    ]);
+
+    const turnosHoy = (turnos || []).filter((t: Turno) => t.diaSemana === hoy);
+    if (turnosHoy.length === 0) return;
+
+    for (const turno of turnosHoy) {
+      const regular =
+        (turno.alumnoIds || []).includes(alumnoId) &&
+        (() => {
+          const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === alumnoId);
+          return !ins || ins.semanaDesde <= semana;
+        })();
+
+      const recupera = recuperaciones.some((r) => r.turnoId === turno.id && r.alumnoId === alumnoId);
+      if (!regular && !recupera) continue;
+
+      const existente = await storageHybrid.asistencias.findByTurnoYAlumno(turno.id, alumnoId, semana);
+      if (existente) {
+        if (existente.estado !== 'asistio') {
+          await storageHybrid.asistencias.update(existente.id, { estado: 'asistio' });
+        }
+      } else {
+        await storageHybrid.asistencias.add({
+          id: crypto.randomUUID(),
+          turnoId: turno.id,
+          alumnoId,
+          estado: 'asistio',
+          semana,
+          createdAt: new Date().toISOString(),
+        });
+      }
     }
   };
 
@@ -57,6 +107,15 @@ const Acceso = () => {
           }
         } catch (error) {
           console.error('Error incrementando contador de clases:', error);
+        }
+      }
+
+      // Marcar asistencia automática en Calendario (turnos de hoy en semana actual)
+      if (tieneAcceso) {
+        try {
+          await marcarAsistenciaAutomaticaHoy(encontrado.id);
+        } catch (error) {
+          console.error('Error marcando asistencia automática:', error);
         }
       }
       

@@ -188,3 +188,23 @@ CREATE TABLE IF NOT EXISTS inscripciones_turno (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_inscripciones_turno_turno ON inscripciones_turno(turno_id);
+
+-- Cierres de caja (snapshot de totales por período; el detalle se arma filtrando pagos/gastos por fechas)
+CREATE TABLE IF NOT EXISTS cierres_caja (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  descripcion TEXT NOT NULL,
+  fecha_desde DATE NOT NULL,
+  fecha_hasta DATE NOT NULL,
+  ingresos_efectivo NUMERIC NOT NULL DEFAULT 0,
+  ingresos_transferencia NUMERIC NOT NULL DEFAULT 0,
+  gastos_efectivo NUMERIC NOT NULL DEFAULT 0,
+  gastos_transferencia NUMERIC NOT NULL DEFAULT 0,
+  total_ingresos NUMERIC NOT NULL DEFAULT 0,
+  total_gastos NUMERIC NOT NULL DEFAULT 0,
+  neto NUMERIC NOT NULL DEFAULT 0,
+  movimientos_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cierres_caja_sucursal ON cierres_caja(sucursal_id);
+CREATE INDEX IF NOT EXISTS idx_cierres_caja_created ON cierres_caja(created_at DESC);

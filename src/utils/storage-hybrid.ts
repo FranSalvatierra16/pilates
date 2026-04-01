@@ -1,4 +1,5 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja } from '../types';
+import { buildCierreSnapshot } from './cierre-caja';
 import { storage } from './storage';
 import { storageSupabase } from './storage-supabase';
 import { storageApi } from './storage-api';
@@ -124,6 +125,24 @@ export const storageHybrid = {
       const b = backend();
       if (b) await b.gastos.delete(id);
       else storage.gastos.delete(id);
+    },
+  },
+
+  cierresCaja: {
+    getAll: async (): Promise<CierreCaja[]> => {
+      if (useApi()) return storageApi.cierresCaja.getAll();
+      return storage.cierresCaja.getAll();
+    },
+    getById: async (id: string): Promise<CierreCaja | undefined> => {
+      if (useApi()) return storageApi.cierresCaja.getById(id);
+      return storage.cierresCaja.getById(id);
+    },
+    crear: async (input: { descripcion: string; fechaDesde: string; fechaHasta: string }): Promise<CierreCaja> => {
+      if (useApi()) return storageApi.cierresCaja.create(input);
+      const [pagos, gastos] = await Promise.all([storageHybrid.pagos.getAll(), storageHybrid.gastos.getAll()]);
+      const cierre = buildCierreSnapshot(input.descripcion, input.fechaDesde, input.fechaHasta, pagos, gastos);
+      storage.cierresCaja.add(cierre);
+      return cierre;
     },
   },
 

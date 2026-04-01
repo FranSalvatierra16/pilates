@@ -702,6 +702,152 @@ app.delete('/api/gastos/:id', async (req, res) => {
   }
 });
 
+function mapCierreCajaRow(r) {
+  return {
+    id: r.id,
+    descripcion: r.descripcion,
+    fechaDesde: r.fecha_desde?.toISOString?.()?.slice(0, 10) ?? r.fecha_desde,
+    fechaHasta: r.fecha_hasta?.toISOString?.()?.slice(0, 10) ?? r.fecha_hasta,
+    ingresosEfectivo: Number(r.ingresos_efectivo),
+    ingresosTransferencia: Number(r.ingresos_transferencia),
+    gastosEfectivo: Number(r.gastos_efectivo),
+    gastosTransferencia: Number(r.gastos_transferencia),
+    totalIngresos: Number(r.total_ingresos),
+    totalGastos: Number(r.total_gastos),
+    neto: Number(r.neto),
+    movimientosCount: Number(r.movimientos_count),
+    createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+  };
+}
+
+// --- Cierres de caja ---
+app.get('/api/cierres-caja', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { rows } = await db.query(
+      'SELECT * FROM cierres_caja WHERE sucursal_id = $1 ORDER BY created_at DESC',
+      [req.user.sucursalId]
+    );
+    res.json(rows.map(mapCierreCajaRow));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/cierres-caja/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { rows } = await db.query('SELECT * FROM cierres_caja WHERE id = $1 AND sucursal_id = $2', [
+      req.params.id,
+      req.user.sucursalId,
+    ]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Cierre no encontrado' });
+    res.json(mapCierreCajaRow(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/cierres-caja', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const b = req.body || {};
+    const descripcion = String(b.descripcion || '').trim();
+    const fechaDesde = b.fechaDesde;
+    const fechaHasta = b.fechaHasta;
+    if (!descripcion) return res.status(400).json({ error: 'Descripción requerida' });
+    if (!fechaDesde || !fechaHasta) return res.status(400).json({ error: 'Indicá fecha desde y hasta' });
+    if (String(fechaDesde) > String(fechaHasta)) return res.status(400).json({ error: 'La fecha desde no puede ser posterior a la fecha hasta' });
+
+    const sid = req.user.sucursalId;
+
+    const { rows: pagRows } = await db.query(
+      `SELECT p.metodo_pago, p.monto FROM pagos p
+       LEFT JOIN alumnos a ON p.alumno_id = a.id
+       WHERE (a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1))
+       AND p.fecha >= $2::date AND p.fecha <= $3::date`,
+      [sid, fechaDesde, fechaHasta]
+    );
+    let ingEf = 0;
+    let ingTr = 0;
+    for (const r of pagRows) {
+      const m = Number(r.monto);
+      if (r.metodo_pago === 'efectivo') ingEf += m;
+      else ingTr += m;
+    }
+
+    const { rows: gasRows } = await db.query(
+      `SELECT metodo_pago, monto FROM gastos
+       WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
+      [sid, fechaDesde, fechaHasta]
+    );
+    let gasEf = 0;
+    let gasTr = 0;
+    for (const r of gasRows) {
+      const m = Number(r.monto);
+      if (r.metodo_pago === 'efectivo') gasEf += m;
+      else gasTr += m;
+    }
+
+    const totalIngresos = ingEf + ingTr;
+    const totalGastos = gasEf + gasTr;
+    const neto = totalIngresos - totalGastos;
+    const movimientosCount = pagRows.length + gasRows.length;
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+
+    await db.query(
+      `INSERT INTO cierres_caja (
+        id, sucursal_id, descripcion, fecha_desde, fecha_hasta,
+        ingresos_efectivo, ingresos_transferencia, gastos_efectivo, gastos_transferencia,
+        total_ingresos, total_gastos, neto, movimientos_count, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [
+        id,
+        sid,
+        descripcion,
+        fechaDesde,
+        fechaHasta,
+        ingEf,
+        ingTr,
+        gasEf,
+        gasTr,
+        totalIngresos,
+        totalGastos,
+        neto,
+        movimientosCount,
+        createdAt,
+      ]
+    );
+
+    res.status(201).json(
+      mapCierreCajaRow({
+        id,
+        descripcion,
+        fecha_desde: fechaDesde,
+        fecha_hasta: fechaHasta,
+        ingresos_efectivo: ingEf,
+        ingresos_transferencia: ingTr,
+        gastos_efectivo: gasEf,
+        gastos_transferencia: gasTr,
+        total_ingresos: totalIngresos,
+        total_gastos: totalGastos,
+        neto,
+        movimientos_count: movimientosCount,
+        created_at: createdAt,
+      })
+    );
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Profesores ---
 app.get('/api/profesores', async (req, res) => {
   try {

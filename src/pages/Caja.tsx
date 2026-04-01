@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
-import { RefreshCw, DollarSign, CreditCard, Wallet, TrendingUp, Calendar, Plus, X, Save, Trash2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { RefreshCw, DollarSign, CreditCard, Wallet, TrendingUp, Calendar, Plus, X, Save, Trash2, Archive, Eye } from 'lucide-react';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { formatDate } from '../utils/date';
-import { Gasto, MetodoPago, Pago } from '../types';
+import { boundsForMesYYYYMM } from '../utils/cierre-caja';
+import { CierreCaja, Gasto, MetodoPago, Pago } from '../types';
 
 const mesFromFecha = (fecha: string) => (fecha || '').slice(0, 7);
 const labelMes = (mes: string) => {
@@ -39,6 +40,12 @@ const Caja = () => {
   });
   const [mesDetalle, setMesDetalle] = useState(new Date().toISOString().slice(0, 7));
 
+  const [cierres, setCierres] = useState<CierreCaja[]>([]);
+  const [showModalCierre, setShowModalCierre] = useState(false);
+  const [cierreDetalle, setCierreDetalle] = useState<CierreCaja | null>(null);
+  const [formCierre, setFormCierre] = useState({ descripcion: '', fechaDesde: '', fechaHasta: '' });
+  const [guardandoCierre, setGuardandoCierre] = useState(false);
+
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
@@ -60,6 +67,13 @@ const Caja = () => {
       ]);
       setPagos(todosPagos);
       setGastos(todosGastos);
+
+      try {
+        const lista = await storageHybrid.cierresCaja.getAll();
+        setCierres(lista);
+      } catch {
+        setCierres(storage.cierresCaja.getAll());
+      }
 
       // Calcular ingresos
       const efectivo = todosPagos
@@ -123,6 +137,7 @@ const Caja = () => {
       const todosGastos = storage.gastos.getAll();
       setPagos(todosPagos);
       setGastos(todosGastos);
+      setCierres(storage.cierresCaja.getAll());
       // Recalcular stats con localStorage
       const efectivo = todosPagos.filter(p => p.metodoPago === 'efectivo').reduce((sum, p) => sum + p.monto, 0);
       const transferencia = todosPagos.filter(p => p.metodoPago === 'transferencia').reduce((sum, p) => sum + p.monto, 0);
@@ -283,6 +298,52 @@ const Caja = () => {
 
   const movimientosMesDetalle = movimientosCaja.filter((m) => mesFromFecha(m.fecha) === mesDetalle);
 
+  const movimientosCierreDetalle = useMemo(() => {
+    if (!cierreDetalle) return [];
+    const desde = cierreDetalle.fechaDesde;
+    const hasta = cierreDetalle.fechaHasta;
+    return movimientosCaja
+      .filter((m) => m.fecha >= desde && m.fecha <= hasta)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [cierreDetalle, movimientosCaja]);
+
+  const abrirModalCerrarCaja = () => {
+    const b = boundsForMesYYYYMM(mesDetalle);
+    setFormCierre({
+      descripcion: '',
+      fechaDesde: b.desde,
+      fechaHasta: b.hasta,
+    });
+    setShowModalCierre(true);
+  };
+
+  const handleSubmitCierre = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formCierre.descripcion.trim()) {
+      alert('Ingresá un detalle o nombre para el cierre (ej. Fin de caja marzo).');
+      return;
+    }
+    if (formCierre.fechaDesde > formCierre.fechaHasta) {
+      alert('La fecha desde no puede ser posterior a la fecha hasta.');
+      return;
+    }
+    setGuardandoCierre(true);
+    try {
+      await storageHybrid.cierresCaja.crear({
+        descripcion: formCierre.descripcion.trim(),
+        fechaDesde: formCierre.fechaDesde,
+        fechaHasta: formCierre.fechaHasta,
+      });
+      setShowModalCierre(false);
+      await loadStats();
+    } catch (err) {
+      console.error(err);
+      alert('No se pudo guardar el cierre. Revisá la consola o probá de nuevo.');
+    } finally {
+      setGuardandoCierre(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -301,13 +362,21 @@ const Caja = () => {
           <span className="page-title-accent" aria-hidden />
           <h1 className="page-title">Caja</h1>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           <button
             onClick={handleOpenModalGasto}
             className="btn-primary flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
             Registrar Gasto
+          </button>
+          <button
+            type="button"
+            onClick={abrirModalCerrarCaja}
+            className="btn-secondary flex items-center gap-2 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+          >
+            <Archive className="w-5 h-5" />
+            Cerrar caja
           </button>
           <button
             onClick={loadStats}
@@ -317,6 +386,59 @@ const Caja = () => {
             Actualizar
           </button>
         </div>
+      </div>
+
+      <div className="card mb-8 overflow-hidden min-w-0">
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Archive className="w-6 h-6 text-amber-700" />
+            Cierres guardados
+          </h2>
+          <p className="text-sm text-gray-500">Registrá un cierre con el detalle del período (quedan los totales guardados).</p>
+        </div>
+        {cierres.length === 0 ? (
+          <p className="text-gray-500 text-sm">Todavía no hay cierres. Usá &quot;Cerrar caja&quot; para guardar un corte con nombre y fechas.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead className="bg-amber-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Registrado</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Detalle</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Período</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Neto</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Mov.</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase"> </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {cierres.map((c) => (
+                  <tr key={c.id} className="hover:bg-gray-50 bg-white">
+                    <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{formatDate(c.createdAt.slice(0, 10))}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{c.descripcion}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                      {formatDate(c.fechaDesde)} — {formatDate(c.fechaHasta)}
+                    </td>
+                    <td className={`px-4 py-3 text-sm text-right font-semibold ${c.neto >= 0 ? 'text-primary-700' : 'text-red-700'}`}>
+                      {formatCurrency(c.neto)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-700">{c.movimientosCount}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setCierreDetalle(c)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-600 text-white text-sm hover:bg-primary-700"
+                      >
+                        <Eye className="w-4 h-4" />
+                        Ver
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="card mb-8 overflow-hidden min-w-0">
@@ -784,6 +906,187 @@ const Caja = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showModalCierre && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Archive className="w-6 h-6 text-amber-600" />
+                Cerrar caja
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowModalCierre(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmitCierre} className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                Se guardan los totales del período elegido (ingresos y gastos por método). Podés poner un nombre claro, por ejemplo: <em>Fin de caja marzo</em>.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Detalle / nombre del cierre *</label>
+                <input
+                  type="text"
+                  required
+                  value={formCierre.descripcion}
+                  onChange={(e) => setFormCierre({ ...formCierre, descripcion: e.target.value })}
+                  className="input-field"
+                  placeholder="Ej: Fin de caja mes marzo"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Desde *</label>
+                  <input
+                    type="date"
+                    required
+                    value={formCierre.fechaDesde}
+                    onChange={(e) => setFormCierre({ ...formCierre, fechaDesde: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Hasta *</label>
+                  <input
+                    type="date"
+                    required
+                    value={formCierre.fechaHasta}
+                    onChange={(e) => setFormCierre({ ...formCierre, fechaHasta: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button type="button" onClick={() => setShowModalCierre(false)} className="btn-secondary">
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={guardandoCierre}
+                  className="btn-primary flex items-center gap-2 bg-amber-600 hover:bg-amber-700 border-amber-600"
+                >
+                  <Archive className="w-4 h-4" />
+                  {guardandoCierre ? 'Guardando…' : 'Guardar cierre'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {cierreDetalle && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-start justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full my-8 mb-12">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-start gap-4 flex-wrap sticky top-0 bg-white rounded-t-xl z-10">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{cierreDetalle.descripcion}</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Período: {formatDate(cierreDetalle.fechaDesde)} — {formatDate(cierreDetalle.fechaHasta)}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Cierre registrado el {formatDate(cierreDetalle.createdAt.slice(0, 10))}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCierreDetalle(null)}
+                className="text-gray-400 hover:text-gray-600 shrink-0"
+                aria-label="Cerrar"
+              >
+                <X className="w-7 h-7" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <p className="text-sm text-gray-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                Los importes de resumen son los del momento del cierre. La tabla lista los movimientos con fecha dentro del período (si más adelante editás o borrás un movimiento, los totales del cierre no cambian).
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                  <p className="text-xs text-green-800 uppercase">Ingresos</p>
+                  <p className="text-lg font-bold text-green-900">{formatCurrency(cierreDetalle.totalIngresos)}</p>
+                </div>
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-xs text-red-800 uppercase">Gastos</p>
+                  <p className="text-lg font-bold text-red-900">{formatCurrency(cierreDetalle.totalGastos)}</p>
+                </div>
+                <div className="rounded-lg border border-primary-200 bg-primary-50 p-3">
+                  <p className="text-xs text-primary-800 uppercase">Neto</p>
+                  <p className="text-lg font-bold text-primary-900">{formatCurrency(cierreDetalle.neto)}</p>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <p className="text-xs text-gray-600 uppercase">Movimientos</p>
+                  <p className="text-lg font-bold text-gray-900">{cierreDetalle.movimientosCount}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border p-3 bg-gray-50">
+                  <span className="text-gray-600">Efectivo: ingresos </span>
+                  <span className="font-semibold text-green-800">{formatCurrency(cierreDetalle.ingresosEfectivo)}</span>
+                  <span className="text-gray-500"> · gastos </span>
+                  <span className="font-semibold text-red-700">{formatCurrency(cierreDetalle.gastosEfectivo)}</span>
+                </div>
+                <div className="rounded-lg border p-3 bg-gray-50">
+                  <span className="text-gray-600">Transferencia: ingresos </span>
+                  <span className="font-semibold text-green-800">{formatCurrency(cierreDetalle.ingresosTransferencia)}</span>
+                  <span className="text-gray-500"> · gastos </span>
+                  <span className="font-semibold text-red-700">{formatCurrency(cierreDetalle.gastosTransferencia)}</span>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-3">Movimientos del período</h3>
+                {movimientosCierreDetalle.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No hay movimientos en ese rango de fechas.</p>
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                    <table className="w-full min-w-[640px]">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Fecha</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Tipo</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Concepto</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase">Método</th>
+                          <th className="px-3 py-2 text-right text-xs font-medium text-gray-700 uppercase">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {movimientosCierreDetalle.map((m) => (
+                          <tr key={m.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{formatDate(m.fecha)}</td>
+                            <td className="px-3 py-2">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  m.tipo === 'ingreso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'
+                                }`}
+                              >
+                                {m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{m.concepto}</td>
+                            <td className="px-3 py-2 text-sm text-gray-700">
+                              {m.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                            </td>
+                            <td
+                              className={`px-3 py-2 whitespace-nowrap text-sm font-semibold text-right ${
+                                m.tipo === 'ingreso' ? 'text-green-700' : 'text-red-700'
+                              }`}
+                            >
+                              {m.tipo === 'ingreso' ? '+' : '-'} {formatCurrency(m.monto)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

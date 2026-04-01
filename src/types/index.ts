@@ -76,6 +76,23 @@ export interface Gasto {
   createdAt: string;
 }
 
+/** Cierre de caja: totales congelados para un período (ej. fin de mes). */
+export interface CierreCaja {
+  id: string;
+  descripcion: string;
+  fechaDesde: string;
+  fechaHasta: string;
+  ingresosEfectivo: number;
+  ingresosTransferencia: number;
+  gastosEfectivo: number;
+  gastosTransferencia: number;
+  totalIngresos: number;
+  totalGastos: number;
+  neto: number;
+  movimientosCount: number;
+  createdAt: string;
+}
+
 export interface Profesor {
   id: string;
   nombre: string;

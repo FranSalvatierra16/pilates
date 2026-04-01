@@ -7,6 +7,7 @@ import { formatDate } from '../utils/date';
 import {
   cierreFechaCorte,
   enPeriodoAbierto,
+  fechaGastoParaPeriodoCaja,
   getUltimoCierre,
   movimientosRangoCierre,
 } from '../utils/cierre-caja';
@@ -54,7 +55,7 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
   const saldoTrasRetiros = totalGeneralNeto - totalRetiros;
 
   const pagosP = todosPagos.filter((p) => inP(p.fecha));
-  const gastosP = todosGastos.filter((g) => inP(g.fecha));
+  const gastosP = todosGastos.filter((g) => inP(fechaGastoParaPeriodoCaja(g)));
 
   const periodoEfectivoIng = pagosP.filter((p) => p.metodoPago === 'efectivo').reduce((s, p) => s + p.monto, 0);
   const periodoTransfIng = pagosP.filter((p) => p.metodoPago === 'transferencia').reduce((s, p) => s + p.monto, 0);
@@ -160,10 +161,18 @@ const Caja = () => {
   const [showModalSueldos, setShowModalSueldos] = useState(false);
   const [formSueldos, setFormSueldos] = useState<{
     fecha: string;
+    /** Mes/período al que corresponde el sueldo (estadísticas del período en Caja). */
+    contabilizarEnFecha: string;
     metodoPago: MetodoPago;
     montosPorId: Record<string, string>;
   }>({
     fecha: new Date().toISOString().slice(0, 10),
+    contabilizarEnFecha: (() => {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - 1);
+      return d.toISOString().slice(0, 10);
+    })(),
     metodoPago: 'efectivo',
     montosPorId: {},
   });
@@ -326,8 +335,12 @@ const Caja = () => {
   };
 
   const abrirModalSueldos = () => {
+    const imput = new Date();
+    imput.setDate(1);
+    imput.setMonth(imput.getMonth() - 1);
     setFormSueldos({
       fecha: new Date().toISOString().slice(0, 10),
+      contabilizarEnFecha: imput.toISOString().slice(0, 10),
       metodoPago: 'efectivo',
       montosPorId: {},
     });
@@ -364,6 +377,7 @@ const Caja = () => {
           fecha: formSueldos.fecha,
           createdAt: new Date().toISOString(),
           profesorId: prof.id,
+          contabilizarEnFecha: formSueldos.contabilizarEnFecha,
         };
         await storageHybrid.gastos.add(nuevoGasto);
       }
@@ -387,7 +401,7 @@ const Caja = () => {
     ? pagos.filter((p) => enPeriodoAbierto(p.fecha, ultimoCierreVista))
     : pagos;
   const gastosPeriodoVista = ultimoCierreVista
-    ? gastos.filter((g) => enPeriodoAbierto(g.fecha, ultimoCierreVista))
+    ? gastos.filter((g) => enPeriodoAbierto(fechaGastoParaPeriodoCaja(g), ultimoCierreVista))
     : gastos;
 
   const ultimosPagos = pagosPeriodoVista
@@ -614,6 +628,9 @@ const Caja = () => {
                 ) : (
                   <>Sin cierres todavía: el período actual incluye todos los movimientos.</>
                 )}
+              </p>
+              <p className="text-xs text-primary-200/85 leading-snug">
+                Los pagos de sueldo bajan del <strong className="text-primary-100">total en caja</strong> en la fecha en que pagás; en este resumen solo entran si los imputaste a este período (campo &quot;Corresponde a&quot; en Pagos sueldos).
               </p>
               <div className="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-sm">
                 <span>
@@ -1066,7 +1083,7 @@ const Caja = () => {
                   Pagos de sueldos
                 </h2>
                 <p className="text-sm text-gray-500 mt-1 font-normal">
-                  Se registran como gastos con vínculo al profesor (historial en la pantalla Profesores).
+                  El dinero sale de la caja en la <strong>fecha del pago</strong>. La fecha &quot;Corresponde a&quot; define el período del resumen de arriba (ej. sueldo de marzo pagado en abril no suma en el neto de abril).
                 </p>
               </div>
               <button
@@ -1094,6 +1111,7 @@ const Caja = () => {
                         onChange={(e) => setFormSueldos({ ...formSueldos, fecha: e.target.value })}
                         className="input-field"
                       />
+                      <p className="text-xs text-gray-500 mt-1">Cuándo salió el dinero (afecta el saldo total).</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Método *</label>
@@ -1109,6 +1127,23 @@ const Caja = () => {
                         <option value="transferencia">Transferencia</option>
                       </select>
                     </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Corresponde a (imputación) *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={formSueldos.contabilizarEnFecha}
+                      onChange={(e) =>
+                        setFormSueldos({ ...formSueldos, contabilizarEnFecha: e.target.value })
+                      }
+                      className="input-field"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Mes o período al que corresponde el sueldo. Así el resumen &quot;Período actual&quot; de Caja no mezcla, por ejemplo, marzo con abril.
+                    </p>
                   </div>
                   <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-[min(50vh,360px)] overflow-y-auto">
                     {profesores.map((p) => (

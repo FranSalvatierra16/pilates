@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS profesores (
 ALTER TABLE profesores ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS profesor_id TEXT REFERENCES profesores(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_gastos_profesor_id ON gastos(profesor_id);
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS contabilizar_en_fecha DATE;
 
 -- Turnos
 CREATE TABLE IF NOT EXISTS turnos (

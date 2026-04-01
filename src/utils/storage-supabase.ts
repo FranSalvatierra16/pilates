@@ -81,9 +81,17 @@ const dbToGasto = (row: any): Gasto => ({
   descripcion: row.descripcion,
   monto: parseFloat(row.monto),
   metodoPago: row.metodo_pago,
-  fecha: row.fecha,
+  fecha: typeof row.fecha === 'string' ? row.fecha.slice(0, 10) : row.fecha,
   createdAt: row.created_at,
   ...(row.profesor_id != null && row.profesor_id !== '' ? { profesorId: row.profesor_id } : {}),
+  ...(row.contabilizar_en_fecha != null
+    ? {
+        contabilizarEnFecha:
+          typeof row.contabilizar_en_fecha === 'string'
+            ? row.contabilizar_en_fecha.slice(0, 10)
+            : row.contabilizar_en_fecha,
+      }
+    : {}),
 });
 
 const gastoToDb = (gasto: Gasto) => ({
@@ -94,6 +102,9 @@ const gastoToDb = (gasto: Gasto) => ({
   fecha: gasto.fecha,
   created_at: gasto.createdAt,
   ...(gasto.profesorId != null && gasto.profesorId !== '' ? { profesor_id: gasto.profesorId } : {}),
+  ...(gasto.contabilizarEnFecha != null && gasto.contabilizarEnFecha !== ''
+    ? { contabilizar_en_fecha: gasto.contabilizarEnFecha }
+    : {}),
 });
 
 const dbToTurno = (row: any): Turno => ({
@@ -287,6 +298,10 @@ export const storageSupabase = {
       if (updates.monto !== undefined) dbUpdates.monto = updates.monto;
       if (updates.metodoPago) dbUpdates.metodo_pago = updates.metodoPago;
       if (updates.fecha) dbUpdates.fecha = updates.fecha;
+      if (updates.contabilizarEnFecha !== undefined) {
+        dbUpdates.contabilizar_en_fecha = updates.contabilizarEnFecha || null;
+      }
+      if (updates.profesorId !== undefined) dbUpdates.profesor_id = updates.profesorId || null;
       const { error } = await supabase.from('gastos').update(dbUpdates).eq('id', id);
       if (error) {
         console.error('Error updating gasto:', error);

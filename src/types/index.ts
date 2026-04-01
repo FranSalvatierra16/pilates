@@ -76,6 +76,12 @@ export interface Gasto {
   createdAt: string;
   /** Si está definido, es un pago de sueldo a ese profesor (historial en Profesores). */
   profesorId?: string | null;
+  /**
+   * Solo sueldos: mes/período al que imputás el gasto para el resumen "período actual" en Caja.
+   * La `fecha` sigue siendo el día en que salió el dinero (saldo total). Si pagás en abril un sueldo de marzo,
+   * poné acá una fecha de marzo: no entra en las estadísticas del período de abril.
+   */
+  contabilizarEnFecha?: string | null;
 }
 
 /** Cierre de caja: retiro físico que reduce el saldo disponible; el período actual en el panel cuenta desde esta fecha inclusive. */

@@ -646,6 +646,12 @@ app.get('/api/gastos', async (req, res) => {
       fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
       ...(r.profesor_id != null && { profesorId: r.profesor_id }),
+      ...(r.contabilizar_en_fecha != null && {
+        contabilizarEnFecha:
+          r.contabilizar_en_fecha instanceof Date
+            ? r.contabilizar_en_fecha.toISOString().slice(0, 10)
+            : String(r.contabilizar_en_fecha).slice(0, 10),
+      }),
     })));
   } catch (e) {
     console.error(e);
@@ -668,8 +674,9 @@ app.post('/api/gastos', async (req, res) => {
         return res.status(400).json({ error: 'Profesor inválido para esta sucursal' });
       }
     }
+    const contabilizarEn = b.contabilizarEnFecha ?? null;
     await db.query(
-      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at, profesor_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at, profesor_id, contabilizar_en_fecha) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
       [
         b.id,
         req.user.sucursalId,
@@ -679,6 +686,7 @@ app.post('/api/gastos', async (req, res) => {
         b.fecha,
         b.createdAt || new Date().toISOString(),
         profesorId,
+        contabilizarEn,
       ]
     );
     res.status(201).json({ ok: true });
@@ -713,6 +721,10 @@ app.patch('/api/gastos/:id', async (req, res) => {
       }
       updates.push(`profesor_id = $${i++}`);
       values.push(pid || null);
+    }
+    if (b.contabilizarEnFecha !== undefined) {
+      updates.push(`contabilizar_en_fecha = $${i++}`);
+      values.push(b.contabilizarEnFecha || null);
     }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);

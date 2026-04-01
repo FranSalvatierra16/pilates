@@ -46,6 +46,14 @@ export function diaSiguiente(fecha: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Fecha que usa el resumen "período actual" en Caja para un gasto. Sueldos: imputación contable; resto: fecha del movimiento. */
+export function fechaGastoParaPeriodoCaja(g: Gasto): string {
+  if (g.profesorId && g.contabilizarEnFecha) {
+    return g.contabilizarEnFecha.slice(0, 10);
+  }
+  return g.fecha;
+}
+
 /** Movimientos del período abierto: desde la fecha del último cierre inclusive (podés cargar gastos el mismo día). */
 export function enPeriodoAbierto(fecha: string, ultimoCierre: CierreCaja | null): boolean {
   if (!ultimoCierre) return true;

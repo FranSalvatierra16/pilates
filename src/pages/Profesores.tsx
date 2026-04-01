@@ -173,8 +173,16 @@ const Profesores = () => {
                   <ul className="space-y-1.5 text-sm text-gray-800 max-h-40 overflow-y-auto">
                     {historialSueldos.map((g) => (
                       <li key={g.id} className="flex justify-between gap-2 border-b border-violet-100/80 last:border-0 pb-1.5 last:pb-0">
-                        <span className="text-gray-600 whitespace-nowrap">{formatDate(g.fecha)}</span>
-                        <span className="font-medium text-right min-w-0">
+                        <div className="min-w-0">
+                          <span className="text-gray-800 block">{formatDate(g.fecha)}</span>
+                          {g.contabilizarEnFecha &&
+                            g.contabilizarEnFecha.slice(0, 10) !== g.fecha.slice(0, 10) && (
+                              <span className="text-xs text-gray-500">
+                                Imputado a {formatDate(g.contabilizarEnFecha)}
+                              </span>
+                            )}
+                        </div>
+                        <span className="font-medium text-right shrink-0">
                           {formatCurrency(g.monto)}
                           <span className="text-gray-500 font-normal ml-1">
                             · {g.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}

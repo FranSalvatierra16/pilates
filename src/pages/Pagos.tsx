@@ -3,7 +3,7 @@ import { Plus, X, Save, Calendar, Trash2 } from 'lucide-react';
 import { Alumno, Pago, MetodoPago } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { formatDate, calcularFechaVencimiento } from '../utils/date';
+import { formatDate, calcularFechaVencimiento, horaActualInput } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
 const Pagos = () => {
@@ -16,6 +16,7 @@ const Pagos = () => {
     monto: '',
     metodoPago: 'efectivo' as MetodoPago,
     fecha: new Date().toISOString().split('T')[0],
+    hora: horaActualInput(),
     descripcion: '', // para aporte a caja (sin alumno)
   });
 
@@ -69,6 +70,7 @@ const Pagos = () => {
       monto: '',
       metodoPago: 'efectivo',
       fecha: new Date().toISOString().split('T')[0],
+      hora: horaActualInput(),
       descripcion: '',
     });
   };
@@ -108,6 +110,7 @@ const Pagos = () => {
         monto,
         metodoPago: formData.metodoPago,
         fecha: formData.fecha,
+        hora: formData.hora || '12:00',
         createdAt: new Date().toISOString(),
         ...(esAporte && { descripcion: formData.descripcion.trim() || 'Aporte a caja' }),
       };
@@ -244,7 +247,7 @@ const Pagos = () => {
                   <p className="font-semibold text-gray-900 text-base">{getAlumnoNombre(pago)}</p>
                   <p className="text-sm text-gray-500 flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
-                    {formatDate(pago.fecha)}
+                    {formatDate(pago.fecha)} {pago.hora ?? '12:00'}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -289,7 +292,7 @@ const Pagos = () => {
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-sm text-gray-900">
                         <Calendar className="w-4 h-4 text-gray-400" />
-                        {formatDate(pago.fecha)}
+                        {formatDate(pago.fecha)} {pago.hora ?? '12:00'}
                       </div>
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{getAlumnoNombre(pago)}</td>
@@ -395,6 +398,17 @@ const Pagos = () => {
                   required
                   value={formData.fecha}
                   onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Hora
+                </label>
+                <input
+                  type="time"
+                  value={formData.hora}
+                  onChange={(e) => setFormData({ ...formData, hora: e.target.value })}
                   className="input-field"
                 />
               </div>

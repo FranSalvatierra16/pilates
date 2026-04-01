@@ -1,5 +1,6 @@
 import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja } from '../types';
 import { buildCierreRetiro } from './cierre-caja';
+import { horaActualInput } from './date';
 import { storage } from './storage';
 import { storageSupabase } from './storage-supabase';
 import { storageApi } from './storage-api';
@@ -137,14 +138,27 @@ export const storageHybrid = {
       if (useApi()) return storageApi.cierresCaja.getById(id);
       return storage.cierresCaja.getById(id);
     },
-    crear: async (input: { descripcion: string; fecha: string; montoRetirado: number }): Promise<CierreCaja> => {
+    crear: async (input: {
+      descripcion: string;
+      fecha: string;
+      montoRetirado: number;
+      horaCierre?: string;
+    }): Promise<CierreCaja> => {
       if (useApi()) return storageApi.cierresCaja.create(input);
       const [pagos, gastos, existentes] = await Promise.all([
         storageHybrid.pagos.getAll(),
         storageHybrid.gastos.getAll(),
         storage.cierresCaja.getAll(),
       ]);
-      const cierre = buildCierreRetiro(input.descripcion, input.fecha, input.montoRetirado, pagos, gastos, existentes);
+      const cierre = buildCierreRetiro(
+        input.descripcion,
+        input.fecha,
+        input.horaCierre ?? horaActualInput(),
+        input.montoRetirado,
+        pagos,
+        gastos,
+        existentes
+      );
       storage.cierresCaja.add(cierre);
       return cierre;
     },

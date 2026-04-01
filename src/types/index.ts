@@ -61,6 +61,8 @@ export interface Pago {
   monto: number;
   metodoPago: 'efectivo' | 'transferencia';
   fecha: string; // YYYY-MM-DD
+  /** Hora del movimiento (HH:mm), para período de caja mismo día que el cierre. */
+  hora?: string;
   createdAt: string;
   descripcion?: string; // ej. "Aporte a caja" cuando no hay alumno
 }
@@ -73,6 +75,8 @@ export interface Gasto {
   monto: number;
   metodoPago: 'efectivo' | 'transferencia';
   fecha: string; // YYYY-MM-DD
+  /** Hora del movimiento (HH:mm). */
+  hora?: string;
   createdAt: string;
   /** Si está definido, es un pago de sueldo a ese profesor (historial en Profesores). */
   profesorId?: string | null;
@@ -84,12 +88,14 @@ export interface Gasto {
   contabilizarEnFecha?: string | null;
 }
 
-/** Cierre de caja: retiro físico que reduce el saldo disponible; el período actual en el panel cuenta desde esta fecha inclusive. */
+/** Cierre de caja: retiro físico que reduce el saldo disponible; el período nuevo cuenta movimientos posteriores a `cerradoEn`. */
 export interface CierreCaja {
   id: string;
   descripcion: string;
-  /** Fecha del cierre (ingresos/gastos del período actual incluyen este día). */
+  /** Fecha del cierre (calendario). */
   fechaCierre: string;
+  /** Instante en que cerraste (ISO); el período actual incluye solo movimientos después de este momento. */
+  cerradoEn?: string;
   /** Monto que se retira del saldo (ej. lo que llevás al banco). */
   montoRetirado: number;
   /** Saldo teórico (ingresos − gastos − retiros anteriores) justo antes de este retiro. */

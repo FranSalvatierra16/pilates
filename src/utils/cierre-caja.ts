@@ -4,15 +4,54 @@ export function cierreFechaCorte(c: CierreCaja): string {
   return (c.fechaCierre || c.fechaHasta || c.fechaDesde || '').slice(0, 10);
 }
 
-/** Último cierre por fecha de corte y luego por alta. Define el inicio del período abierto. */
+/** Normaliza a HH:mm (24h). */
+export function normalizarHora(hora?: string | null): string {
+  if (!hora || !hora.trim()) return '12:00';
+  const m = hora.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '12:00';
+  const h = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+  const min = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+/** ISO UTC a partir de fecha YYYY-MM-DD y hora local HH:mm. */
+export function combinarFechaHoraISO(fecha: string, hora: string): string {
+  const fd = fecha.slice(0, 10);
+  const h = normalizarHora(hora);
+  const [y, mo, d] = fd.split('-').map(Number);
+  const [hh, mm] = h.split(':').map(Number);
+  return new Date(y, mo - 1, d, hh || 0, mm || 0, 0, 0).toISOString();
+}
+
+function instanteDesdeFechaHora(fecha: string, hora?: string | null): number {
+  const fd = fecha.slice(0, 10);
+  const h = normalizarHora(hora);
+  const [y, mo, d] = fd.split('-').map(Number);
+  const [hh, mm] = h.split(':').map(Number);
+  return new Date(y, mo - 1, d, hh || 0, mm || 0, 0, 0).getTime();
+}
+
+/** Instante del movimiento para orden / período (fecha + hora; sin hora → 12:00). */
+export function instanteMovimientoPago(p: Pago): number {
+  return instanteDesdeFechaHora(p.fecha, p.hora);
+}
+
+export function instanteMovimientoGasto(g: Gasto): number {
+  return instanteDesdeFechaHora(g.fecha, g.hora);
+}
+
+/** Instante en que quedó registrado el cierre (fin de la sesión anterior). */
+export function instanteCierre(c: CierreCaja): number {
+  if (c.cerradoEn) {
+    return new Date(c.cerradoEn).getTime();
+  }
+  return instanteDesdeFechaHora(cierreFechaCorte(c), '12:00');
+}
+
+/** Último cierre = mayor instante de cierre. */
 export function getUltimoCierre(lista: CierreCaja[]): CierreCaja | null {
   if (!lista?.length) return null;
-  return [...lista].sort((a, b) => {
-    const fa = cierreFechaCorte(a);
-    const fb = cierreFechaCorte(b);
-    if (fa && fb && fa !== fb) return fb.localeCompare(fa);
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  })[0];
+  return [...lista].sort((a, b) => instanteCierre(b) - instanteCierre(a))[0];
 }
 
 /** Compat: nombre anterior en el código */
@@ -21,18 +60,13 @@ export function getUltimoCierrePorRegistro(lista: CierreCaja[]): CierreCaja | nu
 }
 
 export function getCierreAnterior(lista: CierreCaja[], actual: CierreCaja): CierreCaja | null {
-  const ordenados = [...lista].sort((a, b) => {
-    const fa = cierreFechaCorte(a);
-    const fb = cierreFechaCorte(b);
-    if (fa !== fb) return fa.localeCompare(fb);
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
+  const ordenados = [...lista].sort((a, b) => instanteCierre(a) - instanteCierre(b));
   const i = ordenados.findIndex((c) => c.id === actual.id);
   if (i <= 0) return null;
   return ordenados[i - 1];
 }
 
-/** Rango de fechas [min, max] inclusive para movimientos de la sesión cerrada por `cierre`. */
+/** Rango de fechas [min, max] inclusive para listados por día (detalle de cierre). */
 export function movimientosRangoCierre(listaCierres: CierreCaja[], cierre: CierreCaja): { fechaMin: string; fechaMax: string } {
   const prev = getCierreAnterior(listaCierres, cierre);
   const fechaMax = cierreFechaCorte(cierre);
@@ -46,7 +80,7 @@ export function diaSiguiente(fecha: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Fecha que usa el resumen "período actual" en Caja para un gasto. Sueldos: imputación contable; resto: fecha del movimiento. */
+/** Fecha que usa el resumen "período actual" en Caja para un gasto (imputación sueldos). */
 export function fechaGastoParaPeriodoCaja(g: Gasto): string {
   if (g.profesorId && g.contabilizarEnFecha) {
     return g.contabilizarEnFecha.slice(0, 10);
@@ -54,23 +88,44 @@ export function fechaGastoParaPeriodoCaja(g: Gasto): string {
   return g.fecha;
 }
 
-/** Movimientos del período abierto: desde la fecha del último cierre inclusive (podés cargar gastos el mismo día). */
+/**
+ * ¿Entra en el período actual de Caja?
+ * - Sueldos con imputación: solo comparación de fechas (imputación vs día del cierre).
+ * - Resto: instante del movimiento > instante del último cierre.
+ */
+export function estaEnPeriodoAbiertoCaja(mov: Pago | Gasto, ultimoCierre: CierreCaja | null): boolean {
+  if (!ultimoCierre) return true;
+  const g = mov as Gasto;
+  if (g.profesorId && g.contabilizarEnFecha) {
+    const ref = g.contabilizarEnFecha.slice(0, 10);
+    const fc = cierreFechaCorte(ultimoCierre);
+    return ref > fc;
+  }
+  const tm = 'alumnoId' in mov ? instanteMovimientoPago(mov as Pago) : instanteMovimientoGasto(mov as Gasto);
+  return tm > instanteCierre(ultimoCierre);
+}
+
+/** @deprecated Usar estaEnPeriodoAbiertoCaja con el movimiento completo. */
 export function enPeriodoAbierto(fecha: string, ultimoCierre: CierreCaja | null): boolean {
   if (!ultimoCierre) return true;
   const fc = cierreFechaCorte(ultimoCierre);
   if (!fc) return true;
-  return fecha >= fc;
+  return fecha > fc;
 }
 
-/** Cierre local: mismo criterio que el servidor (retiro + snapshot de sesión). */
+/** Cierre local: snapshot de sesión por instantes + cerradoEn. */
 export function buildCierreRetiro(
   descripcion: string,
   fechaCierre: string,
+  horaCierre: string,
   montoRetirado: number,
   pagos: Pago[],
   gastos: Gasto[],
   cierresExistentes: CierreCaja[]
 ): CierreCaja {
+  const cerradoEn = combinarFechaHoraISO(fechaCierre, horaCierre);
+  const cerradoMs = new Date(cerradoEn).getTime();
+
   const ing = pagos.reduce((s, p) => s + p.monto, 0);
   const gas = gastos.reduce((s, g) => s + g.monto, 0);
   const teorico = ing - gas;
@@ -78,15 +133,25 @@ export function buildCierreRetiro(
   const saldoAntesRetiro = teorico - sumRet;
   const saldoDespuesRetiro = saldoAntesRetiro - montoRetirado;
 
-  const sorted = [...cierresExistentes].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const sorted = [...cierresExistentes].sort((a, b) => instanteCierre(b) - instanteCierre(a));
   const last = sorted[0];
-  const prevCut = last ? cierreFechaCorte(last) : '';
+  const prevInstant = last ? instanteCierre(last) : null;
 
-  const inWin = (f: string) =>
-    prevCut ? f > prevCut && f <= fechaCierre : f <= fechaCierre;
+  const inWinPago = (p: Pago) => {
+    const t = instanteMovimientoPago(p);
+    if (prevInstant != null && t <= prevInstant) return false;
+    if (t > cerradoMs) return false;
+    return true;
+  };
+  const inWinGasto = (g: Gasto) => {
+    const t = instanteMovimientoGasto(g);
+    if (prevInstant != null && t <= prevInstant) return false;
+    if (t > cerradoMs) return false;
+    return true;
+  };
 
-  const pagFil = pagos.filter((p) => inWin(p.fecha));
-  const gasFil = gastos.filter((g) => inWin(g.fecha));
+  const pagFil = pagos.filter(inWinPago);
+  const gasFil = gastos.filter(inWinGasto);
   let ingEf = 0;
   let ingTr = 0;
   let gasEf = 0;
@@ -112,6 +177,7 @@ export function buildCierreRetiro(
     id,
     descripcion: descripcion.trim(),
     fechaCierre,
+    cerradoEn,
     montoRetirado,
     saldoAntesRetiro,
     saldoDespuesRetiro,

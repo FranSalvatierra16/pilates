@@ -61,7 +61,8 @@ const dbToPago = (row: any): Pago => ({
   alumnoId: row.alumno_id ?? null,
   monto: parseFloat(row.monto),
   metodoPago: row.metodo_pago,
-  fecha: row.fecha,
+  fecha: typeof row.fecha === 'string' ? row.fecha.slice(0, 10) : row.fecha,
+  hora: row.hora ? String(row.hora).slice(0, 5) : '12:00',
   createdAt: row.created_at,
   ...(row.descripcion && { descripcion: row.descripcion }),
 });
@@ -72,6 +73,7 @@ const pagoToDb = (pago: Pago) => ({
   monto: pago.monto,
   metodo_pago: pago.metodoPago,
   fecha: pago.fecha,
+  hora: pago.hora || '12:00',
   created_at: pago.createdAt,
   ...(pago.descripcion && { descripcion: pago.descripcion }),
 });
@@ -82,6 +84,7 @@ const dbToGasto = (row: any): Gasto => ({
   monto: parseFloat(row.monto),
   metodoPago: row.metodo_pago,
   fecha: typeof row.fecha === 'string' ? row.fecha.slice(0, 10) : row.fecha,
+  hora: row.hora ? String(row.hora).slice(0, 5) : '12:00',
   createdAt: row.created_at,
   ...(row.profesor_id != null && row.profesor_id !== '' ? { profesorId: row.profesor_id } : {}),
   ...(row.contabilizar_en_fecha != null
@@ -100,6 +103,7 @@ const gastoToDb = (gasto: Gasto) => ({
   monto: gasto.monto,
   metodo_pago: gasto.metodoPago,
   fecha: gasto.fecha,
+  hora: gasto.hora || '12:00',
   created_at: gasto.createdAt,
   ...(gasto.profesorId != null && gasto.profesorId !== '' ? { profesor_id: gasto.profesorId } : {}),
   ...(gasto.contabilizarEnFecha != null && gasto.contabilizarEnFecha !== ''

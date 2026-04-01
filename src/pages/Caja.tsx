@@ -3,11 +3,11 @@ import { RefreshCw, DollarSign, CreditCard, Wallet, TrendingUp, Calendar, Plus, 
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
-import { formatDate } from '../utils/date';
+import { formatDate, formatDateTime, horaActualInput } from '../utils/date';
 import {
   cierreFechaCorte,
-  enPeriodoAbierto,
-  fechaGastoParaPeriodoCaja,
+  combinarFechaHoraISO,
+  estaEnPeriodoAbiertoCaja,
   getUltimoCierre,
   movimientosRangoCierre,
 } from '../utils/cierre-caja';
@@ -41,7 +41,8 @@ type CajaStats = {
   periodoEfectivoGas: number;
   periodoTransfIng: number;
   periodoTransfGas: number;
-  fechaInicioPeriodo: string | null;
+  /** Texto del último cierre (fecha/hora); el período cuenta movimientos posteriores a ese instante. */
+  periodoDesdeTexto: string | null;
   pagosHoy: number;
   pagosMes: number;
   pagosPeriodoCount: number;
@@ -49,7 +50,8 @@ type CajaStats = {
 
 function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres: CierreCaja[]): CajaStats {
   const ultimoCierre = getUltimoCierre(listaCierres);
-  const inP = (fecha: string) => enPeriodoAbierto(fecha, ultimoCierre);
+  const enP = (p: Pago) => estaEnPeriodoAbiertoCaja(p, ultimoCierre);
+  const enG = (g: Gasto) => estaEnPeriodoAbiertoCaja(g, ultimoCierre);
 
   const efectivo = todosPagos.filter((p) => p.metodoPago === 'efectivo').reduce((s, p) => s + p.monto, 0);
   const transferencia = todosPagos.filter((p) => p.metodoPago === 'transferencia').reduce((s, p) => s + p.monto, 0);
@@ -62,8 +64,8 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
   const totalRetiros = listaCierres.reduce((s, c) => s + (c.montoRetirado ?? 0), 0);
   const saldoTrasRetiros = totalGeneralNeto - totalRetiros;
 
-  const pagosP = todosPagos.filter((p) => inP(p.fecha));
-  const gastosP = todosGastos.filter((g) => inP(fechaGastoParaPeriodoCaja(g)));
+  const pagosP = todosPagos.filter(enP);
+  const gastosP = todosGastos.filter(enG);
 
   const periodoEfectivoIng = pagosP.filter((p) => p.metodoPago === 'efectivo').reduce((s, p) => s + p.monto, 0);
   const periodoTransfIng = pagosP.filter((p) => p.metodoPago === 'transferencia').reduce((s, p) => s + p.monto, 0);
@@ -79,7 +81,7 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
     .filter((p) => {
       const fechaPago = new Date(p.fecha);
       fechaPago.setHours(0, 0, 0, 0);
-      return fechaPago.getTime() === hoy.getTime() && inP(p.fecha);
+      return fechaPago.getTime() === hoy.getTime() && enP(p);
     })
     .reduce((s, p) => s + p.monto, 0);
 
@@ -87,11 +89,16 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
   const pagosMes = todosPagos
     .filter((p) => {
       const fechaPago = new Date(p.fecha);
-      return fechaPago >= inicioMes && inP(p.fecha);
+      return fechaPago >= inicioMes && enP(p);
     })
     .reduce((s, p) => s + p.monto, 0);
 
-  const fechaInicioPeriodo = ultimoCierre ? cierreFechaCorte(ultimoCierre) : null;
+  const periodoDesdeTexto = ultimoCierre
+    ? formatDateTime(
+        ultimoCierre.cerradoEn ??
+          combinarFechaHoraISO(cierreFechaCorte(ultimoCierre), '12:00')
+      )
+    : null;
 
   return {
     totalEfectivo: efectivo,
@@ -110,7 +117,7 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
     periodoEfectivoGas,
     periodoTransfIng,
     periodoTransfGas,
-    fechaInicioPeriodo,
+    periodoDesdeTexto,
     pagosHoy,
     pagosMes,
     pagosPeriodoCount: pagosP.length,
@@ -135,7 +142,7 @@ const Caja = () => {
     periodoEfectivoGas: 0,
     periodoTransfIng: 0,
     periodoTransfGas: 0,
-    fechaInicioPeriodo: null,
+    periodoDesdeTexto: null,
     pagosHoy: 0,
     pagosMes: 0,
     pagosPeriodoCount: 0,
@@ -150,6 +157,7 @@ const Caja = () => {
     monto: '',
     metodoPago: 'efectivo' as MetodoPago,
     fecha: new Date().toISOString().split('T')[0],
+    hora: horaActualInput(),
   });
   const [cierres, setCierres] = useState<CierreCaja[]>([]);
   const [showModalCierre, setShowModalCierre] = useState(false);
@@ -157,6 +165,7 @@ const Caja = () => {
   const [formCierre, setFormCierre] = useState({
     descripcion: '',
     fecha: new Date().toISOString().slice(0, 10),
+    horaCierre: horaActualInput(),
     montoRetirado: '',
   });
   const [guardandoCierre, setGuardandoCierre] = useState(false);
@@ -169,12 +178,14 @@ const Caja = () => {
   const [showModalSueldos, setShowModalSueldos] = useState(false);
   const [formSueldos, setFormSueldos] = useState<{
     fecha: string;
+    hora: string;
     /** Mes/período al que corresponde el sueldo (estadísticas del período en Caja). */
     contabilizarEnFecha: string;
     montosEfvoPorId: Record<string, string>;
     montosTransfPorId: Record<string, string>;
   }>({
     fecha: new Date().toISOString().slice(0, 10),
+    hora: horaActualInput(),
     contabilizarEnFecha: (() => {
       const d = new Date();
       d.setDate(1);
@@ -258,6 +269,7 @@ const Caja = () => {
       monto: '',
       metodoPago: 'efectivo',
       fecha: new Date().toISOString().split('T')[0],
+      hora: horaActualInput(),
     });
     setShowModalGasto(true);
   };
@@ -270,6 +282,7 @@ const Caja = () => {
       monto: '',
       metodoPago: 'efectivo',
       fecha: fc,
+      hora: horaActualInput(),
     });
     setShowModalGasto(true);
   };
@@ -282,6 +295,7 @@ const Caja = () => {
       monto: '',
       metodoPago: 'efectivo',
       fecha: new Date().toISOString().split('T')[0],
+      hora: horaActualInput(),
     });
   };
 
@@ -317,6 +331,7 @@ const Caja = () => {
         monto: monto,
         metodoPago: formDataGasto.metodoPago,
         fecha: formDataGasto.fecha,
+        hora: formDataGasto.hora,
         createdAt: new Date().toISOString(),
       };
 
@@ -348,6 +363,7 @@ const Caja = () => {
     imput.setMonth(imput.getMonth() - 1);
     setFormSueldos({
       fecha: new Date().toISOString().slice(0, 10),
+      hora: horaActualInput(),
       contabilizarEnFecha: imput.toISOString().slice(0, 10),
       montosEfvoPorId: {},
       montosTransfPorId: {},
@@ -401,6 +417,7 @@ const Caja = () => {
           monto,
           metodoPago,
           fecha: formSueldos.fecha,
+          hora: formSueldos.hora,
           createdAt: new Date().toISOString(),
           profesorId: prof.id,
           contabilizarEnFecha: formSueldos.contabilizarEnFecha,
@@ -424,10 +441,10 @@ const Caja = () => {
 
   const ultimoCierreVista = getUltimoCierre(cierres);
   const pagosPeriodoVista = ultimoCierreVista
-    ? pagos.filter((p) => enPeriodoAbierto(p.fecha, ultimoCierreVista))
+    ? pagos.filter((p) => estaEnPeriodoAbiertoCaja(p, ultimoCierreVista))
     : pagos;
   const gastosPeriodoVista = ultimoCierreVista
-    ? gastos.filter((g) => enPeriodoAbierto(fechaGastoParaPeriodoCaja(g), ultimoCierreVista))
+    ? gastos.filter((g) => estaEnPeriodoAbiertoCaja(g, ultimoCierreVista))
     : gastos;
 
   const ultimosPagos = pagosPeriodoVista
@@ -494,6 +511,7 @@ const Caja = () => {
     setFormCierre({
       descripcion: '',
       fecha: new Date().toISOString().slice(0, 10),
+      horaCierre: horaActualInput(),
       montoRetirado: '',
     });
     setShowModalCierre(true);
@@ -515,6 +533,7 @@ const Caja = () => {
       await storageHybrid.cierresCaja.crear({
         descripcion: formCierre.descripcion.trim(),
         fecha: formCierre.fecha,
+        horaCierre: formCierre.horaCierre,
         montoRetirado: monto,
       });
       setShowModalCierre(false);
@@ -663,9 +682,10 @@ const Caja = () => {
             <div className="rounded-lg bg-white/10 border border-white/20 px-4 py-3 space-y-1.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-primary-200">Período actual</p>
               <p className="text-sm text-primary-50">
-                {stats.fechaInicioPeriodo ? (
+                {stats.periodoDesdeTexto ? (
                   <>
-                    Desde el {formatDate(stats.fechaInicioPeriodo)} (fecha del último cierre inclusive). Ingresos y gastos de este tramo cuentan desde ese día.
+                    Período actual: movimientos con fecha/hora <strong>después</strong> del cierre del{' '}
+                    <strong>{stats.periodoDesdeTexto}</strong>. Si cerrás y media hora después cargás un pago con esa hora, ya entra acá.
                   </>
                 ) : (
                   <>Sin cierres todavía: el período actual incluye todos los movimientos.</>
@@ -1087,6 +1107,17 @@ const Caja = () => {
                   </p>
                 )}
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Hora del gasto *</label>
+                <input
+                  type="time"
+                  required
+                  value={formDataGasto.hora}
+                  onChange={(e) => setFormDataGasto({ ...formDataGasto, hora: e.target.value })}
+                  className="input-field max-w-[200px]"
+                />
+                <p className="text-xs text-gray-500 mt-1">Define si entra en el período actual respecto al último cierre (mismo día, después de la hora del cierre).</p>
+              </div>
               <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                 <p className="text-sm text-red-800">
                   ⚠️ <strong>Nota:</strong> El gasto se descontará del total de caja correspondiente (efectivo o transferencia).
@@ -1163,17 +1194,29 @@ const Caja = () => {
                       Total global: <strong>{formatCurrency(stats.totalNeto)}</strong> (neto movimientos − retiros). Los retiros no se asignan a un método; estos montos son ingresos − gastos por tipo.
                     </p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Fecha del pago *</label>
-                    <input
-                      type="date"
-                      required
-                      value={formSueldos.fecha}
-                      onChange={(e) => setFormSueldos({ ...formSueldos, fecha: e.target.value })}
-                      className="input-field max-w-xs"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Cuándo salió el dinero (afecta el saldo total).</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Fecha del pago *</label>
+                      <input
+                        type="date"
+                        required
+                        value={formSueldos.fecha}
+                        onChange={(e) => setFormSueldos({ ...formSueldos, fecha: e.target.value })}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Hora del pago *</label>
+                      <input
+                        type="time"
+                        required
+                        value={formSueldos.hora}
+                        onChange={(e) => setFormSueldos({ ...formSueldos, hora: e.target.value })}
+                        className="input-field"
+                      />
+                    </div>
                   </div>
+                  <p className="text-xs text-gray-500 -mt-2">Cuándo salió el dinero (saldo total y período actual).</p>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Corresponde a (imputación) *
@@ -1277,7 +1320,7 @@ const Caja = () => {
             </div>
             <form onSubmit={handleSubmitCierre} className="p-6 space-y-4">
               <p className="text-sm text-gray-600">
-                Poné un <strong>nombre</strong>, la <strong>fecha del cierre</strong> (por defecto hoy) y cuánto <strong>sacás de la caja</strong>. Ese monto se resta del saldo (ej. 473.000 − 200.000 = 273.000). El período &quot;nuevo&quot; en el panel incluye esa misma fecha: podés cargar gastos el día que cerrás.
+                Poné <strong>fecha y hora del cierre</strong>: a partir de ese instante, los movimientos nuevos (con hora posterior) entran en el período actual. El monto retirado se resta del saldo (ej. 473.000 − 200.000 = 273.000).
               </p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Nombre del cierre *</label>
@@ -1290,15 +1333,27 @@ const Caja = () => {
                   placeholder="Ej: Cierre 1 abril"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Fecha del cierre *</label>
-                <input
-                  type="date"
-                  required
-                  value={formCierre.fecha}
-                  onChange={(e) => setFormCierre({ ...formCierre, fecha: e.target.value })}
-                  className="input-field"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Fecha del cierre *</label>
+                  <input
+                    type="date"
+                    required
+                    value={formCierre.fecha}
+                    onChange={(e) => setFormCierre({ ...formCierre, fecha: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Hora del cierre *</label>
+                  <input
+                    type="time"
+                    required
+                    value={formCierre.horaCierre}
+                    onChange={(e) => setFormCierre({ ...formCierre, horaCierre: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Monto retirado de la caja *</label>

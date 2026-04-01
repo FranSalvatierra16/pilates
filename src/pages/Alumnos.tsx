@@ -4,7 +4,7 @@ import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '..
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal } from '../utils/date';
+import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal, horaActualInput } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
 /** Normaliza teléfono para WhatsApp (Argentina: 54 9 área número). Devuelve null si no hay número válido. */
@@ -104,6 +104,7 @@ const Alumnos = () => {
     monto: '',
     metodoPago: 'efectivo' as MetodoPago,
     fecha: new Date().toISOString().split('T')[0],
+    hora: horaActualInput(),
     fechaVencimiento: '',
   });
 
@@ -354,6 +355,7 @@ const Alumnos = () => {
       monto: actividad ? actividad.precio.toString() : '',
       metodoPago: 'efectivo',
       fecha: fechaPago,
+      hora: horaActualInput(),
       fechaVencimiento: fechaVencimientoCalculada,
     });
     setShowModalPago(true);
@@ -366,6 +368,7 @@ const Alumnos = () => {
       monto: '',
       metodoPago: 'efectivo',
       fecha: new Date().toISOString().split('T')[0],
+      hora: horaActualInput(),
       fechaVencimiento: '',
     });
   };
@@ -392,6 +395,7 @@ const Alumnos = () => {
         monto: monto,
         metodoPago: formDataPago.metodoPago,
         fecha: formDataPago.fecha,
+        hora: formDataPago.hora || '12:00',
         createdAt: new Date().toISOString(),
       };
 
@@ -1057,6 +1061,17 @@ const Alumnos = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Hora
+                </label>
+                <input
+                  type="time"
+                  value={formDataPago.hora}
+                  onChange={(e) => setFormDataPago({ ...formDataPago, hora: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Fecha de Vencimiento *
                 </label>
                 <input
@@ -1120,7 +1135,9 @@ const Alumnos = () => {
                     {historialPagos.map((pago) => (
                       <li key={pago.id} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm font-medium text-gray-900">{formatDate(pago.fecha)}</span>
+                          <span className="text-sm font-medium text-gray-900">
+                            {formatDate(pago.fecha)} {pago.hora ?? '12:00'}
+                          </span>
                           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${pago.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                             {pago.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
                           </span>

@@ -83,6 +83,8 @@ ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS link_token TEXT;
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS profesor_id TEXT REFERENCES profesores(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_gastos_profesor_id ON gastos(profesor_id);
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS contabilizar_en_fecha DATE;
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS hora TEXT DEFAULT '12:00';
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS hora TEXT DEFAULT '12:00';
 
 -- Política para permitir todas las operaciones (solo para desarrollo/pruebas)
 -- CREATE POLICY "Allow all operations" ON alumnos FOR ALL USING (true) WITH CHECK (true);

@@ -564,6 +564,7 @@ app.get('/api/pagos', async (req, res) => {
       monto: Number(r.monto),
       metodoPago: r.metodo_pago,
       fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
+      hora: r.hora ? String(r.hora).slice(0, 5) : '12:00',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
       descripcion: r.descripcion ?? undefined,
     })));
@@ -587,6 +588,7 @@ app.get('/api/pagos/by-alumno/:alumnoId', async (req, res) => {
       monto: Number(r.monto),
       metodoPago: r.metodo_pago,
       fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
+      hora: r.hora ? String(r.hora).slice(0, 5) : '12:00',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {
@@ -602,8 +604,18 @@ app.post('/api/pagos', async (req, res) => {
     const b = req.body;
     const sucursalId = b.alumnoId ? null : req.user.sucursalId;
     await db.query(
-      'INSERT INTO pagos (id, alumno_id, monto, metodo_pago, fecha, created_at, descripcion, sucursal_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [b.id, b.alumnoId || null, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString(), b.descripcion || null, sucursalId]
+      'INSERT INTO pagos (id, alumno_id, monto, metodo_pago, fecha, hora, created_at, descripcion, sucursal_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [
+        b.id,
+        b.alumnoId || null,
+        b.monto,
+        b.metodoPago,
+        b.fecha,
+        b.hora || '12:00',
+        b.createdAt || new Date().toISOString(),
+        b.descripcion || null,
+        sucursalId,
+      ]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -644,6 +656,7 @@ app.get('/api/gastos', async (req, res) => {
       monto: Number(r.monto),
       metodoPago: r.metodo_pago,
       fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
+      hora: r.hora ? String(r.hora).slice(0, 5) : '12:00',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
       ...(r.profesor_id != null && { profesorId: r.profesor_id }),
       ...(r.contabilizar_en_fecha != null && {
@@ -676,7 +689,7 @@ app.post('/api/gastos', async (req, res) => {
     }
     const contabilizarEn = b.contabilizarEnFecha ?? null;
     await db.query(
-      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at, profesor_id, contabilizar_en_fecha) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, hora, created_at, profesor_id, contabilizar_en_fecha) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
       [
         b.id,
         req.user.sucursalId,
@@ -684,6 +697,7 @@ app.post('/api/gastos', async (req, res) => {
         b.monto,
         b.metodoPago,
         b.fecha,
+        b.hora || '12:00',
         b.createdAt || new Date().toISOString(),
         profesorId,
         contabilizarEn,
@@ -708,6 +722,7 @@ app.patch('/api/gastos/:id', async (req, res) => {
     if (b.monto !== undefined) { updates.push(`monto = $${i++}`); values.push(b.monto); }
     if (b.metodoPago !== undefined) { updates.push(`metodo_pago = $${i++}`); values.push(b.metodoPago); }
     if (b.fecha !== undefined) { updates.push(`fecha = $${i++}`); values.push(b.fecha); }
+    if (b.hora !== undefined) { updates.push(`hora = $${i++}`); values.push(b.hora || '12:00'); }
     if (b.profesorId !== undefined) {
       let pid = b.profesorId;
       if (pid) {
@@ -748,6 +763,33 @@ app.delete('/api/gastos/:id', async (req, res) => {
   }
 });
 
+function instanteLocalMs(fecha, hora) {
+  const fd = fecha instanceof Date ? fecha.toISOString().slice(0, 10) : String(fecha).slice(0, 10);
+  const h = hora && String(hora).trim() ? String(hora).trim() : '12:00';
+  const m = h.match(/^(\d{1,2}):(\d{2})/);
+  const hh = m ? Math.min(23, Math.max(0, parseInt(m[1], 10))) : 12;
+  const mm = m ? Math.min(59, Math.max(0, parseInt(m[2], 10))) : 0;
+  const [y, mo, d] = fd.split('-').map(Number);
+  return new Date(y, mo - 1, d, hh, mm, 0, 0).getTime();
+}
+
+function combinarFechaHoraISO(fechaStr, horaStr) {
+  return new Date(instanteLocalMs(fechaStr, horaStr)).toISOString();
+}
+
+function instanteCierreRow(r) {
+  if (r.cerrado_en != null) {
+    const d = r.cerrado_en instanceof Date ? r.cerrado_en : new Date(r.cerrado_en);
+    return d.getTime();
+  }
+  const fc =
+    r.fecha_cierre?.toISOString?.()?.slice(0, 10) ??
+    r.fecha_hasta?.toISOString?.()?.slice(0, 10) ??
+    String(r.fecha_cierre ?? r.fecha_hasta ?? '').slice(0, 10);
+  if (!fc) return 0;
+  return instanteLocalMs(fc, '12:00');
+}
+
 function mapCierreCajaRow(r) {
   const fc =
     r.fecha_cierre?.toISOString?.()?.slice(0, 10) ??
@@ -758,6 +800,10 @@ function mapCierreCajaRow(r) {
     id: r.id,
     descripcion: r.descripcion,
     fechaCierre: fc,
+    ...(r.cerrado_en != null && {
+      cerradoEn:
+        r.cerrado_en instanceof Date ? r.cerrado_en.toISOString() : String(r.cerrado_en),
+    }),
     montoRetirado: Number(r.monto_retirado ?? 0),
     saldoAntesRetiro: r.saldo_antes_retiro != null ? Number(r.saldo_antes_retiro) : undefined,
     saldoDespuesRetiro: r.saldo_despues_retiro != null ? Number(r.saldo_despues_retiro) : undefined,
@@ -793,7 +839,7 @@ app.get('/api/cierres-caja', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query(
       `SELECT * FROM cierres_caja WHERE sucursal_id = $1
-       ORDER BY COALESCE(fecha_cierre, fecha_hasta) DESC NULLS LAST, created_at DESC`,
+       ORDER BY cerrado_en DESC NULLS LAST, COALESCE(fecha_cierre, fecha_hasta) DESC NULLS LAST, created_at DESC`,
       [req.user.sucursalId]
     );
     res.json(rows.map(mapCierreCajaRow));
@@ -826,11 +872,21 @@ app.post('/api/cierres-caja', async (req, res) => {
     const b = req.body || {};
     const descripcion = String(b.descripcion || '').trim();
     const fechaCierre = String(b.fecha || b.fechaCierre || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const horaCierreRaw = b.horaCierre ?? b.hora ?? '12:00';
+    const horaCierre = String(horaCierreRaw).trim() || '12:00';
+    const cerradoEnBody = b.cerradoEn != null ? String(b.cerradoEn).trim() : '';
     const montoRetirado = Number(b.montoRetirado);
     if (!descripcion) return res.status(400).json({ error: 'Nombre o descripción requerida' });
     if (!Number.isFinite(montoRetirado) || montoRetirado < 0) return res.status(400).json({ error: 'Indicá un monto a retirar válido (≥ 0)' });
 
     const sid = req.user.sucursalId;
+    let cerradoMs = instanteLocalMs(fechaCierre, horaCierre);
+    if (cerradoEnBody) {
+      const t = new Date(cerradoEnBody).getTime();
+      if (!Number.isFinite(t)) return res.status(400).json({ error: 'cerradoEn inválido' });
+      cerradoMs = t;
+    }
+    const cerradoEn = new Date(cerradoMs).toISOString();
 
     const teorico = await getTeoricoNetoCaja(db, sid);
     const { rows: retRows } = await db.query(
@@ -842,49 +898,46 @@ app.post('/api/cierres-caja', async (req, res) => {
     const saldoDespuesRetiro = saldoAntesRetiro - montoRetirado;
 
     const { rows: lastCierreRows } = await db.query(
-      `SELECT COALESCE(fecha_cierre, fecha_hasta) AS fc FROM cierres_caja WHERE sucursal_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT * FROM cierres_caja WHERE sucursal_id = $1
+       ORDER BY cerrado_en DESC NULLS LAST, COALESCE(fecha_cierre, fecha_hasta) DESC NULLS LAST, created_at DESC
+       LIMIT 1`,
       [sid]
     );
-    const rawFc = lastCierreRows[0]?.fc;
-    const prevCut = rawFc
-      ? rawFc instanceof Date
-        ? rawFc.toISOString().slice(0, 10)
-        : String(rawFc).slice(0, 10)
-      : null;
+    const prevInstant = lastCierreRows[0] ? instanteCierreRow(lastCierreRows[0]) : null;
 
-    const pagParams = prevCut
-      ? [sid, prevCut, fechaCierre]
-      : [sid, fechaCierre];
-    const pagSql = prevCut
-      ? `SELECT p.metodo_pago, p.monto FROM pagos p
-         LEFT JOIN alumnos a ON p.alumno_id = a.id
-         WHERE (a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1))
-         AND p.fecha > $2::date AND p.fecha <= $3::date`
-      : `SELECT p.metodo_pago, p.monto FROM pagos p
-         LEFT JOIN alumnos a ON p.alumno_id = a.id
-         WHERE (a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1))
-         AND p.fecha <= $2::date`;
+    const { rows: pagRows } = await db.query(
+      `SELECT p.* FROM pagos p
+       LEFT JOIN alumnos a ON p.alumno_id = a.id
+       WHERE a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1)`,
+      [sid]
+    );
+    const { rows: gasRowsAll } = await db.query('SELECT * FROM gastos WHERE sucursal_id = $1', [sid]);
 
-    const { rows: pagRows } = await db.query(pagSql, pagParams);
+    const pagFil = [];
+    for (const r of pagRows) {
+      const t = instanteLocalMs(r.fecha, r.hora);
+      if (prevInstant != null && t <= prevInstant) continue;
+      if (t > cerradoMs) continue;
+      pagFil.push(r);
+    }
+    const gasFil = [];
+    for (const r of gasRowsAll) {
+      const t = instanteLocalMs(r.fecha, r.hora);
+      if (prevInstant != null && t <= prevInstant) continue;
+      if (t > cerradoMs) continue;
+      gasFil.push(r);
+    }
 
     let ingEf = 0;
     let ingTr = 0;
-    for (const r of pagRows) {
+    for (const r of pagFil) {
       const m = Number(r.monto);
       if (r.metodo_pago === 'efectivo') ingEf += m;
       else ingTr += m;
     }
-
-    const gasParams = prevCut ? [sid, prevCut, fechaCierre] : [sid, fechaCierre];
-    const gasSql = prevCut
-      ? `SELECT metodo_pago, monto FROM gastos
-         WHERE sucursal_id = $1 AND fecha > $2::date AND fecha <= $3::date`
-      : `SELECT metodo_pago, monto FROM gastos WHERE sucursal_id = $1 AND fecha <= $2::date`;
-
-    const { rows: gasRows } = await db.query(gasSql, gasParams);
     let gasEf = 0;
     let gasTr = 0;
-    for (const r of gasRows) {
+    for (const r of gasFil) {
       const m = Number(r.monto);
       if (r.metodo_pago === 'efectivo') gasEf += m;
       else gasTr += m;
@@ -893,7 +946,7 @@ app.post('/api/cierres-caja', async (req, res) => {
     const totalIngresos = ingEf + ingTr;
     const totalGastos = gasEf + gasTr;
     const balanceSesion = totalIngresos - totalGastos;
-    const movimientosCount = pagRows.length + gasRows.length;
+    const movimientosCount = pagFil.length + gasFil.length;
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
@@ -902,8 +955,8 @@ app.post('/api/cierres-caja', async (req, res) => {
         id, sucursal_id, descripcion, fecha_desde, fecha_hasta, fecha_cierre,
         ingresos_efectivo, ingresos_transferencia, gastos_efectivo, gastos_transferencia,
         total_ingresos, total_gastos, neto, movimientos_count,
-        monto_retirado, saldo_antes_retiro, saldo_despues_retiro, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+        monto_retirado, saldo_antes_retiro, saldo_despues_retiro, cerrado_en, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [
         id,
         sid,
@@ -922,6 +975,7 @@ app.post('/api/cierres-caja', async (req, res) => {
         montoRetirado,
         saldoAntesRetiro,
         saldoDespuesRetiro,
+        cerradoEn,
         createdAt,
       ]
     );
@@ -931,6 +985,7 @@ app.post('/api/cierres-caja', async (req, res) => {
         id,
         descripcion,
         fecha_cierre: fechaCierre,
+        cerrado_en: cerradoEn,
         fecha_desde: fechaCierre,
         fecha_hasta: fechaCierre,
         ingresos_efectivo: ingEf,

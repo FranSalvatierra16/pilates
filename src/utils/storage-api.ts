@@ -99,7 +99,12 @@ export const storageApi = {
         return undefined;
       }
     },
-    create: (body: { descripcion: string; fecha: string; montoRetirado: number }): Promise<CierreCaja> =>
+    create: (body: {
+      descripcion: string;
+      fecha: string;
+      montoRetirado: number;
+      horaCierre?: string;
+    }): Promise<CierreCaja> =>
       request<CierreCaja>('/api/cierres-caja', { method: 'POST', body: JSON.stringify(body) }),
   },
   profesores: {

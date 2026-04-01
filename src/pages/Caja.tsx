@@ -146,6 +146,8 @@ const Caja = () => {
   const [cierreDetalle, setCierreDetalle] = useState<CierreCaja | null>(null);
   const [formCierre, setFormCierre] = useState({ descripcion: '', fechaDesde: '', fechaHasta: '' });
   const [guardandoCierre, setGuardandoCierre] = useState(false);
+  /** Si se abrió "Registrar gasto" desde un cierre ya guardado (gasto pendiente de ese mes). */
+  const [gastoDesdeCierre, setGastoDesdeCierre] = useState<CierreCaja | null>(null);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [alumnos, setAlumnos] = useState<any[]>([]);
@@ -209,6 +211,7 @@ const Caja = () => {
   };
 
   const handleOpenModalGasto = () => {
+    setGastoDesdeCierre(null);
     setFormDataGasto({
       descripcion: '',
       monto: '',
@@ -218,8 +221,20 @@ const Caja = () => {
     setShowModalGasto(true);
   };
 
+  const abrirGastoPendienteDesdeCierre = (cierre: CierreCaja) => {
+    setGastoDesdeCierre(cierre);
+    setFormDataGasto({
+      descripcion: '',
+      monto: '',
+      metodoPago: 'efectivo',
+      fecha: cierre.fechaHasta,
+    });
+    setShowModalGasto(true);
+  };
+
   const handleCerrarModalGasto = () => {
     setShowModalGasto(false);
+    setGastoDesdeCierre(null);
     setFormDataGasto({
       descripcion: '',
       monto: '',
@@ -240,6 +255,16 @@ const Caja = () => {
     if (!formDataGasto.descripcion.trim()) {
       alert('Por favor ingresá una descripción del gasto');
       return;
+    }
+
+    if (gastoDesdeCierre) {
+      const f = formDataGasto.fecha;
+      if (f < gastoDesdeCierre.fechaDesde || f > gastoDesdeCierre.fechaHasta) {
+        alert(
+          `La fecha del gasto tiene que estar dentro del período cerrado (${formatDate(gastoDesdeCierre.fechaDesde)} — ${formatDate(gastoDesdeCierre.fechaHasta)}).`
+        );
+        return;
+      }
     }
 
     try {
@@ -900,13 +925,27 @@ const Caja = () => {
         )}
       </div>
 
-      {/* Modal de Gasto */}
+      {/* Modal de Gasto (z-[70] si viene desde detalle de cierre para quedar arriba del panel) */}
       {showModalGasto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+        <div
+          className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 ${
+            gastoDesdeCierre ? 'z-[70]' : 'z-50'
+          }`}
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gray-900">Registrar Gasto</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {gastoDesdeCierre ? 'Registrar gasto pendiente' : 'Registrar gasto'}
+                </h2>
+                {gastoDesdeCierre && (
+                  <p className="text-sm text-gray-500 mt-1 font-normal">
+                    Mismo formulario que siempre; la fecha queda limitada al período de este cierre.
+                  </p>
+                )}
+              </div>
               <button
+                type="button"
                 onClick={handleCerrarModalGasto}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -958,20 +997,32 @@ const Caja = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Fecha del Gasto *
+                  Fecha del gasto *
                 </label>
                 <input
                   type="date"
                   required
                   value={formDataGasto.fecha}
+                  min={gastoDesdeCierre?.fechaDesde}
+                  max={gastoDesdeCierre?.fechaHasta}
                   onChange={(e) => setFormDataGasto({ ...formDataGasto, fecha: e.target.value })}
                   className="input-field"
                 />
+                {gastoDesdeCierre && (
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Solo fechas entre {formatDate(gastoDesdeCierre.fechaDesde)} y {formatDate(gastoDesdeCierre.fechaHasta)}.
+                  </p>
+                )}
               </div>
               <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                 <p className="text-sm text-red-800">
                   ⚠️ <strong>Nota:</strong> El gasto se descontará del total de caja correspondiente (efectivo o transferencia).
                 </p>
+                {gastoDesdeCierre && (
+                  <p className="text-sm text-amber-900 mt-2 pt-2 border-t border-red-100">
+                    <strong>Cierre ya guardado:</strong> los totales de la tarjeta de este cierre no se recalculan solos; el gasto aparece en la tabla de abajo y en el saldo general de la caja.
+                  </p>
+                )}
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
@@ -983,7 +1034,7 @@ const Caja = () => {
                 </button>
                 <button type="submit" className="btn-danger flex items-center gap-2">
                   <Save className="w-4 h-4" />
-                  Registrar Gasto
+                  {gastoDesdeCierre ? 'Guardar gasto' : 'Registrar gasto'}
                 </button>
               </div>
             </form>
@@ -1119,6 +1170,19 @@ const Caja = () => {
                   <span className="text-gray-500"> · gastos </span>
                   <span className="font-semibold text-red-700">{formatCurrency(cierreDetalle.gastosTransferencia)}</span>
                 </div>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => abrirGastoPendienteDesdeCierre(cierreDetalle)}
+                  className="btn-primary flex items-center gap-2 bg-red-600 hover:bg-red-700 border-red-600"
+                >
+                  <Plus className="w-5 h-5" />
+                  Agregar gasto pendiente (este período)
+                </button>
+                <p className="text-sm text-gray-600 self-center">
+                  Mismo formulario que &quot;Registrar gasto&quot;; la fecha solo puede caer dentro del rango de este cierre.
+                </p>
               </div>
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-3">Movimientos del período</h3>

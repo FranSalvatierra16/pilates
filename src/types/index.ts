@@ -61,6 +61,8 @@ export interface Pago {
   monto: number;
   metodoPago: 'efectivo' | 'transferencia';
   fecha: string; // YYYY-MM-DD
+  /** Hora del movimiento (HH:mm), para período de caja mismo día que el cierre. */
+  hora?: string;
   createdAt: string;
   descripcion?: string; // ej. "Aporte a caja" cuando no hay alumno
 }
@@ -73,6 +75,45 @@ export interface Gasto {
   monto: number;
   metodoPago: 'efectivo' | 'transferencia';
   fecha: string; // YYYY-MM-DD
+  /** Hora del movimiento (HH:mm). */
+  hora?: string;
+  createdAt: string;
+  /** Si está definido, es un pago de sueldo a ese profesor (historial en Profesores). */
+  profesorId?: string | null;
+  /**
+   * Solo sueldos: mes/período al que imputás el gasto para el resumen "período actual" en Caja.
+   * La `fecha` sigue siendo el día en que salió el dinero (saldo total). Si pagás en abril un sueldo de marzo,
+   * poné acá una fecha de marzo: no entra en las estadísticas del período de abril.
+   */
+  contabilizarEnFecha?: string | null;
+}
+
+/** Cierre de caja: retiro físico que reduce el saldo disponible; el período nuevo cuenta movimientos posteriores a `cerradoEn`. */
+export interface CierreCaja {
+  id: string;
+  descripcion: string;
+  /** Fecha del cierre (calendario). */
+  fechaCierre: string;
+  /** Instante en que cerraste (ISO); el período actual incluye solo movimientos después de este momento. */
+  cerradoEn?: string;
+  /** Monto que se retira del saldo (ej. lo que llevás al banco). */
+  montoRetirado: number;
+  /** Saldo teórico (ingresos − gastos − retiros anteriores) justo antes de este retiro. */
+  saldoAntesRetiro?: number;
+  /** Saldo luego de descontar este retiro. */
+  saldoDespuesRetiro?: number;
+  /** Compatibilidad con cierres viejos (rango por mes). */
+  fechaDesde?: string;
+  fechaHasta?: string;
+  ingresosEfectivo?: number;
+  ingresosTransferencia?: number;
+  gastosEfectivo?: number;
+  gastosTransferencia?: number;
+  totalIngresos?: number;
+  totalGastos?: number;
+  /** Balance de la sesión cerrada: ingresos − gastos de ese tramo (mismo valor que totalIngresos − totalGastos). */
+  neto?: number;
+  movimientosCount?: number;
   createdAt: string;
 }
 

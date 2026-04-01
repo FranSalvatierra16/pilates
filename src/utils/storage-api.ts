@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal, HorariosSucursal, Recuperacion, InscripcionTurno } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal, HorariosSucursal, Recuperacion, InscripcionTurno, CierreCaja } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -89,6 +89,23 @@ export const storageApi = {
     update: (id: string, updates: Partial<Gasto>): Promise<void> =>
       request(`/api/gastos/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     delete: (id: string): Promise<void> => request(`/api/gastos/${id}`, { method: 'DELETE' }),
+  },
+  cierresCaja: {
+    getAll: (): Promise<CierreCaja[]> => request<CierreCaja[]>('/api/cierres-caja'),
+    getById: async (id: string): Promise<CierreCaja | undefined> => {
+      try {
+        return await request<CierreCaja>(`/api/cierres-caja/${encodeURIComponent(id)}`);
+      } catch {
+        return undefined;
+      }
+    },
+    create: (body: {
+      descripcion: string;
+      fecha: string;
+      montoRetirado: number;
+      horaCierre?: string;
+    }): Promise<CierreCaja> =>
+      request<CierreCaja>('/api/cierres-caja', { method: 'POST', body: JSON.stringify(body) }),
   },
   profesores: {
     getAll: (): Promise<Profesor[]> => request<Profesor[]>('/api/profesores'),

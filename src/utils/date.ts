@@ -82,6 +82,33 @@ export const formatDate = (dateString: string): string => {
   }
 };
 
+/** Fecha y hora para UI (ISO o YYYY-MM-DD). */
+export const formatDateTime = (isoOrDate: string): string => {
+  if (!isoOrDate || !isoOrDate.trim()) return '-';
+  try {
+    const s = isoOrDate.includes('T') ? isoOrDate : `${isoOrDate.slice(0, 10)}T12:00:00`;
+    return format(parseISO(s), 'dd/MM/yyyy HH:mm');
+  } catch {
+    return isoOrDate;
+  }
+};
+
+/** HH:mm actual (24 h) al registrar un movimiento o cierre. */
+export const horaActualInput = (): string => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+/** Muestra una hora guardada como HH:mm en 24 h. */
+export const formatHora24 = (hora?: string | null): string => {
+  if (!hora || !String(hora).trim()) return '12:00';
+  const m = String(hora).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '12:00';
+  const h = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+  const min = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+};
+
 export const isCuotaVencida = (fechaVencimiento: string): boolean => {
   try {
     const vencimiento = parseISO(fechaVencimiento);

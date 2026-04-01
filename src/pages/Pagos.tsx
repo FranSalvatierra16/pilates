@@ -3,7 +3,7 @@ import { Plus, X, Save, Calendar, Trash2 } from 'lucide-react';
 import { Alumno, Pago, MetodoPago } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { formatDate, calcularFechaVencimiento } from '../utils/date';
+import { formatDate, calcularFechaVencimiento, horaActualInput, formatHora24 } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 
 const Pagos = () => {
@@ -108,6 +108,7 @@ const Pagos = () => {
         monto,
         metodoPago: formData.metodoPago,
         fecha: formData.fecha,
+        hora: horaActualInput(),
         createdAt: new Date().toISOString(),
         ...(esAporte && { descripcion: formData.descripcion.trim() || 'Aporte a caja' }),
       };
@@ -244,7 +245,7 @@ const Pagos = () => {
                   <p className="font-semibold text-gray-900 text-base">{getAlumnoNombre(pago)}</p>
                   <p className="text-sm text-gray-500 flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
-                    {formatDate(pago.fecha)}
+                    {formatDate(pago.fecha)} {formatHora24(pago.hora)}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -289,7 +290,7 @@ const Pagos = () => {
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-sm text-gray-900">
                         <Calendar className="w-4 h-4 text-gray-400" />
-                        {formatDate(pago.fecha)}
+                        {formatDate(pago.fecha)} {formatHora24(pago.hora)}
                       </div>
                     </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{getAlumnoNombre(pago)}</td>
@@ -398,6 +399,9 @@ const Pagos = () => {
                   className="input-field"
                 />
               </div>
+              <p className="text-xs text-gray-500">
+                La hora del movimiento se guarda automáticamente al registrar (formato 24 h).
+              </p>
               {formData.alumnoId && (
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-800">

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, X, Save } from 'lucide-react';
-import { Profesor } from '../types';
+import { Plus, Edit, Trash2, X, Save, History } from 'lucide-react';
+import { Profesor, Gasto } from '../types';
 import { storageHybrid } from '../utils/storage-hybrid';
+import { formatDate, formatHora24 } from '../utils/date';
+import { formatCurrency } from '../utils/format';
 
 const Profesores = () => {
   const [profesores, setProfesores] = useState<Profesor[]>([]);
@@ -12,6 +14,8 @@ const Profesores = () => {
     nombre: '',
     apellido: '',
   });
+  const [profesorHistorial, setProfesorHistorial] = useState<Profesor | null>(null);
+  const [gastosSueldos, setGastosSueldos] = useState<Gasto[]>([]);
 
   useEffect(() => {
     loadProfesores();
@@ -84,6 +88,19 @@ const Profesores = () => {
     }
   };
 
+  const abrirHistorialSueldos = async (p: Profesor) => {
+    setProfesorHistorial(p);
+    try {
+      const todos = await storageHybrid.gastos.getAll();
+      const filtrados = todos
+        .filter((g) => g.profesorId === p.id)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setGastosSueldos(filtrados);
+    } catch {
+      setGastosSueldos([]);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (confirm('¿Estás seguro de que querés eliminar este profesor?')) {
       try {
@@ -141,7 +158,15 @@ const Profesores = () => {
                   </h3>
                 </div>
               </div>
-              <div className="flex gap-2 pt-4 border-t border-gray-200">
+              <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => abrirHistorialSueldos(profesor)}
+                  className="flex-1 min-w-[8rem] btn-secondary flex items-center justify-center gap-2 border-violet-200 bg-violet-50 text-violet-900"
+                >
+                  <History className="w-4 h-4" />
+                  Pagos
+                </button>
                 <button
                   onClick={() => handleOpenModal(profesor)}
                   className="flex-1 btn-secondary flex items-center justify-center gap-2"
@@ -158,6 +183,56 @@ const Profesores = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {profesorHistorial && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Pagos a {profesorHistorial.nombre} {profesorHistorial.apellido}
+              </h2>
+              <button
+                type="button"
+                onClick={() => { setProfesorHistorial(null); setGastosSueldos([]); }}
+                className="p-2 text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 min-h-0">
+              {gastosSueldos.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center py-8">Todavía no hay pagos de sueldo registrados para este profesor (desde Caja → Pagos sueldos).</p>
+              ) : (
+                <ul className="space-y-2">
+                  {gastosSueldos.map((g) => (
+                    <li key={g.id} className="flex justify-between gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100 text-sm">
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900">{formatDate(g.fecha)} {formatHora24(g.hora)}</p>
+                        <p className="text-xs text-gray-500 truncate">{g.descripcion}</p>
+                        {g.contabilizarEnFecha && (
+                          <p className="text-xs text-violet-700 mt-0.5">Imputación: {formatDate(g.contabilizarEnFecha)}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-semibold text-gray-900">{formatCurrency(g.monto)}</p>
+                        <span className={`text-xs ${g.metodoPago === 'efectivo' ? 'text-green-700' : 'text-blue-700'}`}>
+                          {g.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {gastosSueldos.length > 0 && (
+                <p className="mt-4 pt-3 border-t border-gray-200 text-sm font-semibold text-gray-800 text-right">
+                  Total: {formatCurrency(gastosSueldos.reduce((s, g) => s + g.monto, 0))}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

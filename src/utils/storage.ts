@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja } from '../types';
 import { getFechaFromSemanaYDia } from './date';
 
 const STORAGE_KEYS = {
@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   profesores: 'savia_profesores',
   recuperaciones: 'savia_recuperaciones',
   inscripcionesTurno: 'savia_inscripciones_turno',
+  cierresCaja: 'savia_cierres_caja',
 } as const;
 
 export const storage = {
@@ -284,6 +285,24 @@ export const storage = {
         i => !(i.turnoId === turnoId && i.alumnoId === alumnoId)
       );
       storage.inscripcionesTurno.save(list);
+    },
+  },
+
+  cierresCaja: {
+    getAll: (): CierreCaja[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.cierresCaja);
+      return data ? JSON.parse(data) : [];
+    },
+    save: (cierres: CierreCaja[]): void => {
+      localStorage.setItem(STORAGE_KEYS.cierresCaja, JSON.stringify(cierres));
+    },
+    add: (cierre: CierreCaja): void => {
+      const list = storage.cierresCaja.getAll();
+      list.push(cierre);
+      storage.cierresCaja.save(list);
+    },
+    getById: (id: string): CierreCaja | undefined => {
+      return storage.cierresCaja.getAll().find((c) => c.id === id);
     },
   },
 };

@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS pagos (
   fecha DATE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE pagos ADD COLUMN IF NOT EXISTS hora TEXT;
 
 -- Gastos
 CREATE TABLE IF NOT EXISTS gastos (
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS gastos (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS hora TEXT;
 
 -- Profesores
 CREATE TABLE IF NOT EXISTS profesores (
@@ -86,6 +88,8 @@ CREATE TABLE IF NOT EXISTS profesores (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE profesores ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS profesor_id TEXT REFERENCES profesores(id);
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS contabilizar_en_fecha DATE;
 
 -- Turnos
 CREATE TABLE IF NOT EXISTS turnos (
@@ -168,6 +172,30 @@ CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos(fecha);
 CREATE INDEX IF NOT EXISTS idx_turnos_dia_hora ON turnos(dia_semana, hora);
 CREATE INDEX IF NOT EXISTS idx_turnos_profesor_id ON turnos(profesor_id);
 CREATE INDEX IF NOT EXISTS idx_asistencias_semana ON asistencias(semana);
+
+-- Cierres de caja: corte operativo por sucursal
+CREATE TABLE IF NOT EXISTS cierres_caja (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  descripcion TEXT NOT NULL,
+  fecha_cierre DATE NOT NULL,
+  cerrado_en TIMESTAMP WITH TIME ZONE,
+  monto_retirado NUMERIC NOT NULL DEFAULT 0,
+  saldo_antes_retiro NUMERIC,
+  saldo_despues_retiro NUMERIC,
+  fecha_desde DATE,
+  fecha_hasta DATE,
+  ingresos_efectivo NUMERIC,
+  ingresos_transferencia NUMERIC,
+  gastos_efectivo NUMERIC,
+  gastos_transferencia NUMERIC,
+  total_ingresos NUMERIC,
+  total_gastos NUMERIC,
+  neto NUMERIC,
+  movimientos_count INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cierres_caja_sucursal ON cierres_caja(sucursal_id, created_at DESC);
 
 -- Recuperaciones: alumnos agregados temporalmente a una clase para recuperar; desaparecen al reiniciar semana
 CREATE TABLE IF NOT EXISTS recuperaciones (

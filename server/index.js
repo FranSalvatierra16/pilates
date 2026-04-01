@@ -143,6 +143,165 @@ async function initSchema() {
   }
 }
 
+function normalizarHora(hora) {
+  if (!hora || !String(hora).trim()) return '12:00';
+  const m = String(hora).trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '12:00';
+  const h = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+  const min = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+function formatDateOnly(value) {
+  if (!value) return '';
+  return value?.toISOString?.()?.slice(0, 10) ?? String(value).slice(0, 10);
+}
+
+function combinarFechaHoraISO(fecha, hora) {
+  const [y, mo, d] = String(fecha).slice(0, 10).split('-').map(Number);
+  const [hh, mm] = normalizarHora(hora).split(':').map(Number);
+  return new Date(y, (mo || 1) - 1, d || 1, hh || 0, mm || 0, 0, 0).toISOString();
+}
+
+function instanteDesdeFechaHora(fecha, hora) {
+  const [y, mo, d] = String(fecha).slice(0, 10).split('-').map(Number);
+  const [hh, mm] = normalizarHora(hora).split(':').map(Number);
+  return new Date(y, (mo || 1) - 1, d || 1, hh || 0, mm || 0, 0, 0).getTime();
+}
+
+function fechaLocalYMD(date) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function instanteMovimientoParaPeriodoCaja(mov) {
+  const base = instanteDesdeFechaHora(mov.fecha, mov.hora);
+  if (normalizarHora(mov.hora) !== '12:00') return base;
+  const created = new Date(mov.createdAt);
+  if (!Number.isFinite(created.getTime())) return base;
+  if (String(mov.fecha).slice(0, 10) !== fechaLocalYMD(created)) return base;
+  return Math.max(base, created.getTime());
+}
+
+function instanteCierre(cierre) {
+  if (cierre.cerradoEn) return new Date(cierre.cerradoEn).getTime();
+  return instanteDesdeFechaHora(cierre.fechaCierre, '12:00');
+}
+
+function mapPagoRow(r) {
+  return {
+    id: r.id,
+    alumnoId: r.alumno_id ?? null,
+    monto: Number(r.monto),
+    metodoPago: r.metodo_pago,
+    fecha: formatDateOnly(r.fecha),
+    hora: r.hora || undefined,
+    createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+    descripcion: r.descripcion ?? undefined,
+  };
+}
+
+function mapGastoRow(r) {
+  return {
+    id: r.id,
+    descripcion: r.descripcion,
+    monto: Number(r.monto),
+    metodoPago: r.metodo_pago,
+    fecha: formatDateOnly(r.fecha),
+    hora: r.hora || undefined,
+    createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+    ...(r.profesor_id ? { profesorId: r.profesor_id } : {}),
+    ...(r.contabilizar_en_fecha ? { contabilizarEnFecha: formatDateOnly(r.contabilizar_en_fecha) } : {}),
+  };
+}
+
+function mapCierreCajaRow(r) {
+  return {
+    id: r.id,
+    descripcion: r.descripcion,
+    fechaCierre: formatDateOnly(r.fecha_cierre),
+    cerradoEn: r.cerrado_en?.toISOString?.() ?? r.cerrado_en ?? undefined,
+    montoRetirado: Number(r.monto_retirado ?? 0),
+    saldoAntesRetiro: r.saldo_antes_retiro != null ? Number(r.saldo_antes_retiro) : undefined,
+    saldoDespuesRetiro: r.saldo_despues_retiro != null ? Number(r.saldo_despues_retiro) : undefined,
+    fechaDesde: r.fecha_desde ? formatDateOnly(r.fecha_desde) : undefined,
+    fechaHasta: r.fecha_hasta ? formatDateOnly(r.fecha_hasta) : undefined,
+    ingresosEfectivo: r.ingresos_efectivo != null ? Number(r.ingresos_efectivo) : undefined,
+    ingresosTransferencia: r.ingresos_transferencia != null ? Number(r.ingresos_transferencia) : undefined,
+    gastosEfectivo: r.gastos_efectivo != null ? Number(r.gastos_efectivo) : undefined,
+    gastosTransferencia: r.gastos_transferencia != null ? Number(r.gastos_transferencia) : undefined,
+    totalIngresos: r.total_ingresos != null ? Number(r.total_ingresos) : undefined,
+    totalGastos: r.total_gastos != null ? Number(r.total_gastos) : undefined,
+    neto: r.neto != null ? Number(r.neto) : undefined,
+    movimientosCount: r.movimientos_count != null ? Number(r.movimientos_count) : undefined,
+    createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+  };
+}
+
+function buildCierreCajaServer({ descripcion, fechaCierre, horaCierre, montoRetirado, pagos, gastos, cierresExistentes }) {
+  const cerradoEn = combinarFechaHoraISO(fechaCierre, horaCierre);
+  const cerradoMs = new Date(cerradoEn).getTime();
+
+  const totalIngresosHistorico = pagos.reduce((s, p) => s + p.monto, 0);
+  const totalGastosHistorico = gastos.reduce((s, g) => s + g.monto, 0);
+  const totalRetirosPrevios = cierresExistentes.reduce((s, c) => s + (c.montoRetirado ?? 0), 0);
+  const saldoAntesRetiro = totalIngresosHistorico - totalGastosHistorico - totalRetirosPrevios;
+  const saldoDespuesRetiro = saldoAntesRetiro - montoRetirado;
+
+  const ultimoCierre = [...cierresExistentes].sort((a, b) => instanteCierre(b) - instanteCierre(a))[0] || null;
+  const prevInstant = ultimoCierre ? instanteCierre(ultimoCierre) : null;
+
+  const pagosSesion = pagos.filter((p) => {
+    const t = instanteMovimientoParaPeriodoCaja(p);
+    if (prevInstant != null && t <= prevInstant) return false;
+    return t <= cerradoMs;
+  });
+  const gastosSesion = gastos.filter((g) => {
+    if (g.profesorId) return false;
+    const t = instanteMovimientoParaPeriodoCaja(g);
+    if (prevInstant != null && t <= prevInstant) return false;
+    return t <= cerradoMs;
+  });
+
+  let ingresosEfectivo = 0;
+  let ingresosTransferencia = 0;
+  let gastosEfectivo = 0;
+  let gastosTransferencia = 0;
+
+  for (const pago of pagosSesion) {
+    if (pago.metodoPago === 'efectivo') ingresosEfectivo += pago.monto;
+    else ingresosTransferencia += pago.monto;
+  }
+  for (const gasto of gastosSesion) {
+    if (gasto.metodoPago === 'efectivo') gastosEfectivo += gasto.monto;
+    else gastosTransferencia += gasto.monto;
+  }
+
+  const totalIngresos = ingresosEfectivo + ingresosTransferencia;
+  const totalGastos = gastosEfectivo + gastosTransferencia;
+
+  return {
+    id: crypto.randomUUID(),
+    descripcion: descripcion.trim(),
+    fechaCierre,
+    cerradoEn,
+    montoRetirado,
+    saldoAntesRetiro,
+    saldoDespuesRetiro,
+    fechaDesde: fechaCierre,
+    fechaHasta: fechaCierre,
+    ingresosEfectivo,
+    ingresosTransferencia,
+    gastosEfectivo,
+    gastosTransferencia,
+    totalIngresos,
+    totalGastos,
+    neto: totalIngresos - totalGastos,
+    movimientosCount: pagosSesion.length + gastosSesion.length,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'No autorizado' });
@@ -558,15 +717,7 @@ app.get('/api/pagos', async (req, res) => {
        ORDER BY p.created_at DESC`,
       [req.user.sucursalId]
     );
-    res.json(rows.map((r) => ({
-      id: r.id,
-      alumnoId: r.alumno_id ?? null,
-      monto: Number(r.monto),
-      metodoPago: r.metodo_pago,
-      fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
-      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
-      descripcion: r.descripcion ?? undefined,
-    })));
+    res.json(rows.map(mapPagoRow));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -581,14 +732,7 @@ app.get('/api/pagos/by-alumno/:alumnoId', async (req, res) => {
       'SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id WHERE p.alumno_id = $1 AND a.sucursal_id = $2 ORDER BY p.created_at DESC',
       [req.params.alumnoId, req.user.sucursalId]
     );
-    res.json(rows.map((r) => ({
-      id: r.id,
-      alumnoId: r.alumno_id,
-      monto: Number(r.monto),
-      metodoPago: r.metodo_pago,
-      fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
-      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
-    })));
+    res.json(rows.map(mapPagoRow));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -602,8 +746,8 @@ app.post('/api/pagos', async (req, res) => {
     const b = req.body;
     const sucursalId = b.alumnoId ? null : req.user.sucursalId;
     await db.query(
-      'INSERT INTO pagos (id, alumno_id, monto, metodo_pago, fecha, created_at, descripcion, sucursal_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      [b.id, b.alumnoId || null, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString(), b.descripcion || null, sucursalId]
+      'INSERT INTO pagos (id, alumno_id, monto, metodo_pago, fecha, created_at, descripcion, sucursal_id, hora) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      [b.id, b.alumnoId || null, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString(), b.descripcion || null, sucursalId, b.hora || null]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -638,14 +782,7 @@ app.get('/api/gastos', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query('SELECT * FROM gastos WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]);
-    res.json(rows.map((r) => ({
-      id: r.id,
-      descripcion: r.descripcion,
-      monto: Number(r.monto),
-      metodoPago: r.metodo_pago,
-      fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
-      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
-    })));
+    res.json(rows.map(mapGastoRow));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -658,8 +795,8 @@ app.post('/api/gastos', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     await db.query(
-      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [b.id, req.user.sucursalId, b.descripcion, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString()]
+      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at, hora, profesor_id, contabilizar_en_fecha) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+      [b.id, req.user.sucursalId, b.descripcion, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString(), b.hora || null, b.profesorId || null, b.contabilizarEnFecha || null]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -680,6 +817,9 @@ app.patch('/api/gastos/:id', async (req, res) => {
     if (b.monto !== undefined) { updates.push(`monto = $${i++}`); values.push(b.monto); }
     if (b.metodoPago !== undefined) { updates.push(`metodo_pago = $${i++}`); values.push(b.metodoPago); }
     if (b.fecha !== undefined) { updates.push(`fecha = $${i++}`); values.push(b.fecha); }
+    if (b.hora !== undefined) { updates.push(`hora = $${i++}`); values.push(b.hora || null); }
+    if (b.profesorId !== undefined) { updates.push(`profesor_id = $${i++}`); values.push(b.profesorId || null); }
+    if (b.contabilizarEnFecha !== undefined) { updates.push(`contabilizar_en_fecha = $${i++}`); values.push(b.contabilizarEnFecha || null); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);
     await db.query(`UPDATE gastos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
@@ -696,6 +836,122 @@ app.delete('/api/gastos/:id', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     await db.query('DELETE FROM gastos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Cierres de caja ---
+app.get('/api/cierres-caja', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { rows } = await db.query(
+      `SELECT *
+         FROM cierres_caja
+        WHERE sucursal_id = $1
+        ORDER BY COALESCE(cerrado_en, created_at) DESC, created_at DESC`,
+      [req.user.sucursalId]
+    );
+    res.json(rows.map(mapCierreCajaRow));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/cierres-caja/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { rows } = await db.query(
+      'SELECT * FROM cierres_caja WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
+      [req.params.id, req.user.sucursalId]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Cierre no encontrado' });
+    res.json(mapCierreCajaRow(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/cierres-caja', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const b = req.body || {};
+    const descripcion = String(b.descripcion || '').trim();
+    const fechaCierre = formatDateOnly(b.fecha);
+    const horaCierre = normalizarHora(b.horaCierre);
+    const montoRetirado = Number(b.montoRetirado ?? 0);
+
+    if (!descripcion) return res.status(400).json({ error: 'Descripción requerida' });
+    if (!fechaCierre) return res.status(400).json({ error: 'Fecha requerida' });
+    if (!Number.isFinite(montoRetirado) || montoRetirado < 0) {
+      return res.status(400).json({ error: 'Monto retirado inválido' });
+    }
+
+    const [pagosRows, gastosRows, cierresRows] = await Promise.all([
+      db.query(
+        `SELECT p.*
+           FROM pagos p
+           LEFT JOIN alumnos a ON p.alumno_id = a.id
+          WHERE a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1)
+          ORDER BY p.created_at DESC`,
+        [req.user.sucursalId]
+      ),
+      db.query('SELECT * FROM gastos WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]),
+      db.query('SELECT * FROM cierres_caja WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]),
+    ]);
+
+    const cierre = buildCierreCajaServer({
+      descripcion,
+      fechaCierre,
+      horaCierre,
+      montoRetirado,
+      pagos: pagosRows.rows.map(mapPagoRow),
+      gastos: gastosRows.rows.map(mapGastoRow),
+      cierresExistentes: cierresRows.rows.map(mapCierreCajaRow),
+    });
+
+    await db.query(
+      `INSERT INTO cierres_caja (
+        id, sucursal_id, descripcion, fecha_cierre, cerrado_en, monto_retirado,
+        saldo_antes_retiro, saldo_despues_retiro, fecha_desde, fecha_hasta,
+        ingresos_efectivo, ingresos_transferencia, gastos_efectivo, gastos_transferencia,
+        total_ingresos, total_gastos, neto, movimientos_count, created_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10,
+        $11, $12, $13, $14,
+        $15, $16, $17, $18, $19
+      )`,
+      [
+        cierre.id,
+        req.user.sucursalId,
+        cierre.descripcion,
+        cierre.fechaCierre,
+        cierre.cerradoEn || null,
+        cierre.montoRetirado,
+        cierre.saldoAntesRetiro ?? null,
+        cierre.saldoDespuesRetiro ?? null,
+        cierre.fechaDesde || null,
+        cierre.fechaHasta || null,
+        cierre.ingresosEfectivo ?? null,
+        cierre.ingresosTransferencia ?? null,
+        cierre.gastosEfectivo ?? null,
+        cierre.gastosTransferencia ?? null,
+        cierre.totalIngresos ?? null,
+        cierre.totalGastos ?? null,
+        cierre.neto ?? null,
+        cierre.movimientosCount ?? null,
+        cierre.createdAt,
+      ]
+    );
+
+    res.status(201).json(cierre);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

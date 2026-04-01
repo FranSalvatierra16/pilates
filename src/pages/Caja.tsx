@@ -172,7 +172,7 @@ const Caja = () => {
   const [cierreDetalle, setCierreDetalle] = useState<CierreCaja | null>(null);
   const [formCierre, setFormCierre] = useState({
     descripcion: '',
-    montoRetirado: '',
+    montoRetirado: '0',
   });
   const [guardandoCierre, setGuardandoCierre] = useState(false);
   /** Si se abrió "Registrar gasto" desde un cierre ya guardado (gasto pendiente de ese mes). */
@@ -516,7 +516,7 @@ const Caja = () => {
   const abrirModalCerrarCaja = () => {
     setFormCierre({
       descripcion: '',
-      montoRetirado: '',
+      montoRetirado: '0',
     });
     setShowModalCierre(true);
   };

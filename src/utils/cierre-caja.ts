@@ -101,6 +101,7 @@ export function buildCierreRetiro(
   }
   const totalIngresos = ingEf + ingTr;
   const totalGastos = gasEf + gasTr;
+  const balanceSesion = totalIngresos - totalGastos;
 
   const id =
     typeof crypto !== 'undefined' && crypto.randomUUID
@@ -122,7 +123,7 @@ export function buildCierreRetiro(
     gastosTransferencia: gasTr,
     totalIngresos,
     totalGastos,
-    neto: saldoDespuesRetiro,
+    neto: balanceSesion,
     movimientosCount: pagFil.length + gasFil.length,
     createdAt: new Date().toISOString(),
   };

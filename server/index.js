@@ -892,6 +892,7 @@ app.post('/api/cierres-caja', async (req, res) => {
 
     const totalIngresos = ingEf + ingTr;
     const totalGastos = gasEf + gasTr;
+    const balanceSesion = totalIngresos - totalGastos;
     const movimientosCount = pagRows.length + gasRows.length;
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
@@ -916,7 +917,7 @@ app.post('/api/cierres-caja', async (req, res) => {
         gasTr,
         totalIngresos,
         totalGastos,
-        saldoDespuesRetiro,
+        balanceSesion,
         movimientosCount,
         montoRetirado,
         saldoAntesRetiro,
@@ -938,7 +939,7 @@ app.post('/api/cierres-caja', async (req, res) => {
         gastos_transferencia: gasTr,
         total_ingresos: totalIngresos,
         total_gastos: totalGastos,
-        neto: saldoDespuesRetiro,
+        neto: balanceSesion,
         movimientos_count: movimientosCount,
         monto_retirado: montoRetirado,
         saldo_antes_retiro: saldoAntesRetiro,

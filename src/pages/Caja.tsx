@@ -13,6 +13,14 @@ import {
 } from '../utils/cierre-caja';
 import { CierreCaja, Gasto, MetodoPago, Pago, Profesor } from '../types';
 
+/** Ingresos − gastos de la sesión cerrada (usa totales guardados si existen). */
+function balanceSesionCierre(c: CierreCaja): number {
+  if (c.totalIngresos != null && c.totalGastos != null) {
+    return c.totalIngresos - c.totalGastos;
+  }
+  return c.neto ?? 0;
+}
+
 type CajaStats = {
   totalEfectivo: number;
   totalTransferencia: number;
@@ -163,8 +171,8 @@ const Caja = () => {
     fecha: string;
     /** Mes/período al que corresponde el sueldo (estadísticas del período en Caja). */
     contabilizarEnFecha: string;
-    metodoPago: MetodoPago;
-    montosPorId: Record<string, string>;
+    montosEfvoPorId: Record<string, string>;
+    montosTransfPorId: Record<string, string>;
   }>({
     fecha: new Date().toISOString().slice(0, 10),
     contabilizarEnFecha: (() => {
@@ -173,8 +181,8 @@ const Caja = () => {
       d.setMonth(d.getMonth() - 1);
       return d.toISOString().slice(0, 10);
     })(),
-    metodoPago: 'efectivo',
-    montosPorId: {},
+    montosEfvoPorId: {},
+    montosTransfPorId: {},
   });
   const [guardandoSueldos, setGuardandoSueldos] = useState(false);
 
@@ -341,8 +349,8 @@ const Caja = () => {
     setFormSueldos({
       fecha: new Date().toISOString().slice(0, 10),
       contabilizarEnFecha: imput.toISOString().slice(0, 10),
-      metodoPago: 'efectivo',
-      montosPorId: {},
+      montosEfvoPorId: {},
+      montosTransfPorId: {},
     });
     setShowModalSueldos(true);
   };
@@ -350,30 +358,48 @@ const Caja = () => {
   const handleSubmitSueldos = async (e: React.FormEvent) => {
     e.preventDefault();
     const baseTime = Date.now();
-    const creados: { prof: Profesor; monto: number }[] = [];
+    type Item = { prof: Profesor; monto: number; metodoPago: MetodoPago };
+    const creados: Item[] = [];
+    let sub = 0;
     for (const p of profesores) {
-      const raw = (formSueldos.montosPorId[p.id] ?? '').trim().replace(',', '.');
-      if (!raw) continue;
-      const monto = parseFloat(raw);
-      if (!Number.isFinite(monto) || monto <= 0) {
-        alert(`El monto para ${p.nombre} ${p.apellido} no es válido (usá un número mayor a 0).`);
+      const rawEf = (formSueldos.montosEfvoPorId[p.id] ?? '').trim().replace(',', '.');
+      const rawTr = (formSueldos.montosTransfPorId[p.id] ?? '').trim().replace(',', '.');
+      const mEf = rawEf ? parseFloat(rawEf) : 0;
+      const mTr = rawTr ? parseFloat(rawTr) : 0;
+      if (!rawEf && !rawTr) continue;
+      if ((rawEf && !Number.isFinite(mEf)) || (rawTr && !Number.isFinite(mTr))) {
+        alert(`Los montos para ${p.nombre} ${p.apellido} no son válidos.`);
         return;
       }
-      creados.push({ prof: p, monto });
+      if (mEf < 0 || mTr < 0) {
+        alert(`Los montos para ${p.nombre} ${p.apellido} no pueden ser negativos.`);
+        return;
+      }
+      if (mEf > 0) creados.push({ prof: p, monto: mEf, metodoPago: 'efectivo' });
+      if (mTr > 0) creados.push({ prof: p, monto: mTr, metodoPago: 'transferencia' });
     }
     if (creados.length === 0) {
-      alert('Ingresá al menos un monto mayor a 0 para registrar un pago de sueldo.');
+      alert('Ingresá al menos un monto en efectivo o transferencia para algún profesor.');
       return;
     }
     setGuardandoSueldos(true);
     try {
-      for (let i = 0; i < creados.length; i++) {
-        const { prof, monto } = creados[i];
+      const vecesPorProf = new Map<string, number>();
+      for (const it of creados) {
+        vecesPorProf.set(it.prof.id, (vecesPorProf.get(it.prof.id) ?? 0) + 1);
+      }
+      for (const item of creados) {
+        const { prof, monto, metodoPago } = item;
+        const suf = metodoPago === 'efectivo' ? 'ef' : 'tr';
+        const partes =
+          (vecesPorProf.get(prof.id) ?? 0) > 1
+            ? ` (${metodoPago === 'efectivo' ? 'efectivo' : 'transf.'})`
+            : '';
         const nuevoGasto: Gasto = {
-          id: `${baseTime}-sueldo-${i}-${prof.id}`,
-          descripcion: `Sueldo: ${prof.nombre} ${prof.apellido}`,
+          id: `${baseTime}-sueldo-${sub++}-${suf}-${prof.id}`,
+          descripcion: `Sueldo: ${prof.nombre} ${prof.apellido}${partes}`,
           monto,
-          metodoPago: formSueldos.metodoPago,
+          metodoPago,
           fecha: formSueldos.fecha,
           createdAt: new Date().toISOString(),
           profesorId: prof.id,
@@ -386,7 +412,7 @@ const Caja = () => {
       alert(
         creados.length === 1
           ? 'Pago de sueldo registrado.'
-          : `${creados.length} pagos de sueldo registrados.`
+          : `${creados.length} movimientos de sueldo registrados.`
       );
     } catch (err) {
       console.error(err);
@@ -560,21 +586,26 @@ const Caja = () => {
             Cierres guardados
           </h2>
           <p className="text-sm text-gray-500">
-            Cerrás con nombre, fecha y cuánto retirás: ese monto baja el saldo disponible (ej. 473.000 − 200.000 = 273.000).
+            <strong>Balance sesión</strong> es ingresos − gastos de ese tramo. <strong>Saldo global después</strong> es tu caja total luego del retiro de ese cierre.
           </p>
         </div>
         {cierres.length === 0 ? (
           <p className="text-gray-500 text-sm">Todavía no hay cierres. Usá &quot;Cerrar caja&quot; para registrar un retiro y abrir una caja nueva.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px]">
+            <table className="w-full min-w-[880px]">
               <thead className="bg-amber-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Alta</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Nombre</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Fecha cierre</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Retirado</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Saldo después</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase" title="Ingresos − gastos de esa sesión">
+                    Balance sesión
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase" title="Saldo global luego de este retiro">
+                    Saldo global después
+                  </th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase"> </th>
                 </tr>
               </thead>
@@ -589,8 +620,19 @@ const Caja = () => {
                     <td className="px-4 py-3 text-sm text-right font-semibold text-amber-900">
                       {formatCurrency(c.montoRetirado ?? 0)}
                     </td>
-                    <td className={`px-4 py-3 text-sm text-right font-semibold ${(c.saldoDespuesRetiro ?? c.neto ?? 0) >= 0 ? 'text-primary-700' : 'text-red-700'}`}>
-                      {formatCurrency(c.saldoDespuesRetiro ?? c.neto ?? 0)}
+                    <td
+                      className={`px-4 py-3 text-sm text-right font-semibold ${
+                        balanceSesionCierre(c) >= 0 ? 'text-emerald-700' : 'text-red-700'
+                      }`}
+                    >
+                      {formatCurrency(balanceSesionCierre(c))}
+                    </td>
+                    <td
+                      className={`px-4 py-3 text-sm text-right font-semibold ${
+                        (c.saldoDespuesRetiro ?? 0) >= 0 ? 'text-primary-700' : 'text-red-700'
+                      }`}
+                    >
+                      {formatCurrency(c.saldoDespuesRetiro ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -616,7 +658,7 @@ const Caja = () => {
           <div className="min-w-0">
             <h2 className="text-2xl font-bold mb-1">Saldo en caja</h2>
             <p className="text-sm text-primary-100/90 mb-3">
-              Neto de movimientos menos lo retirado en cada cierre (ej. si había 473.000 y retirás 200.000, acá ves 273.000).
+              <strong className="text-primary-50">Total acumulado</strong> de la sucursal: todos los ingresos y gastos, menos los retiros registrados en cada cierre (ej. 473.000 − 200.000 retirados = 273.000).
             </p>
             <div className="rounded-lg bg-white/10 border border-white/20 px-4 py-3 space-y-1.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-primary-200">Período actual</p>
@@ -649,7 +691,7 @@ const Caja = () => {
             </div>
           </div>
           <div className="text-right shrink-0">
-            <p className="text-sm text-primary-200 mb-2 uppercase tracking-wide">Total en caja</p>
+            <p className="text-sm text-primary-200 mb-2 uppercase tracking-wide">Total en caja (global)</p>
             <p className={`text-4xl sm:text-5xl font-bold ${
               stats.totalNeto >= 0 ? 'text-green-300' : 'text-red-300'
             }`}>
@@ -1075,7 +1117,7 @@ const Caja = () => {
 
       {showModalSueldos && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -1101,32 +1143,36 @@ const Caja = () => {
                 </p>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Fecha del pago *</label>
-                      <input
-                        type="date"
-                        required
-                        value={formSueldos.fecha}
-                        onChange={(e) => setFormSueldos({ ...formSueldos, fecha: e.target.value })}
-                        className="input-field"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Cuándo salió el dinero (afecta el saldo total).</p>
+                  <div className="rounded-lg border border-violet-200 bg-violet-50/80 px-3 py-3 text-sm">
+                    <p className="font-semibold text-violet-900 mb-2">Disponible en caja (por método)</p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-1">
+                      <span>
+                        Efectivo:{' '}
+                        <strong className="text-violet-950">
+                          {formatCurrency(stats.totalEfectivo - stats.gastosEfectivo)}
+                        </strong>
+                      </span>
+                      <span>
+                        Transferencia:{' '}
+                        <strong className="text-violet-950">
+                          {formatCurrency(stats.totalTransferencia - stats.gastosTransferencia)}
+                        </strong>
+                      </span>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Método *</label>
-                      <select
-                        required
-                        value={formSueldos.metodoPago}
-                        onChange={(e) =>
-                          setFormSueldos({ ...formSueldos, metodoPago: e.target.value as MetodoPago })
-                        }
-                        className="input-field"
-                      >
-                        <option value="efectivo">Efectivo</option>
-                        <option value="transferencia">Transferencia</option>
-                      </select>
-                    </div>
+                    <p className="text-xs text-violet-900/85 mt-2">
+                      Total global: <strong>{formatCurrency(stats.totalNeto)}</strong> (neto movimientos − retiros). Los retiros no se asignan a un método; estos montos son ingresos − gastos por tipo.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Fecha del pago *</label>
+                    <input
+                      type="date"
+                      required
+                      value={formSueldos.fecha}
+                      onChange={(e) => setFormSueldos({ ...formSueldos, fecha: e.target.value })}
+                      className="input-field max-w-xs"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Cuándo salió el dinero (afecta el saldo total).</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1139,36 +1185,59 @@ const Caja = () => {
                       onChange={(e) =>
                         setFormSueldos({ ...formSueldos, contabilizarEnFecha: e.target.value })
                       }
-                      className="input-field"
+                      className="input-field max-w-xs"
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Mes o período al que corresponde el sueldo. Así el resumen &quot;Período actual&quot; de Caja no mezcla, por ejemplo, marzo con abril.
                     </p>
                   </div>
-                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-[min(50vh,360px)] overflow-y-auto">
+                  <div className="border border-gray-200 rounded-lg overflow-hidden max-h-[min(50vh,380px)] overflow-y-auto">
+                    <div className="grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem] gap-2 items-center px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-600 border-b">
+                      <span>Profesor</span>
+                      <span className="text-right">Efectivo</span>
+                      <span className="text-right">Transf.</span>
+                    </div>
                     {profesores.map((p) => (
-                      <div key={p.id} className="flex items-center gap-3 px-3 py-2.5">
-                        <span className="flex-1 text-sm font-medium text-gray-900 min-w-0">
+                      <div
+                        key={p.id}
+                        className="grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem] gap-2 items-center px-3 py-2 border-b border-gray-100 last:border-0"
+                      >
+                        <span className="text-sm font-medium text-gray-900 min-w-0">
                           {p.nombre} {p.apellido}
                         </span>
                         <input
                           type="text"
                           inputMode="decimal"
                           placeholder="0"
-                          value={formSueldos.montosPorId[p.id] ?? ''}
+                          aria-label={`Efectivo ${p.nombre}`}
+                          value={formSueldos.montosEfvoPorId[p.id] ?? ''}
                           onChange={(e) =>
                             setFormSueldos({
                               ...formSueldos,
-                              montosPorId: { ...formSueldos.montosPorId, [p.id]: e.target.value },
+                              montosEfvoPorId: { ...formSueldos.montosEfvoPorId, [p.id]: e.target.value },
                             })
                           }
-                          className="input-field w-28 text-right shrink-0"
+                          className="input-field text-right text-sm py-1.5"
+                        />
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          aria-label={`Transferencia ${p.nombre}`}
+                          value={formSueldos.montosTransfPorId[p.id] ?? ''}
+                          onChange={(e) =>
+                            setFormSueldos({
+                              ...formSueldos,
+                              montosTransfPorId: { ...formSueldos.montosTransfPorId, [p.id]: e.target.value },
+                            })
+                          }
+                          className="input-field text-right text-sm py-1.5"
                         />
                       </div>
                     ))}
                   </div>
                   <p className="text-xs text-gray-500">
-                    Dejá en blanco a quien no pagues en este movimiento. Podés volver a abrir el modal otro día.
+                    Podés combinar efectivo y transferencia por persona. Dejá en blanco lo que no pagues ahora.
                   </p>
                 </>
               )}
@@ -1291,19 +1360,26 @@ const Caja = () => {
               <p className="text-sm text-gray-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
                 La tabla muestra los movimientos de la sesión que cerraste. Los importes de retiro y saldo quedaron guardados al registrar el cierre.
               </p>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-xs text-emerald-900 uppercase">Balance sesión</p>
+                  <p className="text-lg font-bold text-emerald-950">
+                    {formatCurrency(balanceSesionCierre(cierreDetalle))}
+                  </p>
+                  <p className="text-[11px] text-emerald-800 mt-1">Ingresos − gastos de este cierre</p>
+                </div>
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                   <p className="text-xs text-amber-900 uppercase">Retirado</p>
                   <p className="text-lg font-bold text-amber-950">{formatCurrency(cierreDetalle.montoRetirado ?? 0)}</p>
                 </div>
                 <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                  <p className="text-xs text-green-800 uppercase">Saldo antes</p>
+                  <p className="text-xs text-green-800 uppercase">Saldo global antes</p>
                   <p className="text-lg font-bold text-green-900">{formatCurrency(cierreDetalle.saldoAntesRetiro ?? 0)}</p>
                 </div>
                 <div className="rounded-lg border border-primary-200 bg-primary-50 p-3">
-                  <p className="text-xs text-primary-800 uppercase">Saldo después</p>
+                  <p className="text-xs text-primary-800 uppercase">Saldo global después</p>
                   <p className="text-lg font-bold text-primary-900">
-                    {formatCurrency(cierreDetalle.saldoDespuesRetiro ?? cierreDetalle.neto ?? 0)}
+                    {formatCurrency(cierreDetalle.saldoDespuesRetiro ?? 0)}
                   </p>
                 </div>
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">

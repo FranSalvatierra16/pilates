@@ -105,7 +105,7 @@ export interface CierreCaja {
   gastosTransferencia?: number;
   totalIngresos?: number;
   totalGastos?: number;
-  /** En registros nuevos coincide con saldo después del retiro; en viejos, neto del período. */
+  /** Balance de la sesión cerrada: ingresos − gastos de ese tramo (mismo valor que totalIngresos − totalGastos). */
   neto?: number;
   movimientosCount?: number;
   createdAt: string;

@@ -74,13 +74,15 @@ export interface Gasto {
   metodoPago: 'efectivo' | 'transferencia';
   fecha: string; // YYYY-MM-DD
   createdAt: string;
+  /** Si está definido, es un pago de sueldo a ese profesor (historial en Profesores). */
+  profesorId?: string | null;
 }
 
-/** Cierre de caja: retiro físico que reduce el saldo disponible; nueva “caja” desde el día siguiente. */
+/** Cierre de caja: retiro físico que reduce el saldo disponible; el período actual en el panel cuenta desde esta fecha inclusive. */
 export interface CierreCaja {
   id: string;
   descripcion: string;
-  /** Fecha del cierre (nueva caja desde el día siguiente). */
+  /** Fecha del cierre (ingresos/gastos del período actual incluyen este día). */
   fechaCierre: string;
   /** Monto que se retira del saldo (ej. lo que llevás al banco). */
   montoRetirado: number;

@@ -1,17 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, DollarSign, CreditCard, Wallet, TrendingUp, Calendar, Plus, X, Save, Trash2, Archive, Eye } from 'lucide-react';
+import { RefreshCw, DollarSign, CreditCard, Wallet, TrendingUp, Calendar, Plus, X, Save, Trash2, Archive, Eye, Banknote } from 'lucide-react';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { formatDate } from '../utils/date';
 import {
   cierreFechaCorte,
-  diaSiguiente,
   enPeriodoAbierto,
   getUltimoCierre,
   movimientosRangoCierre,
 } from '../utils/cierre-caja';
-import { CierreCaja, Gasto, MetodoPago, Pago } from '../types';
+import { CierreCaja, Gasto, MetodoPago, Pago, Profesor } from '../types';
 
 type CajaStats = {
   totalEfectivo: number;
@@ -83,7 +82,7 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
     })
     .reduce((s, p) => s + p.monto, 0);
 
-  const fechaInicioPeriodo = ultimoCierre ? diaSiguiente(cierreFechaCorte(ultimoCierre)) : null;
+  const fechaInicioPeriodo = ultimoCierre ? cierreFechaCorte(ultimoCierre) : null;
 
   return {
     totalEfectivo: efectivo,
@@ -157,6 +156,18 @@ const Caja = () => {
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [alumnos, setAlumnos] = useState<any[]>([]);
+  const [profesores, setProfesores] = useState<Profesor[]>([]);
+  const [showModalSueldos, setShowModalSueldos] = useState(false);
+  const [formSueldos, setFormSueldos] = useState<{
+    fecha: string;
+    metodoPago: MetodoPago;
+    montosPorId: Record<string, string>;
+  }>({
+    fecha: new Date().toISOString().slice(0, 10),
+    metodoPago: 'efectivo',
+    montosPorId: {},
+  });
+  const [guardandoSueldos, setGuardandoSueldos] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
@@ -184,12 +195,14 @@ const Caja = () => {
 
   const loadStats = async () => {
     try {
-      const [todosPagos, todosGastos] = await Promise.all([
+      const [todosPagos, todosGastos, listaProfesores] = await Promise.all([
         storageHybrid.pagos.getAll(),
         storageHybrid.gastos.getAll(),
+        storageHybrid.profesores.getAll().catch(() => [] as Profesor[]),
       ]);
       setPagos(todosPagos);
       setGastos(todosGastos);
+      setProfesores(listaProfesores);
 
       let listaCierres: CierreCaja[] = [];
       try {
@@ -208,6 +221,11 @@ const Caja = () => {
       const todosGastos = storage.gastos.getAll();
       setPagos(todosPagos);
       setGastos(todosGastos);
+      try {
+        setProfesores(await storageHybrid.profesores.getAll());
+      } catch {
+        setProfesores([]);
+      }
       const listaCierres = storage.cierresCaja.getAll();
       setCierres(listaCierres);
       setStats(computeCajaStats(todosPagos, todosGastos, listaCierres));
@@ -304,6 +322,63 @@ const Caja = () => {
         console.error('Error deleting gasto:', error);
         alert('Error al eliminar el gasto. Revisá la consola para más detalles.');
       }
+    }
+  };
+
+  const abrirModalSueldos = () => {
+    setFormSueldos({
+      fecha: new Date().toISOString().slice(0, 10),
+      metodoPago: 'efectivo',
+      montosPorId: {},
+    });
+    setShowModalSueldos(true);
+  };
+
+  const handleSubmitSueldos = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const baseTime = Date.now();
+    const creados: { prof: Profesor; monto: number }[] = [];
+    for (const p of profesores) {
+      const raw = (formSueldos.montosPorId[p.id] ?? '').trim().replace(',', '.');
+      if (!raw) continue;
+      const monto = parseFloat(raw);
+      if (!Number.isFinite(monto) || monto <= 0) {
+        alert(`El monto para ${p.nombre} ${p.apellido} no es válido (usá un número mayor a 0).`);
+        return;
+      }
+      creados.push({ prof: p, monto });
+    }
+    if (creados.length === 0) {
+      alert('Ingresá al menos un monto mayor a 0 para registrar un pago de sueldo.');
+      return;
+    }
+    setGuardandoSueldos(true);
+    try {
+      for (let i = 0; i < creados.length; i++) {
+        const { prof, monto } = creados[i];
+        const nuevoGasto: Gasto = {
+          id: `${baseTime}-sueldo-${i}-${prof.id}`,
+          descripcion: `Sueldo: ${prof.nombre} ${prof.apellido}`,
+          monto,
+          metodoPago: formSueldos.metodoPago,
+          fecha: formSueldos.fecha,
+          createdAt: new Date().toISOString(),
+          profesorId: prof.id,
+        };
+        await storageHybrid.gastos.add(nuevoGasto);
+      }
+      setShowModalSueldos(false);
+      await loadStats();
+      alert(
+        creados.length === 1
+          ? 'Pago de sueldo registrado.'
+          : `${creados.length} pagos de sueldo registrados.`
+      );
+    } catch (err) {
+      console.error(err);
+      alert('No se pudieron guardar los pagos. Revisá la conexión e intentá de nuevo.');
+    } finally {
+      setGuardandoSueldos(false);
     }
   };
 
@@ -440,6 +515,14 @@ const Caja = () => {
           </button>
           <button
             type="button"
+            onClick={abrirModalSueldos}
+            className="btn-secondary flex items-center gap-2 border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100"
+          >
+            <Banknote className="w-5 h-5" />
+            Pagos sueldos
+          </button>
+          <button
+            type="button"
             onClick={abrirModalCerrarCaja}
             className="btn-secondary flex items-center gap-2 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
           >
@@ -526,7 +609,7 @@ const Caja = () => {
               <p className="text-sm text-primary-50">
                 {stats.fechaInicioPeriodo ? (
                   <>
-                    Desde el {formatDate(stats.fechaInicioPeriodo)} (después del último cierre). Ingresos y gastos arrancan de cero para este tramo.
+                    Desde el {formatDate(stats.fechaInicioPeriodo)} (fecha del último cierre inclusive). Ingresos y gastos de este tramo cuentan desde ese día.
                   </>
                 ) : (
                   <>Sin cierres todavía: el período actual incluye todos los movimientos.</>
@@ -973,6 +1056,105 @@ const Caja = () => {
         </div>
       )}
 
+      {showModalSueldos && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <Banknote className="w-7 h-7 text-violet-600" />
+                  Pagos de sueldos
+                </h2>
+                <p className="text-sm text-gray-500 mt-1 font-normal">
+                  Se registran como gastos con vínculo al profesor (historial en la pantalla Profesores).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModalSueldos(false)}
+                className="text-gray-400 hover:text-gray-600 shrink-0"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmitSueldos} className="p-6 space-y-4">
+              {profesores.length === 0 ? (
+                <p className="text-sm text-gray-600">
+                  No hay profesores cargados. Agregalos en <strong>Profesores</strong> y volvé acá.
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Fecha del pago *</label>
+                      <input
+                        type="date"
+                        required
+                        value={formSueldos.fecha}
+                        onChange={(e) => setFormSueldos({ ...formSueldos, fecha: e.target.value })}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Método *</label>
+                      <select
+                        required
+                        value={formSueldos.metodoPago}
+                        onChange={(e) =>
+                          setFormSueldos({ ...formSueldos, metodoPago: e.target.value as MetodoPago })
+                        }
+                        className="input-field"
+                      >
+                        <option value="efectivo">Efectivo</option>
+                        <option value="transferencia">Transferencia</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-[min(50vh,360px)] overflow-y-auto">
+                    {profesores.map((p) => (
+                      <div key={p.id} className="flex items-center gap-3 px-3 py-2.5">
+                        <span className="flex-1 text-sm font-medium text-gray-900 min-w-0">
+                          {p.nombre} {p.apellido}
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0"
+                          value={formSueldos.montosPorId[p.id] ?? ''}
+                          onChange={(e) =>
+                            setFormSueldos({
+                              ...formSueldos,
+                              montosPorId: { ...formSueldos.montosPorId, [p.id]: e.target.value },
+                            })
+                          }
+                          className="input-field w-28 text-right shrink-0"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Dejá en blanco a quien no pagues en este movimiento. Podés volver a abrir el modal otro día.
+                  </p>
+                </>
+              )}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <button type="button" onClick={() => setShowModalSueldos(false)} className="btn-secondary">
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={profesores.length === 0 || guardandoSueldos}
+                  className="btn-primary flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {guardandoSueldos ? 'Guardando…' : 'Registrar pagos'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showModalCierre && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full">
@@ -991,7 +1173,7 @@ const Caja = () => {
             </div>
             <form onSubmit={handleSubmitCierre} className="p-6 space-y-4">
               <p className="text-sm text-gray-600">
-                Poné un <strong>nombre</strong>, la <strong>fecha del cierre</strong> (por defecto hoy) y cuánto <strong>sacás de la caja</strong>. Ese monto se resta del saldo (ej. 473.000 − 200.000 = 273.000). A partir del día siguiente arranca el período &quot;nuevo&quot; para ingresos y gastos del panel.
+                Poné un <strong>nombre</strong>, la <strong>fecha del cierre</strong> (por defecto hoy) y cuánto <strong>sacás de la caja</strong>. Ese monto se resta del saldo (ej. 473.000 − 200.000 = 273.000). El período &quot;nuevo&quot; en el panel incluye esa misma fecha: podés cargar gastos el día que cerrás.
               </p>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Nombre del cierre *</label>

@@ -83,6 +83,7 @@ const dbToGasto = (row: any): Gasto => ({
   metodoPago: row.metodo_pago,
   fecha: row.fecha,
   createdAt: row.created_at,
+  ...(row.profesor_id != null && row.profesor_id !== '' ? { profesorId: row.profesor_id } : {}),
 });
 
 const gastoToDb = (gasto: Gasto) => ({
@@ -92,6 +93,7 @@ const gastoToDb = (gasto: Gasto) => ({
   metodo_pago: gasto.metodoPago,
   fecha: gasto.fecha,
   created_at: gasto.createdAt,
+  ...(gasto.profesorId != null && gasto.profesorId !== '' ? { profesor_id: gasto.profesorId } : {}),
 });
 
 const dbToTurno = (row: any): Turno => ({

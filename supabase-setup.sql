@@ -79,6 +79,10 @@ CREATE INDEX IF NOT EXISTS idx_turnos_profesor_id ON turnos(profesor_id);
 -- Token para portal alumno (sumarse/liberar cupo en clases)
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS link_token TEXT;
 
+-- Sueldos: gasto vinculado a profesor (historial en pantalla Profesores)
+ALTER TABLE gastos ADD COLUMN IF NOT EXISTS profesor_id TEXT REFERENCES profesores(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_gastos_profesor_id ON gastos(profesor_id);
+
 -- Política para permitir todas las operaciones (solo para desarrollo/pruebas)
 -- CREATE POLICY "Allow all operations" ON alumnos FOR ALL USING (true) WITH CHECK (true);
 -- CREATE POLICY "Allow all operations" ON actividades FOR ALL USING (true) WITH CHECK (true);

@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, X, Save } from 'lucide-react';
-import { Profesor } from '../types';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Edit, Trash2, X, Save, Wallet } from 'lucide-react';
+import { Gasto, Profesor } from '../types';
 import { storageHybrid } from '../utils/storage-hybrid';
+import { formatCurrency } from '../utils/format';
+import { formatDate } from '../utils/date';
 
 const Profesores = () => {
   const [profesores, setProfesores] = useState<Profesor[]>([]);
+  const [gastos, setGastos] = useState<Gasto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingProfesor, setEditingProfesor] = useState<Profesor | null>(null);
@@ -20,14 +23,32 @@ const Profesores = () => {
   const loadProfesores = async () => {
     try {
       setLoading(true);
-      const data = await storageHybrid.profesores.getAll();
+      const [data, todosGastos] = await Promise.all([
+        storageHybrid.profesores.getAll(),
+        storageHybrid.gastos.getAll().catch(() => [] as Gasto[]),
+      ]);
       setProfesores(data);
+      setGastos(todosGastos);
     } catch (error) {
       console.error('Error loading profesores:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const sueldosPorProfesor = useMemo(() => {
+    const map = new Map<string, Gasto[]>();
+    for (const g of gastos) {
+      if (!g.profesorId) continue;
+      const list = map.get(g.profesorId) ?? [];
+      list.push(g);
+      map.set(g.profesorId, list);
+    }
+    for (const [, list] of map) {
+      list.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    }
+    return map;
+  }, [gastos]);
 
   const resetForm = () => {
     setFormData({
@@ -132,7 +153,9 @@ const Profesores = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {profesores.map((profesor) => (
+          {profesores.map((profesor) => {
+            const historialSueldos = sueldosPorProfesor.get(profesor.id) ?? [];
+            return (
             <div key={profesor.id} className="card hover:shadow-xl transition-shadow">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex-1">
@@ -141,6 +164,27 @@ const Profesores = () => {
                   </h3>
                 </div>
               </div>
+              {historialSueldos.length > 0 && (
+                <div className="mb-4 rounded-lg bg-violet-50/80 border border-violet-100 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-violet-900 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+                    <Wallet className="w-3.5 h-3.5" />
+                    Historial de pagos (sueldos)
+                  </p>
+                  <ul className="space-y-1.5 text-sm text-gray-800 max-h-40 overflow-y-auto">
+                    {historialSueldos.map((g) => (
+                      <li key={g.id} className="flex justify-between gap-2 border-b border-violet-100/80 last:border-0 pb-1.5 last:pb-0">
+                        <span className="text-gray-600 whitespace-nowrap">{formatDate(g.fecha)}</span>
+                        <span className="font-medium text-right min-w-0">
+                          {formatCurrency(g.monto)}
+                          <span className="text-gray-500 font-normal ml-1">
+                            · {g.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="flex gap-2 pt-4 border-t border-gray-200">
                 <button
                   onClick={() => handleOpenModal(profesor)}
@@ -157,7 +201,8 @@ const Profesores = () => {
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

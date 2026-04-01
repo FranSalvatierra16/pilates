@@ -645,6 +645,7 @@ app.get('/api/gastos', async (req, res) => {
       metodoPago: r.metodo_pago,
       fecha: r.fecha?.toISOString?.()?.slice(0, 10) ?? r.fecha,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+      ...(r.profesor_id != null && { profesorId: r.profesor_id }),
     })));
   } catch (e) {
     console.error(e);
@@ -657,9 +658,28 @@ app.post('/api/gastos', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
+    let profesorId = b.profesorId ?? null;
+    if (profesorId) {
+      const { rows: pr } = await db.query(
+        'SELECT id FROM profesores WHERE id = $1 AND sucursal_id = $2',
+        [profesorId, req.user.sucursalId]
+      );
+      if (pr.length === 0) {
+        return res.status(400).json({ error: 'Profesor inválido para esta sucursal' });
+      }
+    }
     await db.query(
-      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [b.id, req.user.sucursalId, b.descripcion, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString()]
+      'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at, profesor_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [
+        b.id,
+        req.user.sucursalId,
+        b.descripcion,
+        b.monto,
+        b.metodoPago,
+        b.fecha,
+        b.createdAt || new Date().toISOString(),
+        profesorId,
+      ]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -680,6 +700,20 @@ app.patch('/api/gastos/:id', async (req, res) => {
     if (b.monto !== undefined) { updates.push(`monto = $${i++}`); values.push(b.monto); }
     if (b.metodoPago !== undefined) { updates.push(`metodo_pago = $${i++}`); values.push(b.metodoPago); }
     if (b.fecha !== undefined) { updates.push(`fecha = $${i++}`); values.push(b.fecha); }
+    if (b.profesorId !== undefined) {
+      let pid = b.profesorId;
+      if (pid) {
+        const { rows: pr } = await db.query(
+          'SELECT id FROM profesores WHERE id = $1 AND sucursal_id = $2',
+          [pid, req.user.sucursalId]
+        );
+        if (pr.length === 0) {
+          return res.status(400).json({ error: 'Profesor inválido para esta sucursal' });
+        }
+      }
+      updates.push(`profesor_id = $${i++}`);
+      values.push(pid || null);
+    }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);
     await db.query(`UPDATE gastos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);

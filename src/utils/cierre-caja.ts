@@ -46,12 +46,12 @@ export function diaSiguiente(fecha: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Movimientos posteriores al último cierre (período abierto). */
+/** Movimientos del período abierto: desde la fecha del último cierre inclusive (podés cargar gastos el mismo día). */
 export function enPeriodoAbierto(fecha: string, ultimoCierre: CierreCaja | null): boolean {
   if (!ultimoCierre) return true;
   const fc = cierreFechaCorte(ultimoCierre);
   if (!fc) return true;
-  return fecha > fc;
+  return fecha >= fc;
 }
 
 /** Cierre local: mismo criterio que el servidor (retiro + snapshot de sesión). */

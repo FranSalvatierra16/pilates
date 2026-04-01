@@ -58,10 +58,12 @@ function nextUniqueDni(baseDni, usedDnis) {
 }
 
 async function main() {
-  const sourceUser = arg(2, 'Savia');
-  const targetUser = arg(3, 'Savia2');
-  const targetPassword = arg(4, '1234');
-  const targetNombreLugar = arg(5, targetUser);
+  const replaceTarget = process.argv.includes('--replace');
+  const positionalArgs = process.argv.slice(2).filter((a) => a !== '--replace');
+  const sourceUser = (positionalArgs[0] || 'Savia').trim();
+  const targetUser = (positionalArgs[1] || 'Savia2').trim();
+  const targetPassword = (positionalArgs[2] || '1234').trim();
+  const targetNombreLugar = (positionalArgs[3] || targetUser).trim();
 
   const databaseUrl = getDatabaseUrl();
   if (!databaseUrl) {
@@ -95,7 +97,10 @@ async function main() {
       [targetUser]
     );
     if (targetSucursal.rows.length > 0) {
-      throw new Error(`Ya existe una sucursal con usuario "${targetUser}".`);
+      if (!replaceTarget) {
+        throw new Error(`Ya existe una sucursal con usuario "${targetUser}". Usá --replace para recrearla.`);
+      }
+      await client.query('DELETE FROM sucursales WHERE id = $1', [targetSucursal.rows[0].id]);
     }
 
     const src = sourceSucursal.rows[0];
@@ -277,9 +282,11 @@ async function main() {
     }
 
     const { rows: pagos } = await client.query(
-      `SELECT *
-         FROM pagos
-        WHERE sucursal_id = $1
+      `SELECT p.*
+         FROM pagos p
+         LEFT JOIN alumnos a ON p.alumno_id = a.id
+        WHERE a.sucursal_id = $1
+           OR (p.alumno_id IS NULL AND p.sucursal_id = $1)
         ORDER BY created_at, id`,
       [src.id]
     );

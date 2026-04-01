@@ -31,6 +31,32 @@ function makeInsertSql(table, columns) {
   return `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
 }
 
+function nextUniqueDni(baseDni, usedDnis) {
+  const trimmed = String(baseDni || '').trim();
+  if (!trimmed) {
+    let candidate = String(Date.now());
+    while (usedDnis.has(candidate)) candidate = String(Number(candidate) + 1);
+    usedDnis.add(candidate);
+    return candidate;
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    let candidate = String(Number(trimmed) + 1);
+    while (usedDnis.has(candidate)) candidate = String(Number(candidate) + 1);
+    usedDnis.add(candidate);
+    return candidate;
+  }
+
+  let n = 1;
+  let candidate = `${trimmed}-${n}`;
+  while (usedDnis.has(candidate)) {
+    n += 1;
+    candidate = `${trimmed}-${n}`;
+  }
+  usedDnis.add(candidate);
+  return candidate;
+}
+
 async function main() {
   const sourceUser = arg(2, 'Savia');
   const targetUser = arg(3, 'Savia2');
@@ -98,11 +124,13 @@ async function main() {
       ]
     );
 
-    const [alumnosCols, pagosCols, gastosCols] = await Promise.all([
+    const [alumnosCols, pagosCols, gastosCols, dniRows] = await Promise.all([
       getColumnSet(client, 'alumnos'),
       getColumnSet(client, 'pagos'),
       getColumnSet(client, 'gastos'),
+      client.query(`SELECT dni FROM alumnos`),
     ]);
+    const usedDnis = new Set(dniRows.rows.map((r) => String(r.dni || '').trim()).filter(Boolean));
 
     const actividadMap = new Map();
     const profesorMap = new Map();
@@ -187,7 +215,7 @@ async function main() {
         targetSucursalId,
         row.nombre,
         row.apellido,
-        row.dni,
+        nextUniqueDni(row.dni, usedDnis),
         row.telefono,
         row.email,
         row.fecha_vencimiento_cuota,

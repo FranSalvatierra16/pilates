@@ -157,21 +157,23 @@ function formatDateOnly(value) {
   return value?.toISOString?.()?.slice(0, 10) ?? String(value).slice(0, 10);
 }
 
+const ARGENTINA_UTC_OFFSET_HOURS = 3;
+
 function combinarFechaHoraISO(fecha, hora) {
-  const [y, mo, d] = String(fecha).slice(0, 10).split('-').map(Number);
-  const [hh, mm] = normalizarHora(hora).split(':').map(Number);
-  return new Date(y, (mo || 1) - 1, d || 1, hh || 0, mm || 0, 0, 0).toISOString();
+  const fd = String(fecha).slice(0, 10);
+  const hhmm = normalizarHora(hora);
+  return new Date(`${fd}T${hhmm}:00-03:00`).toISOString();
 }
 
 function instanteDesdeFechaHora(fecha, hora) {
-  const [y, mo, d] = String(fecha).slice(0, 10).split('-').map(Number);
-  const [hh, mm] = normalizarHora(hora).split(':').map(Number);
-  return new Date(y, (mo || 1) - 1, d || 1, hh || 0, mm || 0, 0, 0).getTime();
+  const fd = String(fecha).slice(0, 10);
+  const hhmm = normalizarHora(hora);
+  return new Date(`${fd}T${hhmm}:00-03:00`).getTime();
 }
 
 function fechaLocalYMD(date) {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const shifted = new Date(new Date(date).getTime() - ARGENTINA_UTC_OFFSET_HOURS * 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 10);
 }
 
 function instanteMovimientoParaPeriodoCaja(mov) {

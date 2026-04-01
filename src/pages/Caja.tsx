@@ -452,12 +452,15 @@ const Caja = () => {
   const gastosPeriodoVista = ultimoCierreVista
     ? gastos.filter((g) => estaEnPeriodoAbiertoCaja(g, ultimoCierreVista))
     : gastos;
+  const gastosVisiblesVista = ultimoCierreVista
+    ? gastos.filter((g) => estaEnPeriodoAbiertoCaja(g, ultimoCierreVista) || !!g.profesorId)
+    : gastos;
 
   const ultimosPagos = pagosPeriodoVista
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
 
-  const ultimosGastos = gastosPeriodoVista
+  const ultimosGastos = gastosVisiblesVista
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
 
@@ -871,7 +874,9 @@ const Caja = () => {
           <div>
             <h2 className="text-xl font-bold text-gray-900">Últimos gastos</h2>
             {ultimoCierreVista && (
-              <p className="text-sm text-gray-500 mt-0.5">Solo movimientos del período actual</p>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Muestra el período actual y también pagos de sueldo como referencia visual.
+              </p>
             )}
           </div>
           <button
@@ -910,6 +915,16 @@ const Caja = () => {
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${gasto.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                     {gasto.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
                   </span>
+                  {gasto.profesorId && (
+                    <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                      Sueldo
+                    </span>
+                  )}
+                  {gasto.profesorId && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Visible como movimiento, pero no entra en el neto operativo del período.
+                    </p>
+                  )}
                 </div>
               </div>
             ))}
@@ -935,9 +950,16 @@ const Caja = () => {
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 min-w-0 break-words">{gasto.descripcion}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-red-600">- {formatCurrency(gasto.monto)}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${gasto.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                        {gasto.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${gasto.metodoPago === 'efectivo' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {gasto.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                        </span>
+                        {gasto.profesorId && (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                            Sueldo
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <button onClick={() => handleEliminarGasto(gasto.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg touch-manipulation" title="Eliminar gasto"><Trash2 className="w-4 h-4" /></button>

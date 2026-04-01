@@ -5,20 +5,13 @@ import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { formatDate } from '../utils/date';
 import {
-  boundsForMesYYYYMM,
+  cierreFechaCorte,
   diaSiguiente,
   enPeriodoAbierto,
-  getUltimoCierrePorRegistro,
+  getUltimoCierre,
+  movimientosRangoCierre,
 } from '../utils/cierre-caja';
 import { CierreCaja, Gasto, MetodoPago, Pago } from '../types';
-
-const mesFromFecha = (fecha: string) => (fecha || '').slice(0, 7);
-const labelMes = (mes: string) => {
-  if (!mes) return '';
-  const [y, m] = mes.split('-').map(Number);
-  if (!y || !m) return mes;
-  return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
-};
 
 type CajaStats = {
   totalEfectivo: number;
@@ -27,6 +20,11 @@ type CajaStats = {
   gastosEfectivo: number;
   gastosTransferencia: number;
   totalGastos: number;
+  /** Ingresos − gastos (sin descontar retiros de cierres). */
+  totalTeorico: number;
+  /** Suma de lo retirado en cada cierre. */
+  totalRetiros: number;
+  /** Saldo disponible = totalTeorico − totalRetiros. */
   totalNeto: number;
   periodoIngresos: number;
   periodoGastos: number;
@@ -42,7 +40,7 @@ type CajaStats = {
 };
 
 function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres: CierreCaja[]): CajaStats {
-  const ultimoCierre = getUltimoCierrePorRegistro(listaCierres);
+  const ultimoCierre = getUltimoCierre(listaCierres);
   const inP = (fecha: string) => enPeriodoAbierto(fecha, ultimoCierre);
 
   const efectivo = todosPagos.filter((p) => p.metodoPago === 'efectivo').reduce((s, p) => s + p.monto, 0);
@@ -53,6 +51,8 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
   const totalEfectivoNeto = efectivo - gastosEfvo;
   const totalTransferenciaNeto = transferencia - gastosTransf;
   const totalGeneralNeto = totalEfectivoNeto + totalTransferenciaNeto;
+  const totalRetiros = listaCierres.reduce((s, c) => s + (c.montoRetirado ?? 0), 0);
+  const saldoTrasRetiros = totalGeneralNeto - totalRetiros;
 
   const pagosP = todosPagos.filter((p) => inP(p.fecha));
   const gastosP = todosGastos.filter((g) => inP(g.fecha));
@@ -83,7 +83,7 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
     })
     .reduce((s, p) => s + p.monto, 0);
 
-  const fechaInicioPeriodo = ultimoCierre ? diaSiguiente(ultimoCierre.fechaHasta) : null;
+  const fechaInicioPeriodo = ultimoCierre ? diaSiguiente(cierreFechaCorte(ultimoCierre)) : null;
 
   return {
     totalEfectivo: efectivo,
@@ -92,7 +92,9 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
     gastosEfectivo: gastosEfvo,
     gastosTransferencia: gastosTransf,
     totalGastos,
-    totalNeto: totalGeneralNeto,
+    totalTeorico: totalGeneralNeto,
+    totalRetiros,
+    totalNeto: saldoTrasRetiros,
     periodoIngresos,
     periodoGastos,
     periodoNeto,
@@ -115,6 +117,8 @@ const Caja = () => {
     gastosEfectivo: 0,
     gastosTransferencia: 0,
     totalGastos: 0,
+    totalTeorico: 0,
+    totalRetiros: 0,
     totalNeto: 0,
     periodoIngresos: 0,
     periodoGastos: 0,
@@ -139,12 +143,14 @@ const Caja = () => {
     metodoPago: 'efectivo' as MetodoPago,
     fecha: new Date().toISOString().split('T')[0],
   });
-  const [mesDetalle, setMesDetalle] = useState(new Date().toISOString().slice(0, 7));
-
   const [cierres, setCierres] = useState<CierreCaja[]>([]);
   const [showModalCierre, setShowModalCierre] = useState(false);
   const [cierreDetalle, setCierreDetalle] = useState<CierreCaja | null>(null);
-  const [formCierre, setFormCierre] = useState({ descripcion: '', fechaDesde: '', fechaHasta: '' });
+  const [formCierre, setFormCierre] = useState({
+    descripcion: '',
+    fecha: new Date().toISOString().slice(0, 10),
+    montoRetirado: '',
+  });
   const [guardandoCierre, setGuardandoCierre] = useState(false);
   /** Si se abrió "Registrar gasto" desde un cierre ya guardado (gasto pendiente de ese mes). */
   const [gastoDesdeCierre, setGastoDesdeCierre] = useState<CierreCaja | null>(null);
@@ -223,11 +229,12 @@ const Caja = () => {
 
   const abrirGastoPendienteDesdeCierre = (cierre: CierreCaja) => {
     setGastoDesdeCierre(cierre);
+    const fc = cierreFechaCorte(cierre) || new Date().toISOString().slice(0, 10);
     setFormDataGasto({
       descripcion: '',
       monto: '',
       metodoPago: 'efectivo',
-      fecha: cierre.fechaHasta,
+      fecha: fc,
     });
     setShowModalGasto(true);
   };
@@ -258,10 +265,11 @@ const Caja = () => {
     }
 
     if (gastoDesdeCierre) {
+      const { fechaMin, fechaMax } = movimientosRangoCierre(cierres, gastoDesdeCierre);
       const f = formDataGasto.fecha;
-      if (f < gastoDesdeCierre.fechaDesde || f > gastoDesdeCierre.fechaHasta) {
+      if (f < fechaMin || f > fechaMax) {
         alert(
-          `La fecha del gasto tiene que estar dentro del período cerrado (${formatDate(gastoDesdeCierre.fechaDesde)} — ${formatDate(gastoDesdeCierre.fechaHasta)}).`
+          `La fecha del gasto tiene que estar entre ${formatDate(fechaMin)} y ${formatDate(fechaMax)}.`
         );
         return;
       }
@@ -299,7 +307,7 @@ const Caja = () => {
     }
   };
 
-  const ultimoCierreVista = getUltimoCierrePorRegistro(cierres);
+  const ultimoCierreVista = getUltimoCierre(cierres);
   const pagosPeriodoVista = ultimoCierreVista
     ? pagos.filter((p) => enPeriodoAbierto(p.fecha, ultimoCierreVista))
     : pagos;
@@ -354,33 +362,24 @@ const Caja = () => {
     })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  const resumenMensual = Array.from(new Set(movimientosCaja.map((m) => mesFromFecha(m.fecha))))
-    .filter(Boolean)
-    .sort((a, b) => b.localeCompare(a))
-    .map((mes) => {
-      const delMes = movimientosCaja.filter((m) => mesFromFecha(m.fecha) === mes);
-      const ingresos = delMes.filter((m) => m.tipo === 'ingreso').reduce((sum, m) => sum + m.monto, 0);
-      const egresos = delMes.filter((m) => m.tipo === 'gasto').reduce((sum, m) => sum + m.monto, 0);
-      return { mes, ingresos, egresos, balance: ingresos - egresos, movimientos: delMes.length };
-    });
-
-  const movimientosMesDetalle = movimientosCaja.filter((m) => mesFromFecha(m.fecha) === mesDetalle);
-
   const movimientosCierreDetalle = useMemo(() => {
     if (!cierreDetalle) return [];
-    const desde = cierreDetalle.fechaDesde;
-    const hasta = cierreDetalle.fechaHasta;
+    const { fechaMin, fechaMax } = movimientosRangoCierre(cierres, cierreDetalle);
     return movimientosCaja
-      .filter((m) => m.fecha >= desde && m.fecha <= hasta)
+      .filter((m) => m.fecha >= fechaMin && m.fecha <= fechaMax)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [cierreDetalle, movimientosCaja]);
+  }, [cierreDetalle, cierres, movimientosCaja]);
+
+  const rangoGastoPendiente = useMemo(() => {
+    if (!gastoDesdeCierre) return null;
+    return movimientosRangoCierre(cierres, gastoDesdeCierre);
+  }, [gastoDesdeCierre, cierres]);
 
   const abrirModalCerrarCaja = () => {
-    const b = boundsForMesYYYYMM(mesDetalle);
     setFormCierre({
       descripcion: '',
-      fechaDesde: b.desde,
-      fechaHasta: b.hasta,
+      fecha: new Date().toISOString().slice(0, 10),
+      montoRetirado: '',
     });
     setShowModalCierre(true);
   };
@@ -388,19 +387,20 @@ const Caja = () => {
   const handleSubmitCierre = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCierre.descripcion.trim()) {
-      alert('Ingresá un detalle o nombre para el cierre (ej. Fin de caja marzo).');
+      alert('Ingresá un nombre para el cierre.');
       return;
     }
-    if (formCierre.fechaDesde > formCierre.fechaHasta) {
-      alert('La fecha desde no puede ser posterior a la fecha hasta.');
+    const monto = parseFloat(String(formCierre.montoRetirado).replace(',', '.'));
+    if (!Number.isFinite(monto) || monto < 0) {
+      alert('Indicá cuánto retirás de la caja (número ≥ 0).');
       return;
     }
     setGuardandoCierre(true);
     try {
       await storageHybrid.cierresCaja.crear({
         descripcion: formCierre.descripcion.trim(),
-        fechaDesde: formCierre.fechaDesde,
-        fechaHasta: formCierre.fechaHasta,
+        fecha: formCierre.fecha,
+        montoRetirado: monto,
       });
       setShowModalCierre(false);
       await loadStats();
@@ -462,20 +462,22 @@ const Caja = () => {
             <Archive className="w-6 h-6 text-amber-700" />
             Cierres guardados
           </h2>
-          <p className="text-sm text-gray-500">Registrá un cierre con el detalle del período (quedan los totales guardados).</p>
+          <p className="text-sm text-gray-500">
+            Cerrás con nombre, fecha y cuánto retirás: ese monto baja el saldo disponible (ej. 473.000 − 200.000 = 273.000).
+          </p>
         </div>
         {cierres.length === 0 ? (
-          <p className="text-gray-500 text-sm">Todavía no hay cierres. Usá &quot;Cerrar caja&quot; para guardar un corte con nombre y fechas.</p>
+          <p className="text-gray-500 text-sm">Todavía no hay cierres. Usá &quot;Cerrar caja&quot; para registrar un retiro y abrir una caja nueva.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[720px]">
               <thead className="bg-amber-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Registrado</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Detalle</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Período</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Neto</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Mov.</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Alta</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Nombre</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Fecha cierre</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Retirado</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Saldo después</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase"> </th>
                 </tr>
               </thead>
@@ -485,12 +487,14 @@ const Caja = () => {
                     <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{formatDate(c.createdAt.slice(0, 10))}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{c.descripcion}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
-                      {formatDate(c.fechaDesde)} — {formatDate(c.fechaHasta)}
+                      {formatDate(cierreFechaCorte(c) || c.fechaDesde || '')}
                     </td>
-                    <td className={`px-4 py-3 text-sm text-right font-semibold ${c.neto >= 0 ? 'text-primary-700' : 'text-red-700'}`}>
-                      {formatCurrency(c.neto)}
+                    <td className="px-4 py-3 text-sm text-right font-semibold text-amber-900">
+                      {formatCurrency(c.montoRetirado ?? 0)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-right text-gray-700">{c.movimientosCount}</td>
+                    <td className={`px-4 py-3 text-sm text-right font-semibold ${(c.saldoDespuesRetiro ?? c.neto ?? 0) >= 0 ? 'text-primary-700' : 'text-red-700'}`}>
+                      {formatCurrency(c.saldoDespuesRetiro ?? c.neto ?? 0)}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
@@ -509,86 +513,13 @@ const Caja = () => {
         )}
       </div>
 
-      <div className="card mb-8 overflow-hidden min-w-0">
-        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <h2 className="text-xl font-bold text-gray-900">Resumen mensual</h2>
-          <p className="text-sm text-gray-500">Tocá un mes para ver el detalle</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px]">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Mes</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Ingresos</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Egresos</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Balance</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Mov.</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {resumenMensual.map((r) => (
-                <tr
-                  key={r.mes}
-                  onClick={() => setMesDetalle(r.mes)}
-                  className={`cursor-pointer hover:bg-gray-50 ${mesDetalle === r.mes ? 'bg-primary-50' : 'bg-white'}`}
-                >
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{labelMes(r.mes)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-semibold text-green-700">{formatCurrency(r.ingresos)}</td>
-                  <td className="px-4 py-3 text-sm text-right font-semibold text-red-700">{formatCurrency(r.egresos)}</td>
-                  <td className={`px-4 py-3 text-sm text-right font-bold ${r.balance >= 0 ? 'text-primary-700' : 'text-red-700'}`}>{formatCurrency(r.balance)}</td>
-                  <td className="px-4 py-3 text-sm text-right text-gray-700">{r.movimientos}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="card mb-8 overflow-hidden min-w-0">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Detalle de {labelMes(mesDetalle)}</h2>
-        {movimientosMesDetalle.length === 0 ? (
-          <p className="text-gray-500">No hay movimientos en este mes.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px]">
-              <thead className="bg-primary-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Fecha</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Tipo</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Concepto</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">Método</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-700 uppercase">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {movimientosMesDetalle.map((m) => (
-                  <tr key={m.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{formatDate(m.fecha)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${m.tipo === 'ingreso' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
-                        {m.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{m.concepto}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{m.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}</td>
-                    <td className={`px-4 py-3 whitespace-nowrap text-sm font-semibold text-right ${m.tipo === 'ingreso' ? 'text-green-700' : 'text-red-700'}`}>
-                      {m.tipo === 'ingreso' ? '+' : '-'} {formatCurrency(m.monto)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
       {/* Saldo de Caja - Destacado: total histórico + período nuevo tras último cierre */}
       <div className="card bg-gradient-to-r from-primary-600 to-primary-700 text-white mb-8 shadow-xl">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="min-w-0">
             <h2 className="text-2xl font-bold mb-1">Saldo en caja</h2>
             <p className="text-sm text-primary-100/90 mb-3">
-              Dinero neto acumulado (todo el historial de ingresos y gastos).
+              Neto de movimientos menos lo retirado en cada cierre (ej. si había 473.000 y retirás 200.000, acá ves 273.000).
             </p>
             <div className="rounded-lg bg-white/10 border border-white/20 px-4 py-3 space-y-1.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-primary-200">Período actual</p>
@@ -627,8 +558,8 @@ const Caja = () => {
             <p className={`text-xs mt-2 ${stats.totalNeto >= 0 ? 'text-green-200' : 'text-red-200'}`}>
               {stats.totalNeto >= 0 ? '✓ Saldo acumulado' : '⚠ Saldo acumulado'}
             </p>
-            <p className="text-xs text-primary-200/80 mt-3 max-w-[220px] ml-auto">
-              Histórico: ingresos {formatCurrency(stats.totalGeneral)} · gastos {formatCurrency(stats.totalGastos)}
+            <p className="text-xs text-primary-200/80 mt-3 max-w-[280px] ml-auto">
+              Neto movimientos {formatCurrency(stats.totalTeorico)} − Retiros {formatCurrency(stats.totalRetiros)}
             </p>
           </div>
         </div>
@@ -1003,14 +934,14 @@ const Caja = () => {
                   type="date"
                   required
                   value={formDataGasto.fecha}
-                  min={gastoDesdeCierre?.fechaDesde}
-                  max={gastoDesdeCierre?.fechaHasta}
+                  min={rangoGastoPendiente?.fechaMin}
+                  max={rangoGastoPendiente?.fechaMax}
                   onChange={(e) => setFormDataGasto({ ...formDataGasto, fecha: e.target.value })}
                   className="input-field"
                 />
-                {gastoDesdeCierre && (
+                {gastoDesdeCierre && rangoGastoPendiente && (
                   <p className="text-xs text-gray-500 mt-1.5">
-                    Solo fechas entre {formatDate(gastoDesdeCierre.fechaDesde)} y {formatDate(gastoDesdeCierre.fechaHasta)}.
+                    Solo fechas entre {formatDate(rangoGastoPendiente.fechaMin)} y {formatDate(rangoGastoPendiente.fechaMax)}.
                   </p>
                 )}
               </div>
@@ -1060,40 +991,44 @@ const Caja = () => {
             </div>
             <form onSubmit={handleSubmitCierre} className="p-6 space-y-4">
               <p className="text-sm text-gray-600">
-                Se guardan los totales del período elegido (ingresos y gastos por método). Podés poner un nombre claro, por ejemplo: <em>Fin de caja marzo</em>.
+                Poné un <strong>nombre</strong>, la <strong>fecha del cierre</strong> (por defecto hoy) y cuánto <strong>sacás de la caja</strong>. Ese monto se resta del saldo (ej. 473.000 − 200.000 = 273.000). A partir del día siguiente arranca el período &quot;nuevo&quot; para ingresos y gastos del panel.
               </p>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Detalle / nombre del cierre *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Nombre del cierre *</label>
                 <input
                   type="text"
                   required
                   value={formCierre.descripcion}
                   onChange={(e) => setFormCierre({ ...formCierre, descripcion: e.target.value })}
                   className="input-field"
-                  placeholder="Ej: Fin de caja mes marzo"
+                  placeholder="Ej: Cierre 1 abril"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Desde *</label>
-                  <input
-                    type="date"
-                    required
-                    value={formCierre.fechaDesde}
-                    onChange={(e) => setFormCierre({ ...formCierre, fechaDesde: e.target.value })}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Hasta *</label>
-                  <input
-                    type="date"
-                    required
-                    value={formCierre.fechaHasta}
-                    onChange={(e) => setFormCierre({ ...formCierre, fechaHasta: e.target.value })}
-                    className="input-field"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Fecha del cierre *</label>
+                <input
+                  type="date"
+                  required
+                  value={formCierre.fecha}
+                  onChange={(e) => setFormCierre({ ...formCierre, fecha: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Monto retirado de la caja *</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  value={formCierre.montoRetirado}
+                  onChange={(e) => setFormCierre({ ...formCierre, montoRetirado: e.target.value })}
+                  className="input-field"
+                  placeholder="0"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Saldo disponible antes (referencia): {formatCurrency(stats.totalNeto + stats.totalRetiros)} · Ya retirado en cierres: {formatCurrency(stats.totalRetiros)}
+                </p>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button type="button" onClick={() => setShowModalCierre(false)} className="btn-secondary">
@@ -1120,7 +1055,7 @@ const Caja = () => {
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{cierreDetalle.descripcion}</h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  Período: {formatDate(cierreDetalle.fechaDesde)} — {formatDate(cierreDetalle.fechaHasta)}
+                  Fecha de cierre: {formatDate(cierreFechaCorte(cierreDetalle) || cierreDetalle.fechaDesde || '')}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
                   Cierre registrado el {formatDate(cierreDetalle.createdAt.slice(0, 10))}
@@ -1137,38 +1072,50 @@ const Caja = () => {
             </div>
             <div className="p-6 space-y-6">
               <p className="text-sm text-gray-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                Los importes de resumen son los del momento del cierre. La tabla lista los movimientos con fecha dentro del período (si más adelante editás o borrás un movimiento, los totales del cierre no cambian).
+                La tabla muestra los movimientos de la sesión que cerraste. Los importes de retiro y saldo quedaron guardados al registrar el cierre.
               </p>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                  <p className="text-xs text-green-800 uppercase">Ingresos</p>
-                  <p className="text-lg font-bold text-green-900">{formatCurrency(cierreDetalle.totalIngresos)}</p>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs text-amber-900 uppercase">Retirado</p>
+                  <p className="text-lg font-bold text-amber-950">{formatCurrency(cierreDetalle.montoRetirado ?? 0)}</p>
                 </div>
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                  <p className="text-xs text-red-800 uppercase">Gastos</p>
-                  <p className="text-lg font-bold text-red-900">{formatCurrency(cierreDetalle.totalGastos)}</p>
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                  <p className="text-xs text-green-800 uppercase">Saldo antes</p>
+                  <p className="text-lg font-bold text-green-900">{formatCurrency(cierreDetalle.saldoAntesRetiro ?? 0)}</p>
                 </div>
                 <div className="rounded-lg border border-primary-200 bg-primary-50 p-3">
-                  <p className="text-xs text-primary-800 uppercase">Neto</p>
-                  <p className="text-lg font-bold text-primary-900">{formatCurrency(cierreDetalle.neto)}</p>
+                  <p className="text-xs text-primary-800 uppercase">Saldo después</p>
+                  <p className="text-lg font-bold text-primary-900">
+                    {formatCurrency(cierreDetalle.saldoDespuesRetiro ?? cierreDetalle.neto ?? 0)}
+                  </p>
                 </div>
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <p className="text-xs text-gray-600 uppercase">Movimientos</p>
-                  <p className="text-lg font-bold text-gray-900">{cierreDetalle.movimientosCount}</p>
+                  <p className="text-xs text-gray-600 uppercase">Movimientos sesión</p>
+                  <p className="text-lg font-bold text-gray-900">{cierreDetalle.movimientosCount ?? 0}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-green-100 bg-white p-3 text-sm">
+                  <span className="text-gray-600">Ingresos (sesión): </span>
+                  <span className="font-semibold text-green-800">{formatCurrency(cierreDetalle.totalIngresos ?? 0)}</span>
+                </div>
+                <div className="rounded-lg border border-red-100 bg-white p-3 text-sm">
+                  <span className="text-gray-600">Gastos (sesión): </span>
+                  <span className="font-semibold text-red-700">{formatCurrency(cierreDetalle.totalGastos ?? 0)}</span>
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div className="rounded-lg border p-3 bg-gray-50">
                   <span className="text-gray-600">Efectivo: ingresos </span>
-                  <span className="font-semibold text-green-800">{formatCurrency(cierreDetalle.ingresosEfectivo)}</span>
+                  <span className="font-semibold text-green-800">{formatCurrency(cierreDetalle.ingresosEfectivo ?? 0)}</span>
                   <span className="text-gray-500"> · gastos </span>
-                  <span className="font-semibold text-red-700">{formatCurrency(cierreDetalle.gastosEfectivo)}</span>
+                  <span className="font-semibold text-red-700">{formatCurrency(cierreDetalle.gastosEfectivo ?? 0)}</span>
                 </div>
                 <div className="rounded-lg border p-3 bg-gray-50">
                   <span className="text-gray-600">Transferencia: ingresos </span>
-                  <span className="font-semibold text-green-800">{formatCurrency(cierreDetalle.ingresosTransferencia)}</span>
+                  <span className="font-semibold text-green-800">{formatCurrency(cierreDetalle.ingresosTransferencia ?? 0)}</span>
                   <span className="text-gray-500"> · gastos </span>
-                  <span className="font-semibold text-red-700">{formatCurrency(cierreDetalle.gastosTransferencia)}</span>
+                  <span className="font-semibold text-red-700">{formatCurrency(cierreDetalle.gastosTransferencia ?? 0)}</span>
                 </div>
               </div>
               <div className="flex flex-wrap gap-3">

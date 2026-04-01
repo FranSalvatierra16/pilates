@@ -76,20 +76,30 @@ export interface Gasto {
   createdAt: string;
 }
 
-/** Cierre de caja: totales congelados para un período (ej. fin de mes). */
+/** Cierre de caja: retiro físico que reduce el saldo disponible; nueva “caja” desde el día siguiente. */
 export interface CierreCaja {
   id: string;
   descripcion: string;
-  fechaDesde: string;
-  fechaHasta: string;
-  ingresosEfectivo: number;
-  ingresosTransferencia: number;
-  gastosEfectivo: number;
-  gastosTransferencia: number;
-  totalIngresos: number;
-  totalGastos: number;
-  neto: number;
-  movimientosCount: number;
+  /** Fecha del cierre (nueva caja desde el día siguiente). */
+  fechaCierre: string;
+  /** Monto que se retira del saldo (ej. lo que llevás al banco). */
+  montoRetirado: number;
+  /** Saldo teórico (ingresos − gastos − retiros anteriores) justo antes de este retiro. */
+  saldoAntesRetiro?: number;
+  /** Saldo luego de descontar este retiro. */
+  saldoDespuesRetiro?: number;
+  /** Compatibilidad con cierres viejos (rango por mes). */
+  fechaDesde?: string;
+  fechaHasta?: string;
+  ingresosEfectivo?: number;
+  ingresosTransferencia?: number;
+  gastosEfectivo?: number;
+  gastosTransferencia?: number;
+  totalIngresos?: number;
+  totalGastos?: number;
+  /** En registros nuevos coincide con saldo después del retiro; en viejos, neto del período. */
+  neto?: number;
+  movimientosCount?: number;
   createdAt: string;
 }
 

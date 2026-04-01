@@ -208,3 +208,9 @@ CREATE TABLE IF NOT EXISTS cierres_caja (
 );
 CREATE INDEX IF NOT EXISTS idx_cierres_caja_sucursal ON cierres_caja(sucursal_id);
 CREATE INDEX IF NOT EXISTS idx_cierres_caja_created ON cierres_caja(created_at DESC);
+
+ALTER TABLE cierres_caja ADD COLUMN IF NOT EXISTS fecha_cierre DATE;
+ALTER TABLE cierres_caja ADD COLUMN IF NOT EXISTS monto_retirado NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE cierres_caja ADD COLUMN IF NOT EXISTS saldo_antes_retiro NUMERIC;
+ALTER TABLE cierres_caja ADD COLUMN IF NOT EXISTS saldo_despues_retiro NUMERIC;
+UPDATE cierres_caja SET fecha_cierre = fecha_hasta WHERE fecha_cierre IS NULL;

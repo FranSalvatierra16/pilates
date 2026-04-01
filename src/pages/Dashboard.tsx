@@ -17,17 +17,19 @@ const Dashboard = () => {
     ingresosCaja: 0,
     /** Suma de gastos registrados */
     gastosCaja: 0,
-    /** ingresosCaja - gastosCaja (misma lógica que la página Caja → Saldo final) */
+    /** ingresosCaja - gastosCaja - retiros en cierres (misma lógica que Caja) */
     totalCajaNeto: 0,
+    totalRetirosCaja: 0,
   });
 
   useEffect(() => {
     (async () => {
-      const [alumnos, actividades, pagos, gastos] = await Promise.all([
+      const [alumnos, actividades, pagos, gastos, cierres] = await Promise.all([
         storageHybrid.alumnos.getAll(),
         storageHybrid.actividades.getAll(),
         storageHybrid.pagos.getAll(),
         storageHybrid.gastos.getAll(),
+        storageHybrid.cierresCaja.getAll(),
       ]);
 
       const cuotasVencidas = alumnos.filter(a => isCuotaVencida(a.fechaVencimientoCuota));
@@ -50,7 +52,9 @@ const Dashboard = () => {
 
       const ingresosCaja = totalEfectivo + totalTransferencia;
       const gastosCaja = gastosEfectivo + gastosTransferencia;
-      const totalCajaNeto = ingresosCaja - gastosCaja;
+      const teorico = ingresosCaja - gastosCaja;
+      const totalRetiros = cierres.reduce((s, c) => s + (c.montoRetirado ?? 0), 0);
+      const totalCajaNeto = teorico - totalRetiros;
 
       setStats({
         totalAlumnos: alumnos.length,
@@ -59,6 +63,7 @@ const Dashboard = () => {
         ingresosCaja,
         gastosCaja,
         totalCajaNeto,
+        totalRetirosCaja: totalRetiros,
       });
     })();
   }, []);
@@ -95,7 +100,7 @@ const Dashboard = () => {
     {
       title: 'Saldo en caja',
       value: formatCurrency(stats.totalCajaNeto),
-      subtitle: `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)}`,
+      subtitle: `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)} − Retiros ${formatCurrency(stats.totalRetirosCaja)}`,
       icon: DollarSign,
       color: 'bg-yellow-500',
       link: '/caja',

@@ -703,21 +703,41 @@ app.delete('/api/gastos/:id', async (req, res) => {
 });
 
 function mapCierreCajaRow(r) {
+  const fc =
+    r.fecha_cierre?.toISOString?.()?.slice(0, 10) ??
+    r.fecha_cierre ??
+    r.fecha_hasta?.toISOString?.()?.slice(0, 10) ??
+    r.fecha_hasta;
   return {
     id: r.id,
     descripcion: r.descripcion,
+    fechaCierre: fc,
+    montoRetirado: Number(r.monto_retirado ?? 0),
+    saldoAntesRetiro: r.saldo_antes_retiro != null ? Number(r.saldo_antes_retiro) : undefined,
+    saldoDespuesRetiro: r.saldo_despues_retiro != null ? Number(r.saldo_despues_retiro) : undefined,
     fechaDesde: r.fecha_desde?.toISOString?.()?.slice(0, 10) ?? r.fecha_desde,
     fechaHasta: r.fecha_hasta?.toISOString?.()?.slice(0, 10) ?? r.fecha_hasta,
-    ingresosEfectivo: Number(r.ingresos_efectivo),
-    ingresosTransferencia: Number(r.ingresos_transferencia),
-    gastosEfectivo: Number(r.gastos_efectivo),
-    gastosTransferencia: Number(r.gastos_transferencia),
-    totalIngresos: Number(r.total_ingresos),
-    totalGastos: Number(r.total_gastos),
-    neto: Number(r.neto),
-    movimientosCount: Number(r.movimientos_count),
+    ingresosEfectivo: Number(r.ingresos_efectivo ?? 0),
+    ingresosTransferencia: Number(r.ingresos_transferencia ?? 0),
+    gastosEfectivo: Number(r.gastos_efectivo ?? 0),
+    gastosTransferencia: Number(r.gastos_transferencia ?? 0),
+    totalIngresos: Number(r.total_ingresos ?? 0),
+    totalGastos: Number(r.total_gastos ?? 0),
+    neto: Number(r.neto ?? 0),
+    movimientosCount: Number(r.movimientos_count ?? 0),
     createdAt: r.created_at?.toISOString?.() ?? r.created_at,
   };
+}
+
+async function getTeoricoNetoCaja(db, sucursalId) {
+  const { rows: pi } = await db.query(
+    `SELECT COALESCE(SUM(p.monto), 0) AS s FROM pagos p
+     LEFT JOIN alumnos a ON p.alumno_id = a.id
+     WHERE a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1)`,
+    [sucursalId]
+  );
+  const { rows: gi } = await db.query('SELECT COALESCE(SUM(monto), 0) AS s FROM gastos WHERE sucursal_id = $1', [sucursalId]);
+  return Number(pi[0].s) - Number(gi[0].s);
 }
 
 // --- Cierres de caja ---
@@ -726,7 +746,8 @@ app.get('/api/cierres-caja', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query(
-      'SELECT * FROM cierres_caja WHERE sucursal_id = $1 ORDER BY created_at DESC',
+      `SELECT * FROM cierres_caja WHERE sucursal_id = $1
+       ORDER BY COALESCE(fecha_cierre, fecha_hasta) DESC NULLS LAST, created_at DESC`,
       [req.user.sucursalId]
     );
     res.json(rows.map(mapCierreCajaRow));
@@ -758,21 +779,48 @@ app.post('/api/cierres-caja', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body || {};
     const descripcion = String(b.descripcion || '').trim();
-    const fechaDesde = b.fechaDesde;
-    const fechaHasta = b.fechaHasta;
-    if (!descripcion) return res.status(400).json({ error: 'Descripción requerida' });
-    if (!fechaDesde || !fechaHasta) return res.status(400).json({ error: 'Indicá fecha desde y hasta' });
-    if (String(fechaDesde) > String(fechaHasta)) return res.status(400).json({ error: 'La fecha desde no puede ser posterior a la fecha hasta' });
+    const fechaCierre = String(b.fecha || b.fechaCierre || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const montoRetirado = Number(b.montoRetirado);
+    if (!descripcion) return res.status(400).json({ error: 'Nombre o descripción requerida' });
+    if (!Number.isFinite(montoRetirado) || montoRetirado < 0) return res.status(400).json({ error: 'Indicá un monto a retirar válido (≥ 0)' });
 
     const sid = req.user.sucursalId;
 
-    const { rows: pagRows } = await db.query(
-      `SELECT p.metodo_pago, p.monto FROM pagos p
-       LEFT JOIN alumnos a ON p.alumno_id = a.id
-       WHERE (a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1))
-       AND p.fecha >= $2::date AND p.fecha <= $3::date`,
-      [sid, fechaDesde, fechaHasta]
+    const teorico = await getTeoricoNetoCaja(db, sid);
+    const { rows: retRows } = await db.query(
+      'SELECT COALESCE(SUM(monto_retirado), 0) AS s FROM cierres_caja WHERE sucursal_id = $1',
+      [sid]
     );
+    const sumRetirosPrev = Number(retRows[0].s);
+    const saldoAntesRetiro = teorico - sumRetirosPrev;
+    const saldoDespuesRetiro = saldoAntesRetiro - montoRetirado;
+
+    const { rows: lastCierreRows } = await db.query(
+      `SELECT COALESCE(fecha_cierre, fecha_hasta) AS fc FROM cierres_caja WHERE sucursal_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [sid]
+    );
+    const rawFc = lastCierreRows[0]?.fc;
+    const prevCut = rawFc
+      ? rawFc instanceof Date
+        ? rawFc.toISOString().slice(0, 10)
+        : String(rawFc).slice(0, 10)
+      : null;
+
+    const pagParams = prevCut
+      ? [sid, prevCut, fechaCierre]
+      : [sid, fechaCierre];
+    const pagSql = prevCut
+      ? `SELECT p.metodo_pago, p.monto FROM pagos p
+         LEFT JOIN alumnos a ON p.alumno_id = a.id
+         WHERE (a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1))
+         AND p.fecha > $2::date AND p.fecha <= $3::date`
+      : `SELECT p.metodo_pago, p.monto FROM pagos p
+         LEFT JOIN alumnos a ON p.alumno_id = a.id
+         WHERE (a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1))
+         AND p.fecha <= $2::date`;
+
+    const { rows: pagRows } = await db.query(pagSql, pagParams);
+
     let ingEf = 0;
     let ingTr = 0;
     for (const r of pagRows) {
@@ -781,11 +829,13 @@ app.post('/api/cierres-caja', async (req, res) => {
       else ingTr += m;
     }
 
-    const { rows: gasRows } = await db.query(
-      `SELECT metodo_pago, monto FROM gastos
-       WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
-      [sid, fechaDesde, fechaHasta]
-    );
+    const gasParams = prevCut ? [sid, prevCut, fechaCierre] : [sid, fechaCierre];
+    const gasSql = prevCut
+      ? `SELECT metodo_pago, monto FROM gastos
+         WHERE sucursal_id = $1 AND fecha > $2::date AND fecha <= $3::date`
+      : `SELECT metodo_pago, monto FROM gastos WHERE sucursal_id = $1 AND fecha <= $2::date`;
+
+    const { rows: gasRows } = await db.query(gasSql, gasParams);
     let gasEf = 0;
     let gasTr = 0;
     for (const r of gasRows) {
@@ -796,31 +846,35 @@ app.post('/api/cierres-caja', async (req, res) => {
 
     const totalIngresos = ingEf + ingTr;
     const totalGastos = gasEf + gasTr;
-    const neto = totalIngresos - totalGastos;
     const movimientosCount = pagRows.length + gasRows.length;
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
 
     await db.query(
       `INSERT INTO cierres_caja (
-        id, sucursal_id, descripcion, fecha_desde, fecha_hasta,
+        id, sucursal_id, descripcion, fecha_desde, fecha_hasta, fecha_cierre,
         ingresos_efectivo, ingresos_transferencia, gastos_efectivo, gastos_transferencia,
-        total_ingresos, total_gastos, neto, movimientos_count, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        total_ingresos, total_gastos, neto, movimientos_count,
+        monto_retirado, saldo_antes_retiro, saldo_despues_retiro, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       [
         id,
         sid,
         descripcion,
-        fechaDesde,
-        fechaHasta,
+        fechaCierre,
+        fechaCierre,
+        fechaCierre,
         ingEf,
         ingTr,
         gasEf,
         gasTr,
         totalIngresos,
         totalGastos,
-        neto,
+        saldoDespuesRetiro,
         movimientosCount,
+        montoRetirado,
+        saldoAntesRetiro,
+        saldoDespuesRetiro,
         createdAt,
       ]
     );
@@ -829,16 +883,20 @@ app.post('/api/cierres-caja', async (req, res) => {
       mapCierreCajaRow({
         id,
         descripcion,
-        fecha_desde: fechaDesde,
-        fecha_hasta: fechaHasta,
+        fecha_cierre: fechaCierre,
+        fecha_desde: fechaCierre,
+        fecha_hasta: fechaCierre,
         ingresos_efectivo: ingEf,
         ingresos_transferencia: ingTr,
         gastos_efectivo: gasEf,
         gastos_transferencia: gasTr,
         total_ingresos: totalIngresos,
         total_gastos: totalGastos,
-        neto,
+        neto: saldoDespuesRetiro,
         movimientos_count: movimientosCount,
+        monto_retirado: montoRetirado,
+        saldo_antes_retiro: saldoAntesRetiro,
+        saldo_despues_retiro: saldoDespuesRetiro,
         created_at: createdAt,
       })
     );

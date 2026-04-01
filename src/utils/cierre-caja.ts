@@ -43,6 +43,24 @@ export function buildCierreSnapshot(
   };
 }
 
+/** Último cierre registrado (más reciente por fecha de alta). Define desde cuándo arranca el período abierto. */
+export function getUltimoCierrePorRegistro(lista: CierreCaja[]): CierreCaja | null {
+  if (!lista?.length) return null;
+  return [...lista].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+}
+
+export function diaSiguiente(fecha: string): string {
+  const d = new Date(fecha + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Movimientos del período abierto (después del último cierre). Sin cierres, todo el historial cuenta. */
+export function enPeriodoAbierto(fecha: string, ultimoCierre: CierreCaja | null): boolean {
+  if (!ultimoCierre) return true;
+  return fecha > ultimoCierre.fechaHasta;
+}
+
 export function boundsForMesYYYYMM(mes: string): { desde: string; hasta: string } {
   const [y, m] = mes.split('-').map(Number);
   if (!y || !m) {

@@ -4,7 +4,12 @@ import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { formatDate } from '../utils/date';
-import { boundsForMesYYYYMM } from '../utils/cierre-caja';
+import {
+  boundsForMesYYYYMM,
+  diaSiguiente,
+  enPeriodoAbierto,
+  getUltimoCierrePorRegistro,
+} from '../utils/cierre-caja';
 import { CierreCaja, Gasto, MetodoPago, Pago } from '../types';
 
 const mesFromFecha = (fecha: string) => (fecha || '').slice(0, 7);
@@ -15,8 +20,95 @@ const labelMes = (mes: string) => {
   return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
 };
 
+type CajaStats = {
+  totalEfectivo: number;
+  totalTransferencia: number;
+  totalGeneral: number;
+  gastosEfectivo: number;
+  gastosTransferencia: number;
+  totalGastos: number;
+  totalNeto: number;
+  periodoIngresos: number;
+  periodoGastos: number;
+  periodoNeto: number;
+  periodoEfectivoIng: number;
+  periodoEfectivoGas: number;
+  periodoTransfIng: number;
+  periodoTransfGas: number;
+  fechaInicioPeriodo: string | null;
+  pagosHoy: number;
+  pagosMes: number;
+  pagosPeriodoCount: number;
+};
+
+function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres: CierreCaja[]): CajaStats {
+  const ultimoCierre = getUltimoCierrePorRegistro(listaCierres);
+  const inP = (fecha: string) => enPeriodoAbierto(fecha, ultimoCierre);
+
+  const efectivo = todosPagos.filter((p) => p.metodoPago === 'efectivo').reduce((s, p) => s + p.monto, 0);
+  const transferencia = todosPagos.filter((p) => p.metodoPago === 'transferencia').reduce((s, p) => s + p.monto, 0);
+  const gastosEfvo = todosGastos.filter((g) => g.metodoPago === 'efectivo').reduce((s, g) => s + g.monto, 0);
+  const gastosTransf = todosGastos.filter((g) => g.metodoPago === 'transferencia').reduce((s, g) => s + g.monto, 0);
+  const totalGastos = gastosEfvo + gastosTransf;
+  const totalEfectivoNeto = efectivo - gastosEfvo;
+  const totalTransferenciaNeto = transferencia - gastosTransf;
+  const totalGeneralNeto = totalEfectivoNeto + totalTransferenciaNeto;
+
+  const pagosP = todosPagos.filter((p) => inP(p.fecha));
+  const gastosP = todosGastos.filter((g) => inP(g.fecha));
+
+  const periodoEfectivoIng = pagosP.filter((p) => p.metodoPago === 'efectivo').reduce((s, p) => s + p.monto, 0);
+  const periodoTransfIng = pagosP.filter((p) => p.metodoPago === 'transferencia').reduce((s, p) => s + p.monto, 0);
+  const periodoEfectivoGas = gastosP.filter((g) => g.metodoPago === 'efectivo').reduce((s, g) => s + g.monto, 0);
+  const periodoTransfGas = gastosP.filter((g) => g.metodoPago === 'transferencia').reduce((s, g) => s + g.monto, 0);
+  const periodoIngresos = periodoEfectivoIng + periodoTransfIng;
+  const periodoGastos = periodoEfectivoGas + periodoTransfGas;
+  const periodoNeto = periodoIngresos - periodoGastos;
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const pagosHoy = todosPagos
+    .filter((p) => {
+      const fechaPago = new Date(p.fecha);
+      fechaPago.setHours(0, 0, 0, 0);
+      return fechaPago.getTime() === hoy.getTime() && inP(p.fecha);
+    })
+    .reduce((s, p) => s + p.monto, 0);
+
+  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const pagosMes = todosPagos
+    .filter((p) => {
+      const fechaPago = new Date(p.fecha);
+      return fechaPago >= inicioMes && inP(p.fecha);
+    })
+    .reduce((s, p) => s + p.monto, 0);
+
+  const fechaInicioPeriodo = ultimoCierre ? diaSiguiente(ultimoCierre.fechaHasta) : null;
+
+  return {
+    totalEfectivo: efectivo,
+    totalTransferencia: transferencia,
+    totalGeneral: efectivo + transferencia,
+    gastosEfectivo: gastosEfvo,
+    gastosTransferencia: gastosTransf,
+    totalGastos,
+    totalNeto: totalGeneralNeto,
+    periodoIngresos,
+    periodoGastos,
+    periodoNeto,
+    periodoEfectivoIng,
+    periodoEfectivoGas,
+    periodoTransfIng,
+    periodoTransfGas,
+    fechaInicioPeriodo,
+    pagosHoy,
+    pagosMes,
+    pagosPeriodoCount: pagosP.length,
+  };
+}
+
 const Caja = () => {
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<CajaStats>({
     totalEfectivo: 0,
     totalTransferencia: 0,
     totalGeneral: 0,
@@ -24,8 +116,17 @@ const Caja = () => {
     gastosTransferencia: 0,
     totalGastos: 0,
     totalNeto: 0,
+    periodoIngresos: 0,
+    periodoGastos: 0,
+    periodoNeto: 0,
+    periodoEfectivoIng: 0,
+    periodoEfectivoGas: 0,
+    periodoTransfIng: 0,
+    periodoTransfGas: 0,
+    fechaInicioPeriodo: null,
     pagosHoy: 0,
     pagosMes: 0,
+    pagosPeriodoCount: 0,
   });
 
   const [pagos, setPagos] = useState<Pago[]>([]);
@@ -47,12 +148,26 @@ const Caja = () => {
   const [guardandoCierre, setGuardandoCierre] = useState(false);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  const [alumnos, setAlumnos] = useState<any[]>([]);
+
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
     const fn = () => setIsMobile(mq.matches);
     fn();
     mq.addEventListener('change', fn);
     return () => mq.removeEventListener('change', fn);
+  }, []);
+
+  useEffect(() => {
+    const loadAlumnos = async () => {
+      try {
+        const data = await storageHybrid.alumnos.getAll();
+        setAlumnos(data);
+      } catch (error) {
+        setAlumnos(storage.alumnos.getAll());
+      }
+    };
+    loadAlumnos();
   }, []);
 
   useEffect(() => {
@@ -68,68 +183,16 @@ const Caja = () => {
       setPagos(todosPagos);
       setGastos(todosGastos);
 
+      let listaCierres: CierreCaja[] = [];
       try {
-        const lista = await storageHybrid.cierresCaja.getAll();
-        setCierres(lista);
+        listaCierres = await storageHybrid.cierresCaja.getAll();
+        setCierres(listaCierres);
       } catch {
-        setCierres(storage.cierresCaja.getAll());
+        listaCierres = storage.cierresCaja.getAll();
+        setCierres(listaCierres);
       }
 
-      // Calcular ingresos
-      const efectivo = todosPagos
-      .filter(p => p.metodoPago === 'efectivo')
-      .reduce((sum, p) => sum + p.monto, 0);
-
-    const transferencia = todosPagos
-      .filter(p => p.metodoPago === 'transferencia')
-      .reduce((sum, p) => sum + p.monto, 0);
-
-    // Calcular gastos
-    const gastosEfvo = todosGastos
-      .filter(g => g.metodoPago === 'efectivo')
-      .reduce((sum, g) => sum + g.monto, 0);
-
-    const gastosTransf = todosGastos
-      .filter(g => g.metodoPago === 'transferencia')
-      .reduce((sum, g) => sum + g.monto, 0);
-
-    const totalGastos = gastosEfvo + gastosTransf;
-
-    // Calcular totales netos
-    const totalEfectivoNeto = efectivo - gastosEfvo;
-    const totalTransferenciaNeto = transferencia - gastosTransf;
-    const totalGeneralNeto = totalEfectivoNeto + totalTransferenciaNeto;
-
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    
-    const pagosHoy = todosPagos
-      .filter(p => {
-        const fechaPago = new Date(p.fecha);
-        fechaPago.setHours(0, 0, 0, 0);
-        return fechaPago.getTime() === hoy.getTime();
-      })
-      .reduce((sum, p) => sum + p.monto, 0);
-
-    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const pagosMes = todosPagos
-      .filter(p => {
-        const fechaPago = new Date(p.fecha);
-        return fechaPago >= inicioMes;
-      })
-      .reduce((sum, p) => sum + p.monto, 0);
-
-    setStats({
-      totalEfectivo: efectivo,
-      totalTransferencia: transferencia,
-      totalGeneral: efectivo + transferencia,
-      gastosEfectivo: gastosEfvo,
-      gastosTransferencia: gastosTransf,
-      totalGastos,
-      totalNeto: totalGeneralNeto,
-      pagosHoy,
-      pagosMes,
-    });
+      setStats(computeCajaStats(todosPagos, todosGastos, listaCierres));
     } catch (error) {
       console.error('Error loading stats:', error);
       // Fallback a localStorage
@@ -137,23 +200,9 @@ const Caja = () => {
       const todosGastos = storage.gastos.getAll();
       setPagos(todosPagos);
       setGastos(todosGastos);
-      setCierres(storage.cierresCaja.getAll());
-      // Recalcular stats con localStorage
-      const efectivo = todosPagos.filter(p => p.metodoPago === 'efectivo').reduce((sum, p) => sum + p.monto, 0);
-      const transferencia = todosPagos.filter(p => p.metodoPago === 'transferencia').reduce((sum, p) => sum + p.monto, 0);
-      const gastosEfvo = todosGastos.filter(g => g.metodoPago === 'efectivo').reduce((sum, g) => sum + g.monto, 0);
-      const gastosTransf = todosGastos.filter(g => g.metodoPago === 'transferencia').reduce((sum, g) => sum + g.monto, 0);
-      setStats({
-        totalEfectivo: efectivo,
-        totalTransferencia: transferencia,
-        totalGeneral: efectivo + transferencia,
-        gastosEfectivo: gastosEfvo,
-        gastosTransferencia: gastosTransf,
-        totalGastos: gastosEfvo + gastosTransf,
-        totalNeto: (efectivo - gastosEfvo) + (transferencia - gastosTransf),
-        pagosHoy: 0,
-        pagosMes: 0,
-      });
+      const listaCierres = storage.cierresCaja.getAll();
+      setCierres(listaCierres);
+      setStats(computeCajaStats(todosPagos, todosGastos, listaCierres));
     } finally {
       setLoading(false);
     }
@@ -225,27 +274,21 @@ const Caja = () => {
     }
   };
 
-  const ultimosPagos = pagos
+  const ultimoCierreVista = getUltimoCierrePorRegistro(cierres);
+  const pagosPeriodoVista = ultimoCierreVista
+    ? pagos.filter((p) => enPeriodoAbierto(p.fecha, ultimoCierreVista))
+    : pagos;
+  const gastosPeriodoVista = ultimoCierreVista
+    ? gastos.filter((g) => enPeriodoAbierto(g.fecha, ultimoCierreVista))
+    : gastos;
+
+  const ultimosPagos = pagosPeriodoVista
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
 
-  const ultimosGastos = gastos
+  const ultimosGastos = gastosPeriodoVista
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
-
-  const [alumnos, setAlumnos] = useState<any[]>([]);
-  
-  useEffect(() => {
-    const loadAlumnos = async () => {
-      try {
-        const data = await storageHybrid.alumnos.getAll();
-        setAlumnos(data);
-      } catch (error) {
-        setAlumnos(storage.alumnos.getAll());
-      }
-    };
-    loadAlumnos();
-  }, []);
 
   const getAlumnoNombre = (pago: Pago): string => {
     if (pago.alumnoId == null) return pago.descripcion || 'Aporte a caja';
@@ -514,31 +557,53 @@ const Caja = () => {
         )}
       </div>
 
-      {/* Saldo de Caja - Destacado */}
+      {/* Saldo de Caja - Destacado: total histórico + período nuevo tras último cierre */}
       <div className="card bg-gradient-to-r from-primary-600 to-primary-700 text-white mb-8 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold mb-2">Saldo de Caja</h2>
-            <div className="space-y-1 text-primary-100">
-              <p className="text-sm">
-                <span className="font-semibold">Ingresos:</span> {formatCurrency(stats.totalGeneral)}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold mb-1">Saldo en caja</h2>
+            <p className="text-sm text-primary-100/90 mb-3">
+              Dinero neto acumulado (todo el historial de ingresos y gastos).
+            </p>
+            <div className="rounded-lg bg-white/10 border border-white/20 px-4 py-3 space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary-200">Período actual</p>
+              <p className="text-sm text-primary-50">
+                {stats.fechaInicioPeriodo ? (
+                  <>
+                    Desde el {formatDate(stats.fechaInicioPeriodo)} (después del último cierre). Ingresos y gastos arrancan de cero para este tramo.
+                  </>
+                ) : (
+                  <>Sin cierres todavía: el período actual incluye todos los movimientos.</>
+                )}
               </p>
-              <p className="text-sm">
-                <span className="font-semibold">Gastos:</span> {formatCurrency(stats.totalGastos)}
-              </p>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 pt-1 text-sm">
+                <span>
+                  <span className="font-semibold">Ingresos:</span> {formatCurrency(stats.periodoIngresos)}
+                </span>
+                <span>
+                  <span className="font-semibold">Gastos:</span> {formatCurrency(stats.periodoGastos)}
+                </span>
+                <span>
+                  <span className="font-semibold">Neto período:</span>{' '}
+                  <span className={stats.periodoNeto >= 0 ? 'text-green-200' : 'text-red-200'}>
+                    {formatCurrency(stats.periodoNeto)}
+                  </span>
+                </span>
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-primary-200 mb-2 uppercase tracking-wide">Saldo Final</p>
-            <p className={`text-5xl font-bold ${
+          <div className="text-right shrink-0">
+            <p className="text-sm text-primary-200 mb-2 uppercase tracking-wide">Total en caja</p>
+            <p className={`text-4xl sm:text-5xl font-bold ${
               stats.totalNeto >= 0 ? 'text-green-300' : 'text-red-300'
             }`}>
               {formatCurrency(stats.totalNeto)}
             </p>
-            <p className={`text-xs mt-2 ${
-              stats.totalNeto >= 0 ? 'text-green-200' : 'text-red-200'
-            }`}>
-              {stats.totalNeto >= 0 ? '✓ Positivo' : '⚠ Negativo'}
+            <p className={`text-xs mt-2 ${stats.totalNeto >= 0 ? 'text-green-200' : 'text-red-200'}`}>
+              {stats.totalNeto >= 0 ? '✓ Saldo acumulado' : '⚠ Saldo acumulado'}
+            </p>
+            <p className="text-xs text-primary-200/80 mt-3 max-w-[220px] ml-auto">
+              Histórico: ingresos {formatCurrency(stats.totalGeneral)} · gastos {formatCurrency(stats.totalGastos)}
             </p>
           </div>
         </div>
@@ -549,82 +614,88 @@ const Caja = () => {
         <div className="card bg-green-50 border-2 border-green-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-green-700 uppercase tracking-wide">
-              Efectivo — Saldo neto
+              Efectivo — período actual
             </h3>
             <div className="bg-green-200 p-2 rounded-lg">
               <DollarSign className="w-5 h-5 text-green-700" />
             </div>
           </div>
           <p className="text-3xl font-bold text-green-900 mb-1">
-            {formatCurrency(stats.totalEfectivo - stats.gastosEfectivo)}
+            {formatCurrency(stats.periodoEfectivoIng - stats.periodoEfectivoGas)}
           </p>
           <p className="text-xs text-green-700 mb-0.5">
-            Ingresos: {formatCurrency(stats.totalEfectivo)}
+            Ingresos: {formatCurrency(stats.periodoEfectivoIng)}
           </p>
-          {stats.gastosEfectivo > 0 ? (
+          {stats.periodoEfectivoGas > 0 ? (
             <p className="text-xs text-red-600">
-              Gastos: - {formatCurrency(stats.gastosEfectivo)}
+              Gastos: - {formatCurrency(stats.periodoEfectivoGas)}
             </p>
           ) : (
-            <p className="text-xs text-green-600">Sin gastos en efectivo</p>
+            <p className="text-xs text-green-600">Sin gastos en efectivo (período)</p>
           )}
+          <p className="text-xs text-green-800/80 mt-2 pt-2 border-t border-green-200">
+            Acumulado efectivo: {formatCurrency(stats.totalEfectivo - stats.gastosEfectivo)}
+          </p>
         </div>
 
         <div className="card bg-blue-50 border-2 border-blue-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-blue-700 uppercase tracking-wide">
-              Transferencia — Saldo neto
+              Transferencia — período actual
             </h3>
             <div className="bg-blue-200 p-2 rounded-lg">
               <CreditCard className="w-5 h-5 text-blue-700" />
             </div>
           </div>
           <p className="text-3xl font-bold text-blue-900 mb-1">
-            {formatCurrency(stats.totalTransferencia - stats.gastosTransferencia)}
+            {formatCurrency(stats.periodoTransfIng - stats.periodoTransfGas)}
           </p>
           <p className="text-xs text-blue-700 mb-0.5">
-            Ingresos: {formatCurrency(stats.totalTransferencia)}
+            Ingresos: {formatCurrency(stats.periodoTransfIng)}
           </p>
-          {stats.gastosTransferencia > 0 ? (
+          {stats.periodoTransfGas > 0 ? (
             <p className="text-xs text-red-600">
-              Gastos: - {formatCurrency(stats.gastosTransferencia)}
+              Gastos: - {formatCurrency(stats.periodoTransfGas)}
             </p>
           ) : (
-            <p className="text-xs text-blue-600">Sin gastos en transferencia</p>
+            <p className="text-xs text-blue-600">Sin gastos en transferencia (período)</p>
           )}
+          <p className="text-xs text-blue-800/80 mt-2 pt-2 border-t border-blue-200">
+            Acumulado transfer.: {formatCurrency(stats.totalTransferencia - stats.gastosTransferencia)}
+          </p>
         </div>
 
         <div className="card bg-red-50 border-2 border-red-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-red-700 uppercase tracking-wide">
-              Total Gastos
+              Gastos — período actual
             </h3>
             <div className="bg-red-200 p-2 rounded-lg">
               <DollarSign className="w-5 h-5 text-red-700" />
             </div>
           </div>
           <p className="text-3xl font-bold text-red-900 mb-2">
-            {formatCurrency(stats.totalGastos)}
+            {formatCurrency(stats.periodoGastos)}
           </p>
           <p className="text-xs text-red-600">
-            {gastos.length} gastos registrados
+            {gastosPeriodoVista.length} gastos en el período
           </p>
         </div>
 
         <div className="card bg-primary-50 border-2 border-primary-300">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-medium text-primary-700 uppercase tracking-wide">
-              Total Neto
+              Neto — período actual
             </h3>
             <div className="bg-primary-200 p-2 rounded-lg">
               <Wallet className="w-5 h-5 text-primary-700" />
             </div>
           </div>
           <p className="text-3xl font-bold text-primary-900 mb-2">
-            {formatCurrency(stats.totalNeto)}
+            {formatCurrency(stats.periodoNeto)}
           </p>
           <p className="text-xs text-primary-600">
-            Ingresos - Gastos
+            Ingresos − gastos (desde último cierre)
           </p>
         </div>
         <div className="card bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200">
@@ -633,8 +704,8 @@ const Caja = () => {
               <Calendar className="w-6 h-6 text-purple-700" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Este Mes</h3>
-              <p className="text-sm text-gray-600">Total de pagos recibidos</p>
+              <h3 className="text-lg font-bold text-gray-900">Este mes</h3>
+              <p className="text-sm text-gray-600">Pagos del mes (período actual)</p>
             </div>
           </div>
           <p className="text-3xl font-bold text-purple-900">
@@ -648,22 +719,27 @@ const Caja = () => {
               <TrendingUp className="w-6 h-6 text-indigo-700" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Promedio por Pago</h3>
-              <p className="text-sm text-gray-600">Monto promedio</p>
+              <h3 className="text-lg font-bold text-gray-900">Promedio por pago</h3>
+              <p className="text-sm text-gray-600">Período actual</p>
             </div>
           </div>
           <p className="text-3xl font-bold text-indigo-900">
-            {pagos.length > 0 
-              ? formatCurrency(stats.totalGeneral / pagos.length)
+            {stats.pagosPeriodoCount > 0
+              ? formatCurrency(stats.periodoIngresos / stats.pagosPeriodoCount)
               : formatCurrency(0)}
           </p>
         </div>
       </div>
 
-      {/* Últimos Gastos */}
+      {/* Últimos Gastos (solo período actual si hubo cierre) */}
       <div className="card mb-8 overflow-hidden min-w-0">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-          <h2 className="text-xl font-bold text-gray-900">Últimos Gastos</h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Últimos gastos</h2>
+            {ultimoCierreVista && (
+              <p className="text-sm text-gray-500 mt-0.5">Solo movimientos del período actual</p>
+            )}
+          </div>
           <button
             onClick={handleOpenModalGasto}
             className="btn-primary flex items-center gap-2 text-sm"
@@ -740,7 +816,12 @@ const Caja = () => {
 
       {/* Últimos Pagos */}
       <div className="card overflow-hidden min-w-0">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Últimos Pagos</h2>
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-900">Últimos pagos</h2>
+          {ultimoCierreVista && (
+            <p className="text-sm text-gray-500 mt-0.5">Solo movimientos del período actual</p>
+          )}
+        </div>
         {ultimosPagos.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-500">No hay pagos registrados aún</p>

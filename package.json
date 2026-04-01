@@ -9,7 +9,8 @@
     "start": "node server/index.js",
     "seed-demo": "node server/seed-demo.js",
     "db:schema": "node server/run-schema.js",
-    "admin:update": "node server/update-admin.js"
+    "admin:update": "node server/update-admin.js",
+    "sucursal:clone": "node server/clone-sucursal.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.0",

@@ -777,6 +777,42 @@ function combinarFechaHoraISO(fechaStr, horaStr) {
   return new Date(instanteLocalMs(fechaStr, horaStr)).toISOString();
 }
 
+function normalizarHoraStr(hora) {
+  const h = hora && String(hora).trim() ? String(hora).trim() : '12:00';
+  const m = h.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '12:00';
+  const hh = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+  const mm = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+function fechaLocalYMD(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function fechaRowYMD(fecha) {
+  if (fecha == null) return '';
+  if (typeof fecha === 'string') return fecha.slice(0, 10);
+  if (fecha instanceof Date) {
+    const y = fecha.getFullYear();
+    const m = String(fecha.getMonth() + 1).padStart(2, '0');
+    const d = String(fecha.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return String(fecha).slice(0, 10);
+}
+
+/** Misma regla que instanteMovimientoParaPeriodoCaja en el cliente (12:00 + mismo día → usar created_at). */
+function instanteMovimientoPeriodoCaja(fecha, hora, createdAt) {
+  const base = instanteLocalMs(fecha, hora);
+  if (normalizarHoraStr(hora) !== '12:00') return base;
+  const fd = fechaRowYMD(fecha);
+  const created = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  if (!Number.isFinite(created.getTime())) return base;
+  if (fd !== fechaLocalYMD(created)) return base;
+  return Math.max(base, created.getTime());
+}
+
 function instanteCierreRow(r) {
   if (r.cerrado_en != null) {
     const d = r.cerrado_en instanceof Date ? r.cerrado_en : new Date(r.cerrado_en);
@@ -915,14 +951,14 @@ app.post('/api/cierres-caja', async (req, res) => {
 
     const pagFil = [];
     for (const r of pagRows) {
-      const t = instanteLocalMs(r.fecha, r.hora);
+      const t = instanteMovimientoPeriodoCaja(r.fecha, r.hora, r.created_at);
       if (prevInstant != null && t <= prevInstant) continue;
       if (t > cerradoMs) continue;
       pagFil.push(r);
     }
     const gasFil = [];
     for (const r of gasRowsAll) {
-      const t = instanteLocalMs(r.fecha, r.hora);
+      const t = instanteMovimientoPeriodoCaja(r.fecha, r.hora, r.created_at);
       if (prevInstant != null && t <= prevInstant) continue;
       if (t > cerradoMs) continue;
       gasFil.push(r);

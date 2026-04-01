@@ -40,6 +40,29 @@ export function instanteMovimientoGasto(g: Gasto): number {
   return instanteDesdeFechaHora(g.fecha, g.hora);
 }
 
+function fechaLocalYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Instante para decidir período de caja / qué entra en un cierre: alineado con la hora real del registro
+ * cuando la hora sigue siendo la por defecto (12:00): si cerrás a las 18:00 y cargás un pago "el mismo día"
+ * sin tocar la hora, no debe quedar anclado al mediodía anterior al cierre.
+ */
+export function instanteMovimientoParaPeriodoCaja(mov: Pago | Gasto): number {
+  const base =
+    'alumnoId' in mov ? instanteMovimientoPago(mov as Pago) : instanteMovimientoGasto(mov as Gasto);
+  if (normalizarHora((mov as Pago).hora) !== '12:00') return base;
+  const fechaMov = (mov as Pago).fecha.slice(0, 10);
+  const created = new Date((mov as Pago).createdAt);
+  if (!Number.isFinite(created.getTime())) return base;
+  if (fechaMov !== fechaLocalYMD(created)) return base;
+  return Math.max(base, created.getTime());
+}
+
 /** Instante en que quedó registrado el cierre (fin de la sesión anterior). */
 export function instanteCierre(c: CierreCaja): number {
   if (c.cerradoEn) {
@@ -91,7 +114,7 @@ export function fechaGastoParaPeriodoCaja(g: Gasto): string {
 /**
  * ¿Entra en el período actual de Caja?
  * - Sueldos con imputación: solo comparación de fechas (imputación vs día del cierre).
- * - Resto: instante del movimiento > instante del último cierre.
+ * - Resto: instante del movimiento > instante del último cierre (ver `instanteMovimientoParaPeriodoCaja`).
  */
 export function estaEnPeriodoAbiertoCaja(mov: Pago | Gasto, ultimoCierre: CierreCaja | null): boolean {
   if (!ultimoCierre) return true;
@@ -101,7 +124,7 @@ export function estaEnPeriodoAbiertoCaja(mov: Pago | Gasto, ultimoCierre: Cierre
     const fc = cierreFechaCorte(ultimoCierre);
     return ref > fc;
   }
-  const tm = 'alumnoId' in mov ? instanteMovimientoPago(mov as Pago) : instanteMovimientoGasto(mov as Gasto);
+  const tm = instanteMovimientoParaPeriodoCaja(mov);
   return tm > instanteCierre(ultimoCierre);
 }
 
@@ -138,13 +161,13 @@ export function buildCierreRetiro(
   const prevInstant = last ? instanteCierre(last) : null;
 
   const inWinPago = (p: Pago) => {
-    const t = instanteMovimientoPago(p);
+    const t = instanteMovimientoParaPeriodoCaja(p);
     if (prevInstant != null && t <= prevInstant) return false;
     if (t > cerradoMs) return false;
     return true;
   };
   const inWinGasto = (g: Gasto) => {
-    const t = instanteMovimientoGasto(g);
+    const t = instanteMovimientoParaPeriodoCaja(g);
     if (prevInstant != null && t <= prevInstant) return false;
     if (t > cerradoMs) return false;
     return true;

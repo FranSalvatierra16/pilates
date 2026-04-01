@@ -684,8 +684,8 @@ const Caja = () => {
               <p className="text-sm text-primary-50">
                 {stats.periodoDesdeTexto ? (
                   <>
-                    Período actual: movimientos con fecha/hora <strong>después</strong> del cierre del{' '}
-                    <strong>{stats.periodoDesdeTexto}</strong>. Si cerrás y media hora después cargás un pago con esa hora, ya entra acá.
+                    Período actual: movimientos <strong>después</strong> del cierre del{' '}
+                    <strong>{stats.periodoDesdeTexto}</strong>. Si cargás un movimiento el mismo día sin cambiar la hora, se usa la hora real del registro para que entre en la caja nueva enseguida.
                   </>
                 ) : (
                   <>Sin cierres todavía: el período actual incluye todos los movimientos.</>

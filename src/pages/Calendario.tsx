@@ -317,15 +317,12 @@ const Calendario = () => {
     try {
       const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
       const cupo = turnoExistente?.cupo ?? CUPO_DEFAULT;
-      const recsEnTurno = recuperaciones.filter(r => r.turnoId === (turnoExistente?.id ?? ''));
-      const regularesVisibles = turnoExistente ? turnoExistente.alumnoIds.filter(id => {
-        const ins = inscripciones.find(i => i.turnoId === turnoExistente.id && i.alumnoId === id);
-        return !ins || ins.semanaDesde <= semanaVista;
-      }).length : 0;
-      const totalEnTurno = regularesVisibles + recsEnTurno.length;
+      const alumnosVisiblesEnTurno = getAlumnosDelTurno(turnoExistente);
+      const recsEnTurno = alumnosVisiblesEnTurno.filter((a) => a.isRecuperacion);
+      const totalEnTurno = alumnosVisiblesEnTurno.length;
 
       if (esRecuperacion) {
-        const yaRecuperacion = recsEnTurno.some(r => r.alumnoId === alumnoSeleccionado);
+        const yaRecuperacion = recsEnTurno.some((r) => r.alumno.id === alumnoSeleccionado);
         if (yaRecuperacion) {
           handleCerrarModal();
           return;

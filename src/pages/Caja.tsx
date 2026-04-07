@@ -841,8 +841,8 @@ const Caja = () => {
               <Calendar className="w-6 h-6 text-purple-700" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900">Este mes</h3>
-              <p className="text-sm text-gray-600">Pagos del mes (período actual)</p>
+              <h3 className="text-lg font-bold text-gray-900">Mes calendario</h3>
+              <p className="text-sm text-gray-600">Pagos del mes actual dentro de la caja abierta</p>
             </div>
           </div>
           <p className="text-3xl font-bold text-purple-900">

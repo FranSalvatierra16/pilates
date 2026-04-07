@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Plus, X, Save, Calendar, Trash2 } from 'lucide-react';
-import { Alumno, Pago, MetodoPago } from '../types';
+import { Alumno, Pago, MetodoPago, CierreCaja } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { formatDate, calcularFechaVencimiento, horaActualInput, formatHora24 } from '../utils/date';
+import { formatDate, calcularFechaVencimiento, horaActualInput, formatHora24, formatDateTime } from '../utils/date';
 import { formatCurrency } from '../utils/format';
+import { cierreFechaCorte, combinarFechaHoraISO, estaEnPeriodoAbiertoCaja, getUltimoCierre } from '../utils/cierre-caja';
 
 const Pagos = () => {
   const [pagos, setPagos] = useState<Pago[]>([]);
+  const [cierres, setCierres] = useState<CierreCaja[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -36,17 +38,23 @@ const Pagos = () => {
   const loadPagos = async () => {
     try {
       setLoading(true);
-      const todosPagos = await storageHybrid.pagos.getAll();
+      const [todosPagos, todosCierres] = await Promise.all([
+        storageHybrid.pagos.getAll(),
+        storageHybrid.cierresCaja.getAll().catch(() => [] as CierreCaja[]),
+      ]);
       setPagos(todosPagos.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ));
+      setCierres(todosCierres);
     } catch (error) {
       console.error('Error loading pagos:', error);
       // Fallback a localStorage
       const todosPagos = storage.pagos.getAll();
+      const todosCierres = storage.cierresCaja.getAll();
       setPagos(todosPagos.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ));
+      setCierres(todosCierres);
     } finally {
       setLoading(false);
     }
@@ -151,15 +159,23 @@ const Pagos = () => {
     }
   };
 
-  const totalEfectivo = pagos
+  const ultimoCierre = getUltimoCierre(cierres);
+  const pagosCajaActual = ultimoCierre
+    ? pagos.filter((p) => estaEnPeriodoAbiertoCaja(p, ultimoCierre))
+    : pagos;
+  const totalEfectivo = pagosCajaActual
     .filter(p => p.metodoPago === 'efectivo')
     .reduce((sum, p) => sum + p.monto, 0);
-
-  const totalTransferencia = pagos
+  const totalTransferencia = pagosCajaActual
     .filter(p => p.metodoPago === 'transferencia')
     .reduce((sum, p) => sum + p.monto, 0);
-
   const totalGeneral = totalEfectivo + totalTransferencia;
+  const periodoTexto = ultimoCierre
+    ? formatDateTime(
+        ultimoCierre.cerradoEn ??
+          combinarFechaHoraISO(cierreFechaCorte(ultimoCierre), '12:00')
+      )
+    : null;
 
   return (
     <div>
@@ -167,6 +183,11 @@ const Pagos = () => {
         <div className="page-title-wrap">
           <span className="page-title-accent" aria-hidden />
           <h1 className="page-title">Pagos</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {periodoTexto
+              ? `Mostrando solo pagos de la caja actual: movimientos después del cierre del ${periodoTexto}.`
+              : 'Sin cierres todavía: se muestran todos los pagos.'}
+          </p>
         </div>
         <button
           onClick={handleOpenModal}
@@ -182,11 +203,11 @@ const Pagos = () => {
         <div className="card bg-green-50 border border-green-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-green-600 mb-1">Efectivo — Saldo neto</p>
+              <p className="text-sm font-medium text-green-600 mb-1">Efectivo — Caja actual</p>
               <p className="text-2xl font-bold text-green-900">
                 {formatCurrency(totalEfectivo)}
               </p>
-              <p className="text-xs text-green-700 mt-0.5">Total ingresos en efectivo</p>
+              <p className="text-xs text-green-700 mt-0.5">Ingresos en efectivo de la caja abierta</p>
             </div>
             <div className="bg-green-200 p-3 rounded-lg">
               <span className="text-2xl">💰</span>
@@ -196,11 +217,11 @@ const Pagos = () => {
         <div className="card bg-blue-50 border border-blue-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-blue-600 mb-1">Transferencia — Saldo neto</p>
+              <p className="text-sm font-medium text-blue-600 mb-1">Transferencia — Caja actual</p>
               <p className="text-2xl font-bold text-blue-900">
                 {formatCurrency(totalTransferencia)}
               </p>
-              <p className="text-xs text-blue-700 mt-0.5">Total ingresos por transferencia</p>
+              <p className="text-xs text-blue-700 mt-0.5">Ingresos por transferencia de la caja abierta</p>
             </div>
             <div className="bg-blue-200 p-3 rounded-lg">
               <span className="text-2xl">💳</span>
@@ -210,11 +231,11 @@ const Pagos = () => {
         <div className="card bg-primary-50 border border-primary-200">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-primary-600 mb-1">Total — Saldo neto</p>
+              <p className="text-sm font-medium text-primary-600 mb-1">Total — Caja actual</p>
               <p className="text-2xl font-bold text-primary-900">
                 {formatCurrency(totalGeneral)}
               </p>
-              <p className="text-xs text-primary-700 mt-0.5">Suma de ambos</p>
+              <p className="text-xs text-primary-700 mt-0.5">Todos los pagos de la caja abierta</p>
             </div>
             <div className="bg-primary-200 p-3 rounded-lg">
               <span className="text-2xl">💵</span>
@@ -228,9 +249,9 @@ const Pagos = () => {
         <div className="card text-center py-12">
           <p className="text-gray-500">Cargando pagos...</p>
         </div>
-      ) : pagos.length === 0 ? (
+      ) : pagosCajaActual.length === 0 ? (
         <div className="card text-center py-12">
-          <p className="text-gray-500 mb-4">No hay pagos registrados aún</p>
+          <p className="text-gray-500 mb-4">No hay pagos registrados en la caja actual</p>
           <button onClick={handleOpenModal} className="btn-primary">
             Registrar primer pago
           </button>
@@ -238,7 +259,7 @@ const Pagos = () => {
       ) : isMobile ? (
         /* Vista móvil: tarjetas como en Alumnos */
         <div className="space-y-3">
-          {pagos.map((pago) => (
+          {pagosCajaActual.map((pago) => (
             <div key={pago.id} className="card p-4 border border-gray-200">
               <div className="flex justify-between items-start gap-2 mb-2">
                 <div>
@@ -285,7 +306,7 @@ const Pagos = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {pagos.map((pago) => (
+                {pagosCajaActual.map((pago) => (
                   <tr key={pago.id} className="hover:bg-gray-50">
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-sm text-gray-900">

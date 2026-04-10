@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -678,26 +678,6 @@ const Calendario = () => {
     await loadAsistencias();
   };
 
-  const handleReiniciarSemana = async () => {
-    if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados (✓/✗) a gris. Los alumnos en recuperación se mantienen.')) {
-      const faltasPorAlumno = new Map<string, number>();
-      for (const asistencia of asistencias) {
-        if (asistencia.estado !== 'no_asistio') continue;
-        faltasPorAlumno.set(asistencia.alumnoId, (faltasPorAlumno.get(asistencia.alumnoId) || 0) + 1);
-      }
-      for (const [alumnoId, faltas] of faltasPorAlumno.entries()) {
-        const alumno = alumnos.find((a) => a.id === alumnoId);
-        if (!alumno) continue;
-        await storageHybrid.alumnos.update(alumnoId, {
-          clasesParaRecuperar: Math.max(0, (alumno.clasesParaRecuperar || 0) - faltas),
-        });
-      }
-      await storageHybrid.asistencias.deleteBySemana(semanaVista);
-      await loadAlumnos();
-      await loadAsistencias();
-    }
-  };
-
   const handleSaveHorarios = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!useApi()) {
@@ -887,14 +867,6 @@ const Calendario = () => {
           >
             <Settings className="w-4 h-4" />
             Horarios
-          </button>
-          <button
-            onClick={handleReiniciarSemana}
-            className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
-            title="Reiniciar asistencias de esta semana"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reiniciar Semana
           </button>
           <details className="bg-blue-50 rounded-lg border border-blue-200 overflow-hidden sm:block">
             <summary className="p-3 sm:p-4 text-sm text-blue-800 font-medium cursor-pointer touch-manipulation list-none flex items-center gap-2">

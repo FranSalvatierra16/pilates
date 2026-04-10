@@ -219,3 +219,16 @@ CREATE TABLE IF NOT EXISTS inscripciones_turno (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_inscripciones_turno_turno ON inscripciones_turno(turno_id);
+
+-- Liberaciones semanales: un alumno libera solo esa semana una clase fija
+CREATE TABLE IF NOT EXISTS liberaciones_semana (
+  id TEXT PRIMARY KEY,
+  turno_id TEXT NOT NULL REFERENCES turnos(id) ON DELETE CASCADE,
+  alumno_id TEXT NOT NULL REFERENCES alumnos(id) ON DELETE CASCADE,
+  semana TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_liberaciones_semana_unique
+  ON liberaciones_semana(turno_id, alumno_id, semana);
+CREATE INDEX IF NOT EXISTS idx_liberaciones_semana_turno
+  ON liberaciones_semana(turno_id, semana);

@@ -14,6 +14,9 @@ type TurnoPortal = {
   cupo: number;
   inscriptos: number;
   yaInscripto: boolean;
+  esClaseFija?: boolean;
+  claseLiberada?: boolean;
+  liberacionId?: string;
   recuperacionId?: string;
   usaCredito?: boolean;
 };
@@ -281,6 +284,56 @@ const MiClase = () => {
     }
   };
 
+  const liberarClaseSemana = async (turnoId: string) => {
+    if (!portalAuth || !data) return;
+    setActioning(turnoId);
+    try {
+      const base = getBase();
+      const semana = data.semanaVista || getSemanaActual();
+      const body = portalAuth.type === 'token'
+        ? { token: portalAuth.token, turnoId, semana }
+        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId, semana };
+      const res = await fetch(`${base}/api/alumno-portal/liberar-clase-semana`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(json.error || 'No se pudo liberar la clase.');
+        return;
+      }
+      await recargarRecuperar();
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const restaurarClaseSemana = async (turnoId: string, liberacionId?: string) => {
+    if (!portalAuth || !data) return;
+    setActioning(turnoId);
+    try {
+      const base = getBase();
+      const semana = data.semanaVista || getSemanaActual();
+      const body = portalAuth.type === 'token'
+        ? { token: portalAuth.token, turnoId, semana, liberacionId }
+        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId, semana, liberacionId };
+      const res = await fetch(`${base}/api/alumno-portal/restaurar-clase-semana`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(json.error || 'No se pudo volver a tomar la clase.');
+        return;
+      }
+      await recargarRecuperar();
+    } finally {
+      setActioning(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
@@ -532,6 +585,12 @@ const MiClase = () => {
                         <p className="text-xs text-gray-500">
                           {t.inscriptos}/{t.cupo} inscriptos
                         </p>
+                        {esRecuperar && t.esClaseFija && !t.claseLiberada && (
+                          <p className="text-xs text-amber-700 mt-1">Tu clase fija de esta semana</p>
+                        )}
+                        {esRecuperar && t.esClaseFija && t.claseLiberada && (
+                          <p className="text-xs text-emerald-700 mt-1">La liberaste para esta semana</p>
+                        )}
                       </div>
                       <div className="flex-shrink-0">
                         {t.yaInscripto ? (
@@ -543,6 +602,26 @@ const MiClase = () => {
                           >
                             {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
                             {esRecuperar ? 'Liberar recuperación' : 'Liberar cupo'}
+                          </button>
+                        ) : esRecuperar && t.esClaseFija && !t.claseLiberada ? (
+                          <button
+                            type="button"
+                            onClick={() => liberarClaseSemana(t.id)}
+                            disabled={!!actioning}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                          >
+                            {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                            Liberar esta clase
+                          </button>
+                        ) : esRecuperar && t.esClaseFija && t.claseLiberada ? (
+                          <button
+                            type="button"
+                            onClick={() => restaurarClaseSemana(t.id, t.liberacionId)}
+                            disabled={!!actioning}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                          >
+                            {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                            Volver a tomarla
                           </button>
                         ) : (
                           <button

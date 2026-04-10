@@ -167,6 +167,14 @@ export interface Recuperacion {
   createdAt: string;
 }
 
+export interface LiberacionSemana {
+  id: string;
+  turnoId: string;
+  alumnoId: string;
+  semana: string; // YYYY-WW
+  createdAt: string;
+}
+
 /** Item del historial de asistencias de un alumno */
 export interface AsistenciaHistorialItem {
   id: string;

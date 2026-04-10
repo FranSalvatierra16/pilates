@@ -15,6 +15,7 @@ type TurnoPortal = {
   inscriptos: number;
   yaInscripto: boolean;
   recuperacionId?: string;
+  usaCredito?: boolean;
 };
 
 type HorariosPortal = {
@@ -31,6 +32,14 @@ type PortalData = {
   horarios?: HorariosPortal;
   modo?: 'fijo' | 'recuperar';
   semanaVista?: string;
+  recuperacionStats?: {
+    clasesPorSemana: number | null;
+    clasesFijasSemana: number;
+    recuperacionesSemana: number;
+    clasesUsadasSemana: number;
+    clasesParaRecuperar: number;
+    clasesDisponiblesSemana: number | null;
+  };
 };
 
 type SucursalOption = { id: string; nombre_lugar: string };
@@ -212,6 +221,7 @@ const MiClase = () => {
               }
             : null
         );
+        await recargarRecuperar();
       } else if (!esRecuperar) {
         setData((prev) =>
           prev
@@ -263,6 +273,9 @@ const MiClase = () => {
             }
           : null
       );
+      if (esRecuperar) {
+        await recargarRecuperar();
+      }
     } finally {
       setActioning(null);
     }
@@ -404,6 +417,22 @@ const MiClase = () => {
               ? `Hola, ${nombreCompleto}. Elegí la semana y sumate a una clase para recuperar o liberá tu recuperación.`
               : `Hola, ${nombreCompleto}. Acá podés sumarte a una clase o liberar tu cupo.`}
           </p>
+          {esRecuperar && data.recuperacionStats && (
+            <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
+              <p>
+                Clases para recuperar: <strong>{data.recuperacionStats.clasesParaRecuperar}</strong>
+              </p>
+              <p>
+                Usadas esta semana: <strong>{data.recuperacionStats.clasesUsadasSemana}</strong>
+                {data.recuperacionStats.clasesPorSemana != null && (
+                  <> / <strong>{data.recuperacionStats.clasesPorSemana}</strong> base</>
+                )}
+                {data.recuperacionStats.clasesDisponiblesSemana != null && (
+                  <> · disponibles esta semana: <strong>{data.recuperacionStats.clasesDisponiblesSemana}</strong></>
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         {esRecuperar && (

@@ -40,6 +40,7 @@ export interface Alumno {
   fechaVencimientoCuota: string; // YYYY-MM-DD
   actividadId: string;
   clasesAsistidas: number; // Contador de clases asistidas en el mes actual
+  clasesParaRecuperar?: number; // Créditos disponibles para recuperar por faltas marcadas en rojo
   descripcion?: string; // Notas o info adicional del alumno (editable)
   /** Token para que el alumno acceda a /mi-clase y solo pueda sumarse o liberar cupo */
   linkToken?: string;
@@ -52,6 +53,7 @@ export interface Actividad {
   id: string;
   nombre: string;
   precio: number;
+  clasesPorSemana?: number | null; // Opcional: límite/base de clases por semana
   createdAt: string;
 }
 
@@ -161,6 +163,7 @@ export interface Recuperacion {
   turnoId: string;
   alumnoId: string;
   semana: string; // YYYY-WW
+  usaCredito?: boolean; // Si true, consumió una clase para recuperar
   createdAt: string;
 }
 

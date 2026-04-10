@@ -167,9 +167,9 @@ async function main() {
       const id = crypto.randomUUID();
       actividadMap.set(row.id, id);
       await client.query(
-        `INSERT INTO actividades (id, sucursal_id, nombre, precio, created_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [id, targetSucursalId, row.nombre, row.precio, row.created_at]
+        `INSERT INTO actividades (id, sucursal_id, nombre, precio, clases_por_semana, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [id, targetSucursalId, row.nombre, row.precio, row.clases_por_semana ?? null, row.created_at]
       );
       counters.actividades++;
     }
@@ -231,6 +231,10 @@ async function main() {
       if (alumnosCols.has('descripcion')) {
         cols.push('descripcion');
         vals.push(row.descripcion ?? null);
+      }
+      if (alumnosCols.has('clases_para_recuperar')) {
+        cols.push('clases_para_recuperar');
+        vals.push(row.clases_para_recuperar ?? 0);
       }
       if (alumnosCols.has('activo')) {
         cols.push('activo');
@@ -422,9 +426,9 @@ async function main() {
       const alumnoId = alumnoMap.get(row.alumno_id);
       if (!turnoId || !alumnoId) continue;
       await client.query(
-        `INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, created_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [crypto.randomUUID(), turnoId, alumnoId, row.semana, row.created_at]
+        `INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, usa_credito, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [crypto.randomUUID(), turnoId, alumnoId, row.semana, row.usa_credito ?? false, row.created_at]
       );
       counters.recuperaciones++;
     }

@@ -19,6 +19,7 @@ const dbToAlumno = (row: any): Alumno => ({
   fechaVencimientoCuota: row.fecha_vencimiento_cuota || '',
   actividadId: row.actividad_id,
   clasesAsistidas: row.clases_asistidas || 0,
+  clasesParaRecuperar: row.clases_para_recuperar || 0,
   descripcion: row.descripcion || '',
   linkToken: row.link_token || '',
   activo: row.activo !== false,
@@ -35,6 +36,7 @@ const alumnoToDb = (alumno: Alumno) => ({
   fecha_vencimiento_cuota: alumno.fechaVencimientoCuota || null,
   actividad_id: alumno.actividadId,
   clases_asistidas: alumno.clasesAsistidas || 0,
+  clases_para_recuperar: alumno.clasesParaRecuperar || 0,
   descripcion: alumno.descripcion || null,
   link_token: alumno.linkToken || null,
   activo: alumno.activo !== false,
@@ -45,6 +47,7 @@ const dbToActividad = (row: any): Actividad => ({
   id: row.id,
   nombre: row.nombre,
   precio: parseFloat(row.precio),
+  clasesPorSemana: row.clases_por_semana == null ? null : Number(row.clases_por_semana),
   createdAt: row.created_at,
 });
 
@@ -52,6 +55,7 @@ const actividadToDb = (actividad: Actividad) => ({
   id: actividad.id,
   nombre: actividad.nombre,
   precio: actividad.precio,
+  clases_por_semana: actividad.clasesPorSemana ?? null,
   // Si no hay createdAt, dejamos que Supabase use el DEFAULT NOW()
   ...(actividad.createdAt ? { created_at: actividad.createdAt } : {}),
 });
@@ -163,6 +167,7 @@ export const storageSupabase = {
       if (updates.fechaVencimientoCuota !== undefined) dbUpdates.fecha_vencimiento_cuota = updates.fechaVencimientoCuota || null;
       if (updates.actividadId) dbUpdates.actividad_id = updates.actividadId;
       if (updates.clasesAsistidas !== undefined) dbUpdates.clases_asistidas = updates.clasesAsistidas;
+      if (updates.clasesParaRecuperar !== undefined) dbUpdates.clases_para_recuperar = updates.clasesParaRecuperar;
       if (updates.descripcion !== undefined) dbUpdates.descripcion = updates.descripcion || null;
       if (updates.linkToken !== undefined) dbUpdates.link_token = updates.linkToken || null;
       if (updates.activo !== undefined) dbUpdates.activo = !!updates.activo;
@@ -218,6 +223,7 @@ export const storageSupabase = {
       const dbUpdates: any = {};
       if (updates.nombre) dbUpdates.nombre = updates.nombre;
       if (updates.precio !== undefined) dbUpdates.precio = updates.precio;
+      if (updates.clasesPorSemana !== undefined) dbUpdates.clases_por_semana = updates.clasesPorSemana ?? null;
       const { error } = await supabase.from('actividades').update(dbUpdates).eq('id', id);
       if (error) {
         console.error('Error updating actividad:', error);

@@ -12,6 +12,7 @@ const Actividades = () => {
   const [formData, setFormData] = useState({
     nombre: '',
     precio: '',
+    clasesPorSemana: '',
   });
   const [saveError, setSaveError] = useState('');
 
@@ -36,6 +37,7 @@ const Actividades = () => {
     setFormData({
       nombre: '',
       precio: '',
+      clasesPorSemana: '',
     });
     setEditingActividad(null);
   };
@@ -47,6 +49,7 @@ const Actividades = () => {
       setFormData({
         nombre: actividad.nombre,
         precio: actividad.precio.toString(),
+        clasesPorSemana: actividad.clasesPorSemana != null ? String(actividad.clasesPorSemana) : '',
       });
     } else {
       resetForm();
@@ -67,18 +70,23 @@ const Actividades = () => {
       setSaveError('El precio debe ser un número válido mayor a 0');
       return;
     }
+    const clasesPorSemana = formData.clasesPorSemana.trim() === ''
+      ? null
+      : Math.max(1, parseInt(formData.clasesPorSemana, 10) || 1);
 
     try {
       if (editingActividad) {
         await storageHybrid.actividades.update(editingActividad.id, {
           nombre: formData.nombre,
           precio: precio,
+          clasesPorSemana,
         });
       } else {
         const nuevaActividad: Actividad = {
           id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           nombre: formData.nombre,
           precio: precio,
+          clasesPorSemana,
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.actividades.add(nuevaActividad);
@@ -152,6 +160,11 @@ const Actividades = () => {
                   <p className="text-2xl font-bold text-primary-600">
                     {formatCurrency(actividad.precio)}
                   </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {actividad.clasesPorSemana != null
+                      ? `${actividad.clasesPorSemana} vez${actividad.clasesPorSemana === 1 ? '' : 'es'} por semana`
+                      : 'Sin límite semanal definido'}
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2 pt-4 border-t border-gray-200">
@@ -216,6 +229,23 @@ const Actividades = () => {
                   className="input-field"
                   placeholder="0"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Veces por semana
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={formData.clasesPorSemana}
+                  onChange={(e) => setFormData({ ...formData, clasesPorSemana: e.target.value })}
+                  className="input-field"
+                  placeholder="Opcional"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Opcional. Si indicás un número, se usa para limitar las clases de esa semana y las recuperaciones.
+                </p>
               </div>
               {saveError && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">

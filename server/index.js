@@ -363,6 +363,7 @@ app.get('/api/alumnos', async (req, res) => {
       fechaVencimientoCuota: r.fecha_vencimiento_cuota ? r.fecha_vencimiento_cuota.toISOString().slice(0, 10) : '',
       actividadId: r.actividad_id,
       clasesAsistidas: r.clases_este_mes ?? 0,
+      clasesParaRecuperar: Number(r.clases_para_recuperar ?? 0),
       descripcion: r.descripcion ?? '',
       linkToken: r.link_token ?? '',
       activo: r.activo !== false,
@@ -382,8 +383,8 @@ app.post('/api/alumnos', async (req, res) => {
     const sid = req.user?.sucursalId;
     const b = req.body;
     await db.query(
-      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, descripcion, activo, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, clases_para_recuperar, descripcion, activo, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         b.id,
         sid,
@@ -395,6 +396,7 @@ app.post('/api/alumnos', async (req, res) => {
         b.fechaVencimientoCuota || null,
         b.actividadId || null,
         b.clasesAsistidas ?? 0,
+        b.clasesParaRecuperar ?? 0,
         b.descripcion ?? null,
         b.activo !== false,
         b.createdAt || new Date().toISOString(),
@@ -426,6 +428,7 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.fechaVencimientoCuota !== undefined) { updates.push(`fecha_vencimiento_cuota = $${i++}`); values.push(b.fechaVencimientoCuota || null); }
     if (b.actividadId !== undefined) { updates.push(`actividad_id = $${i++}`); values.push(b.actividadId || null); }
     if (b.clasesAsistidas !== undefined) { updates.push(`clases_asistidas = $${i++}`); values.push(b.clasesAsistidas); }
+    if (b.clasesParaRecuperar !== undefined) { updates.push(`clases_para_recuperar = $${i++}`); values.push(Math.max(0, Number(b.clasesParaRecuperar) || 0)); }
     if (b.descripcion !== undefined) { updates.push(`descripcion = $${i++}`); values.push(b.descripcion || null); }
     if (b.linkToken !== undefined) { updates.push(`link_token = $${i++}`); values.push(b.linkToken || null); }
     if (b.activo !== undefined) { updates.push(`activo = $${i++}`); values.push(!!b.activo); }
@@ -635,7 +638,7 @@ app.get('/api/actividades', async (req, res) => {
     const sid = req.user?.sucursalId || req.query.sucursalId || null;
     if (!sid) return res.json([]);
     const { rows } = await db.query('SELECT * FROM actividades WHERE sucursal_id = $1 ORDER BY created_at DESC', [sid]);
-    res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, precio: Number(r.precio), createdAt: r.created_at?.toISOString?.() ?? r.created_at })));
+    res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, precio: Number(r.precio), clasesPorSemana: r.clases_por_semana == null ? null : Number(r.clases_por_semana), createdAt: r.created_at?.toISOString?.() ?? r.created_at })));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -649,7 +652,7 @@ app.get('/api/actividades/:id', async (req, res) => {
     const { rows } = await db.query('SELECT * FROM actividades WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
     if (rows.length === 0) return res.status(404).json(null);
     const r = rows[0];
-    res.json({ id: r.id, nombre: r.nombre, precio: Number(r.precio), createdAt: r.created_at?.toISOString?.() ?? r.created_at });
+    res.json({ id: r.id, nombre: r.nombre, precio: Number(r.precio), clasesPorSemana: r.clases_por_semana == null ? null : Number(r.clases_por_semana), createdAt: r.created_at?.toISOString?.() ?? r.created_at });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -665,8 +668,8 @@ app.post('/api/actividades', async (req, res) => {
     const b = req.body;
     const id = b.id || crypto.randomUUID();
     await db.query(
-      'INSERT INTO actividades (id, sucursal_id, nombre, precio, created_at) VALUES ($1, $2, $3, $4, $5)',
-      [id, sid, (b.nombre || '').trim(), Number(b.precio) || 0, b.createdAt || new Date().toISOString()]
+      'INSERT INTO actividades (id, sucursal_id, nombre, precio, clases_por_semana, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, sid, (b.nombre || '').trim(), Number(b.precio) || 0, b.clasesPorSemana == null || b.clasesPorSemana === '' ? null : Math.max(1, Number(b.clasesPorSemana) || 1), b.createdAt || new Date().toISOString()]
     );
     res.status(201).json({ ok: true, id });
   } catch (e) {
@@ -685,6 +688,7 @@ app.patch('/api/actividades/:id', async (req, res) => {
     let i = 1;
     if (b.nombre !== undefined) { updates.push(`nombre = $${i++}`); values.push(b.nombre); }
     if (b.precio !== undefined) { updates.push(`precio = $${i++}`); values.push(b.precio); }
+    if (b.clasesPorSemana !== undefined) { updates.push(`clases_por_semana = $${i++}`); values.push(b.clasesPorSemana == null || b.clasesPorSemana === '' ? null : Math.max(1, Number(b.clasesPorSemana) || 1)); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);
     await db.query(`UPDATE actividades SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
@@ -1273,18 +1277,18 @@ function getSemanaActual() {
 // Resuelve alumno por token o por dni (+ sucursalId opcional). Retorna { alumno, sucursalId } o error.
 async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
   if (token && token.trim()) {
-    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE link_token = $1 AND activo IS DISTINCT FROM false', [token.trim()]);
+    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id, actividad_id, clases_para_recuperar FROM alumnos WHERE link_token = $1 AND activo IS DISTINCT FROM false', [token.trim()]);
     if (rows.length === 0) return { error: 404, message: 'Link inválido o expirado' };
     return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   }
   const dniTrim = (dni || '').toString().trim();
   if (!dniTrim) return { error: 400, message: 'Ingresá tu DNI' };
   if (sucursalId && sucursalId.trim()) {
-    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE dni = $1 AND sucursal_id = $2 AND activo IS DISTINCT FROM false', [dniTrim, sucursalId.trim()]);
+    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id, actividad_id, clases_para_recuperar FROM alumnos WHERE dni = $1 AND sucursal_id = $2 AND activo IS DISTINCT FROM false', [dniTrim, sucursalId.trim()]);
     if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI en esta sede' };
     return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   }
-  const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id FROM alumnos WHERE dni = $1 AND activo IS DISTINCT FROM false', [dniTrim]);
+  const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id, actividad_id, clases_para_recuperar FROM alumnos WHERE dni = $1 AND activo IS DISTINCT FROM false', [dniTrim]);
   if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI' };
   if (rows.length === 1) return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   const { rows: sucursales } = await db.query(
@@ -1292,6 +1296,44 @@ async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
     [rows.map((r) => r.sucursal_id)]
   );
   return { error: 400, sucursales, message: 'Hay varias sedes con ese DNI. Elegí tu sede.' };
+}
+
+async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) {
+  const actividadId = alumno.actividad_id || null;
+  let clasesPorSemana = null;
+  if (actividadId) {
+    const { rows: actividadRows } = await db.query(
+      'SELECT clases_por_semana FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
+      [actividadId, alumno.sucursal_id]
+    );
+    if (actividadRows.length > 0 && actividadRows[0].clases_por_semana != null) {
+      clasesPorSemana = Number(actividadRows[0].clases_por_semana);
+    }
+  }
+
+  const { rows: insRows } = await db.query(
+    'SELECT turno_id, alumno_id, semana_desde FROM inscripciones_turno WHERE alumno_id = $1',
+    [alumno.id]
+  );
+  const insByTurno = new Map(insRows.map((r) => [r.turno_id, r]));
+  const clasesFijasSemana = turnoRows.filter((t) => {
+    const ids = t.alumno_ids || [];
+    if (!ids.includes(alumno.id)) return false;
+    const ins = insByTurno.get(t.id);
+    return !ins || ins.semana_desde <= semanaVista;
+  }).length;
+
+  const { rows: recRows } = await db.query(
+    'SELECT id, turno_id, usa_credito FROM recuperaciones WHERE alumno_id = $1 AND semana = $2',
+    [alumno.id, semanaVista]
+  );
+
+  return {
+    clasesPorSemana,
+    clasesFijasSemana,
+    recuperacionesSemana: recRows,
+    clasesParaRecuperar: Math.max(0, Number(alumno.clases_para_recuperar ?? 0)),
+  };
 }
 
 app.get('/api/alumno-portal', async (req, res) => {
@@ -1318,11 +1360,10 @@ app.get('/api/alumno-portal', async (req, res) => {
     );
     const hor = horRows[0] || {};
     let turnos;
+    let recuperacionStats = null;
     if (esRecuperar && semanaVista) {
-      const { rows: recRows } = await db.query(
-        'SELECT id, turno_id FROM recuperaciones WHERE alumno_id = $1 AND semana = $2',
-        [alumno.id, semanaVista]
-      );
+      const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows);
+      const recRows = ctx.recuperacionesSemana;
       const { rows: recCountRows } = await db.query(
         'SELECT turno_id, COUNT(*) AS n FROM recuperaciones WHERE turno_id = ANY($1) AND semana = $2 GROUP BY turno_id',
         [turnoRows.map((r) => r.id), semanaVista]
@@ -1343,9 +1384,21 @@ app.get('/api/alumno-portal', async (req, res) => {
           cupo,
           inscriptos,
           yaInscripto: !!rec,
-          ...(rec && { recuperacionId: rec.id }),
+          ...(rec && { recuperacionId: rec.id, usaCredito: !!rec.usa_credito }),
         };
       });
+      const clasesUsadasSemana = ctx.clasesFijasSemana + recRows.length;
+      recuperacionStats = {
+        clasesPorSemana: ctx.clasesPorSemana,
+        clasesFijasSemana: ctx.clasesFijasSemana,
+        recuperacionesSemana: recRows.length,
+        clasesUsadasSemana,
+        clasesParaRecuperar: ctx.clasesParaRecuperar,
+        clasesDisponiblesSemana:
+          ctx.clasesPorSemana == null
+            ? null
+            : Math.max(0, ctx.clasesPorSemana + ctx.clasesParaRecuperar - clasesUsadasSemana),
+      };
     } else {
       turnos = turnoRows.map((r) => {
         const alumnoIds = r.alumno_ids || [];
@@ -1367,6 +1420,7 @@ app.get('/api/alumno-portal', async (req, res) => {
       sucursalId: sid,
       modo: esRecuperar ? 'recuperar' : 'fijo',
       ...(esRecuperar && semanaVista && { semanaVista }),
+      ...(recuperacionStats ? { recuperacionStats } : {}),
       horarios: {
         horaInicioManana: hor.hora_inicio_manana || '07:00',
         horaFinManana: hor.hora_fin_manana || '12:00',
@@ -1397,22 +1451,36 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     const semanaVista = (semana || '').toString().trim() || getSemanaActual();
     const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [alumno.sucursal_id]);
     const { rows: exist } = await db.query(
       'SELECT id FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3',
       [alumno.id, turnoId, semanaVista]
     );
     if (exist.length > 0) return res.json({ ok: true, message: 'Ya estás anotado para recuperar esta semana' });
+    const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
     const t = turnoRows[0];
     const cupo = t.cupo != null ? Number(t.cupo) : 6;
     const { rows: recCount } = await db.query('SELECT COUNT(*) AS n FROM recuperaciones WHERE turno_id = $1 AND semana = $2', [turnoId, semanaVista]);
     const totalFijos = (t.alumno_ids || []).length;
     const recs = parseInt(recCount[0]?.n || '0', 10);
     if (totalFijos + recs >= cupo) return res.status(400).json({ error: 'No hay cupo para recuperar esta semana' });
+    const clasesUsadasSemana = ctx.clasesFijasSemana + ctx.recuperacionesSemana.length;
+    const excedeBase = ctx.clasesPorSemana != null && clasesUsadasSemana >= ctx.clasesPorSemana;
+    if (excedeBase && ctx.clasesParaRecuperar <= 0) {
+      return res.status(400).json({ error: 'No te quedan clases para recuperar disponibles.' });
+    }
     const id = crypto.randomUUID();
+    const usaCredito = excedeBase;
     await db.query(
-      'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      [id, turnoId, alumno.id, semanaVista]
+      'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, usa_credito, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+      [id, turnoId, alumno.id, semanaVista, usaCredito]
     );
+    if (usaCredito) {
+      await db.query(
+        'UPDATE alumnos SET clases_para_recuperar = GREATEST(0, COALESCE(clases_para_recuperar, 0) - 1) WHERE id = $1 AND sucursal_id = $2',
+        [alumno.id, alumno.sucursal_id]
+      );
+    }
     await db.query(
       'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
       [crypto.randomUUID(), alumno.sucursal_id, 'inscribio', alumno.id, turnoId]
@@ -1430,7 +1498,7 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
         body: `${nombre} se anotó para recuperar en ${turno}`,
       });
     }
-    res.json({ ok: true, recuperacionId: id });
+    res.json({ ok: true, recuperacionId: id, usoCredito: usaCredito });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -1450,9 +1518,11 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
     let turnoIdParaPush = turnoId;
+    let devolvioCredito = false;
     if (recuperacionId) {
-      const { rows: recRow } = await db.query('SELECT turno_id FROM recuperaciones WHERE id = $1 AND alumno_id = $2', [recuperacionId, alumno.id]);
+      const { rows: recRow } = await db.query('SELECT turno_id, usa_credito FROM recuperaciones WHERE id = $1 AND alumno_id = $2', [recuperacionId, alumno.id]);
       if (recRow.length > 0) turnoIdParaPush = recRow[0].turno_id;
+      devolvioCredito = !!recRow[0]?.usa_credito;
       const { rowCount } = await db.query(
         'DELETE FROM recuperaciones WHERE id = $1 AND alumno_id = $2',
         [recuperacionId, alumno.id]
@@ -1460,6 +1530,11 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
       if (rowCount === 0) return res.status(404).json({ error: 'Recuperación no encontrada' });
     } else if (turnoId) {
       const semana = (semanaBody || '').toString().trim() || getSemanaActual();
+      const { rows: recRows } = await db.query(
+        'SELECT id, usa_credito FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3',
+        [alumno.id, turnoId, semana]
+      );
+      devolvioCredito = recRows.some((r) => !!r.usa_credito);
       const { rowCount } = await db.query(
         'DELETE FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3',
         [alumno.id, turnoId, semana]
@@ -1467,6 +1542,12 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
       if (rowCount === 0) return res.status(404).json({ error: 'No estabas anotado para recuperar' });
     } else {
       return res.status(400).json({ error: 'Falta turnoId o recuperacionId' });
+    }
+    if (devolvioCredito) {
+      await db.query(
+        'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
+        [alumno.id, alumno.sucursal_id]
+      );
     }
     if (turnoIdParaPush) {
       await db.query(
@@ -1830,7 +1911,7 @@ app.get('/api/recuperaciones/by-semana/:semana', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
     const { rows } = await db.query(
-      `SELECT r.id, r.turno_id AS "turnoId", r.alumno_id AS "alumnoId", r.semana, r.created_at AS "createdAt"
+      `SELECT r.id, r.turno_id AS "turnoId", r.alumno_id AS "alumnoId", r.semana, r.usa_credito AS "usaCredito", r.created_at AS "createdAt"
        FROM recuperaciones r
        JOIN turnos t ON r.turno_id = t.id AND t.sucursal_id = $1
        WHERE r.semana = $2`,
@@ -1848,16 +1929,16 @@ app.post('/api/recuperaciones', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
-    const { turnoId, alumnoId, semana } = req.body || {};
+    const { turnoId, alumnoId, semana, usaCredito } = req.body || {};
     if (!turnoId || !alumnoId || !semana) return res.status(400).json({ error: 'Faltan turnoId, alumnoId o semana' });
     const { rows: turnoRows } = await db.query('SELECT id FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, sid]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const id = crypto.randomUUID();
     await db.query(
-      'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      [id, turnoId, alumnoId, semana]
+      'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, usa_credito, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+      [id, turnoId, alumnoId, semana, !!usaCredito]
     );
-    res.status(201).json({ id, turnoId, alumnoId, semana, createdAt: new Date().toISOString() });
+    res.status(201).json({ id, turnoId, alumnoId, semana, usaCredito: !!usaCredito, createdAt: new Date().toISOString() });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -2220,9 +2301,9 @@ app.get('/api/health', async (req, res) => {
 
 // Manifest PWA dinámico: nombre e icono según el usuario (brand=fitgest → FITGEST + fitgest.png)
 app.get('/api/manifest.webmanifest', (req, res) => {
-  const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '') || 'savia';
-  const name = brand.charAt(0).toUpperCase() + brand.slice(1);
-  const icon = ['fitgest', 'savia'].includes(brand) ? `/${brand}.png` : '/savia.png';
+  const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '') || 'fitgest';
+  const name = brand === 'fitgest' ? 'FitGest' : brand.charAt(0).toUpperCase() + brand.slice(1);
+  const icon = ['fitgest', 'savia'].includes(brand) ? `/${brand}.png` : '/fitgest.png';
   res.set('Content-Type', 'application/manifest+json');
   res.set('Cache-Control', 'no-store');
   res.json({

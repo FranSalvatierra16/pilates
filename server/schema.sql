@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS actividades (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE actividades ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
+ALTER TABLE actividades ADD COLUMN IF NOT EXISTS clases_por_semana INTEGER;
 
 -- Alumnos
 CREATE TABLE IF NOT EXISTS alumnos (
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS alumnos (
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS descripcion TEXT;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS clases_para_recuperar INTEGER DEFAULT 0;
 
 -- Pagos
 CREATE TABLE IF NOT EXISTS pagos (
@@ -205,6 +207,7 @@ CREATE TABLE IF NOT EXISTS recuperaciones (
   semana TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE recuperaciones ADD COLUMN IF NOT EXISTS usa_credito BOOLEAN DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_recuperaciones_semana ON recuperaciones(semana);
 
 -- Inscripciones: alumno en turno desde qué semana (semanas anteriores no lo muestran)

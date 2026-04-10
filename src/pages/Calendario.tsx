@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, X, UserPlus, Search, Check, XCircle, RotateCcw, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star } from 'lucide-react';
-import { Turno, Alumno, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor } from '../types';
+import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
@@ -69,6 +69,7 @@ const Calendario = () => {
   const [horariosTarde, setHorariosTarde] = useState<string[]>(horariosTarde_DEFAULT);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
+  const [actividades, setActividades] = useState<Actividad[]>([]);
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [profesores, setProfesores] = useState<Profesor[]>([]);
   const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
@@ -91,7 +92,7 @@ const Calendario = () => {
   const [turnoParaEditar, setTurnoParaEditar] = useState<Turno | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
   const [esRecuperacion, setEsRecuperacion] = useState(false);
-  const [recuperaciones, setRecuperaciones] = useState<{ id: string; turnoId: string; alumnoId: string; semana: string }[]>([]);
+  const [recuperaciones, setRecuperaciones] = useState<Recuperacion[]>([]);
   const [inscripciones, setInscripciones] = useState<{ id: string; turnoId: string; alumnoId: string; semanaDesde: string }[]>([]);
   const CUPO_DEFAULT = 6;
   const [formDataTurno, setFormDataTurno] = useState({
@@ -139,6 +140,7 @@ const Calendario = () => {
       }
       await loadTurnos();
       await loadAlumnos();
+      await loadActividades();
       await loadProfesores();
       await loadAsistencias();
       await loadRecuperaciones();
@@ -177,6 +179,16 @@ const Calendario = () => {
       const alumnosLocal = storage.alumnos.getAll();
       setAlumnos(alumnosLocal);
       setAlumnosFiltrados(alumnosLocal);
+    }
+  };
+
+  const loadActividades = async () => {
+    try {
+      const data = await storageHybrid.actividades.getAll();
+      setActividades(data);
+    } catch (error) {
+      console.error('Error loading actividades:', error);
+      setActividades(storage.actividades.getAll());
     }
   };
 
@@ -225,7 +237,7 @@ const Calendario = () => {
     return turnos.find(t => t.diaSemana === diaSemana && t.hora === hora);
   };
 
-  type AlumnoEnTurno = { alumno: Alumno; isRecuperacion: boolean; recuperacionId?: string };
+  type AlumnoEnTurno = { alumno: Alumno; isRecuperacion: boolean; recuperacionId?: string; usaCredito?: boolean };
   const getAlumnosDelTurno = (turno: Turno | undefined): AlumnoEnTurno[] => {
     if (!turno) return [];
     // Solo mostrar alumnos cuya inscripción tiene semanaDesde <= semanaVista (semanas anteriores no los muestran)
@@ -241,10 +253,26 @@ const Calendario = () => {
       .filter(r => r.turnoId === turno.id)
       .map(r => {
         const a = alumnos.find(x => x.id === r.alumnoId);
-        return a ? { alumno: a, isRecuperacion: true, recuperacionId: r.id } : null;
+        return a ? { alumno: a, isRecuperacion: true, recuperacionId: r.id, usaCredito: r.usaCredito } : null;
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
     return [...regulares, ...recs];
+  };
+
+  const getActividadDelAlumno = (alumnoId: string) => {
+    const alumno = alumnos.find((a) => a.id === alumnoId);
+    if (!alumno?.actividadId) return undefined;
+    return actividades.find((a) => a.id === alumno.actividadId);
+  };
+
+  const getClasesUsadasSemanaAlumno = (alumnoId: string) => {
+    const clasesFijas = turnos.filter((t) => {
+      if (!t.alumnoIds.includes(alumnoId)) return false;
+      const ins = inscripciones.find((i) => i.turnoId === t.id && i.alumnoId === alumnoId);
+      return !ins || ins.semanaDesde <= semanaVista;
+    }).length;
+    const clasesRecuperacion = recuperaciones.filter((r) => r.alumnoId === alumnoId && r.semana === semanaVista).length;
+    return clasesFijas + clasesRecuperacion;
   };
 
   const handleAgregarAlumno = (diaSemana: number, hora: string) => {
@@ -316,6 +344,11 @@ const Calendario = () => {
 
     try {
       const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
+      const alumnoActual = alumnos.find((a) => a.id === alumnoSeleccionado);
+      if (!alumnoActual) {
+        alert('No se encontró el alumno seleccionado.');
+        return;
+      }
       const cupo = turnoExistente?.cupo ?? CUPO_DEFAULT;
       const alumnosVisiblesEnTurno = getAlumnosDelTurno(turnoExistente);
       const recsEnTurno = alumnosVisiblesEnTurno.filter((a) => a.isRecuperacion);
@@ -331,11 +364,20 @@ const Calendario = () => {
           alert('Esta clase ya tiene el cupo completo.');
           return;
         }
-        const rec: { id: string; turnoId: string; alumnoId: string; semana: string; createdAt: string } = {
+        const actividad = getActividadDelAlumno(alumnoSeleccionado);
+        const limiteSemanal = actividad?.clasesPorSemana ?? null;
+        const clasesUsadasSemana = getClasesUsadasSemanaAlumno(alumnoSeleccionado);
+        const usaCredito = limiteSemanal != null && clasesUsadasSemana >= limiteSemanal;
+        if (usaCredito && (alumnoActual.clasesParaRecuperar || 0) <= 0) {
+          alert('Este alumno no tiene clases para recuperar disponibles.');
+          return;
+        }
+        const rec: Recuperacion = {
           id: Date.now().toString(),
           turnoId: turnoExistente?.id ?? '',
           alumnoId: alumnoSeleccionado,
           semana: semanaVista,
+          usaCredito,
           createdAt: new Date().toISOString(),
         };
         if (!turnoExistente) {
@@ -353,6 +395,11 @@ const Calendario = () => {
           rec.turnoId = nuevoTurno.id;
         }
         await storageHybrid.recuperaciones.add(rec);
+        if (usaCredito) {
+          await storageHybrid.alumnos.update(alumnoSeleccionado, {
+            clasesParaRecuperar: Math.max(0, (alumnoActual.clasesParaRecuperar || 0) - 1),
+          });
+        }
       } else {
         if (turnoExistente) {
           if (totalEnTurno >= cupo) {
@@ -394,6 +441,7 @@ const Calendario = () => {
       }
 
       await loadTurnos();
+      await loadAlumnos();
       await loadInscripciones();
       await loadRecuperaciones();
       handleCerrarModal();
@@ -438,7 +486,17 @@ const Calendario = () => {
   const handleEliminarAlumno = async (turnoId: string, alumnoId: string, recuperacionId?: string) => {
     try {
       if (recuperacionId) {
+        const recuperacion = recuperaciones.find((r) => r.id === recuperacionId);
         await storageHybrid.recuperaciones.delete(recuperacionId);
+        if (recuperacion?.usaCredito) {
+          const alumno = alumnos.find((a) => a.id === alumnoId);
+          if (alumno) {
+            await storageHybrid.alumnos.update(alumnoId, {
+              clasesParaRecuperar: (alumno.clasesParaRecuperar || 0) + 1,
+            });
+          }
+        }
+        await loadAlumnos();
         await loadRecuperaciones();
       } else {
         const turno = turnos.find(t => t.id === turnoId);
@@ -583,6 +641,12 @@ const Calendario = () => {
     const asistenciaExistente = asistencias.find(
       a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaVista
     );
+    const siguienteEstado = asistenciaExistente
+      ? (asistenciaExistente.estado === estado ? null : estado)
+      : estado;
+    const alumno = alumnos.find((a) => a.id === alumnoId);
+    const eraNoAsistio = asistenciaExistente?.estado === 'no_asistio';
+    const seraNoAsistio = siguienteEstado === 'no_asistio';
 
     if (asistenciaExistente) {
       if (asistenciaExistente.estado === estado) {
@@ -602,13 +666,34 @@ const Calendario = () => {
       await storageHybrid.asistencias.add(nuevaAsistencia);
     }
 
+    if (alumno && eraNoAsistio !== seraNoAsistio) {
+      const delta = seraNoAsistio ? 1 : -1;
+      await storageHybrid.alumnos.update(alumnoId, {
+        clasesParaRecuperar: Math.max(0, (alumno.clasesParaRecuperar || 0) + delta),
+      });
+      await loadAlumnos();
+    }
+
     // La recuperación se mantiene para el historial de esa semana (no se elimina al confirmar asistencia)
     await loadAsistencias();
   };
 
   const handleReiniciarSemana = async () => {
     if (confirm('¿Estás seguro de que querés reiniciar todas las asistencias de esta semana? Esto volverá todos los estados (✓/✗) a gris. Los alumnos en recuperación se mantienen.')) {
+      const faltasPorAlumno = new Map<string, number>();
+      for (const asistencia of asistencias) {
+        if (asistencia.estado !== 'no_asistio') continue;
+        faltasPorAlumno.set(asistencia.alumnoId, (faltasPorAlumno.get(asistencia.alumnoId) || 0) + 1);
+      }
+      for (const [alumnoId, faltas] of faltasPorAlumno.entries()) {
+        const alumno = alumnos.find((a) => a.id === alumnoId);
+        if (!alumno) continue;
+        await storageHybrid.alumnos.update(alumnoId, {
+          clasesParaRecuperar: Math.max(0, (alumno.clasesParaRecuperar || 0) - faltas),
+        });
+      }
       await storageHybrid.asistencias.deleteBySemana(semanaVista);
+      await loadAlumnos();
       await loadAsistencias();
     }
   };

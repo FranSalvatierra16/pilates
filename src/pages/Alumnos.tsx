@@ -726,6 +726,10 @@ const Alumnos = () => {
                       </span>
                     )}
                   </div>
+                  <div>
+                    <span className="text-gray-500">Para recuperar: </span>
+                    <span className="font-medium text-violet-700">{alumno.clasesParaRecuperar || 0}</span>
+                  </div>
                   <div className="flex justify-between text-gray-500 text-xs pt-1 border-t border-gray-100">
                     <span>Clases este mes: <strong className="text-primary-600">{alumno.clasesAsistidas || 0}</strong></span>
                     <span>Registro: {formatDate(alumno.createdAt.split('T')[0])}</span>
@@ -792,6 +796,7 @@ const Alumnos = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-semibold text-primary-600">{alumno.clasesAsistidas || 0}</div>
                         <div className="text-xs text-gray-500">este mes</div>
+                        <div className="text-xs text-violet-600 mt-1">Recuperar: {alumno.clasesParaRecuperar || 0}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{formatDate(alumno.createdAt.split('T')[0])}</div>

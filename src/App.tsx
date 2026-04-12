@@ -3,22 +3,34 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 
-const APP_NAME_FALLBACK = import.meta.env.VITE_APP_NAME || 'Sistema de Gestión';
+const APP_NAME_FALLBACK = import.meta.env.VITE_APP_NAME || 'FITGEST';
 
 function DocumentTitle() {
-  const { isAuthenticated, sucursalNombre } = useAuth();
+  const { isAuthenticated, sucursalId, sucursalNombre } = useAuth();
   useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+    const manifestHref = sucursalId
+      ? `/api/manifest.webmanifest?sucursalId=${encodeURIComponent(sucursalId)}`
+      : '/api/manifest.webmanifest?brand=fitgest';
+    const iconHref = sucursalId
+      ? `/api/public/sucursal-logo/${encodeURIComponent(sucursalId)}`
+      : '/fitgest.png';
+
+    if (link) link.href = manifestHref;
+    if (appleTouch) appleTouch.href = iconHref;
+    if (favicon) favicon.href = iconHref;
+
     if (isAuthenticated && sucursalNombre) {
       document.title = `${sucursalNombre} - Sistema de Gestión`;
-      const slug = sucursalNombre.toLowerCase().replace(/\s+/g, '');
-      const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-      if (link && slug) link.href = `/api/manifest.webmanifest?brand=${encodeURIComponent(slug)}`;
+      if (appleTitle) appleTitle.content = sucursalNombre;
     } else {
       document.title = APP_NAME_FALLBACK === 'Sistema de Gestión' ? APP_NAME_FALLBACK : `${APP_NAME_FALLBACK} - Sistema de Gestión`;
-      const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-      if (link) link.href = '/api/manifest.webmanifest?brand=savia';
+      if (appleTitle) appleTitle.content = APP_NAME_FALLBACK;
     }
-  }, [isAuthenticated, sucursalNombre]);
+  }, [isAuthenticated, sucursalId, sucursalNombre]);
   return null;
 }
 import Login from './pages/Login';

@@ -2443,30 +2443,6 @@ app.get('/api/health', async (req, res) => {
   res.json({ ok: true, db: !!db });
 });
 
-// Manifest PWA dinámico: nombre e icono según el usuario (brand=fitgest → FITGEST + fitgest.png)
-app.get('/api/manifest.webmanifest', (req, res) => {
-  const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '') || 'fitgest';
-  const name = brand === 'fitgest' ? 'FitGest' : brand.charAt(0).toUpperCase() + brand.slice(1);
-  const icon = ['fitgest', 'savia'].includes(brand) ? `/${brand}.png` : '/fitgest.png';
-  res.set('Content-Type', 'application/manifest+json');
-  res.set('Cache-Control', 'no-store');
-  res.json({
-    name: `${name} - Sistema de Gestión`,
-    short_name: name,
-    description: 'Sistema de gestión para Pilates',
-    theme_color: '#0f172a',
-    background_color: '#0f172a',
-    display: 'standalone',
-    orientation: 'portrait',
-    scope: '/',
-    start_url: '/',
-    icons: [
-      { src: icon, sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-    ],
-  });
-});
-
 function escapeHtml(value = '') {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -2555,6 +2531,59 @@ function injectShareMetaIntoHtml(html, meta) {
   `;
   return cleaned.replace('</head>', `${injected}\n</head>`);
 }
+
+// Manifest PWA dinámico: nombre e icono según sucursal abierta
+app.get('/api/manifest.webmanifest', async (req, res) => {
+  try {
+    const db = await getPool();
+    const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
+    const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+    const fallbackName = brand === 'fitgest'
+      ? 'FitGest'
+      : brand
+        ? brand.charAt(0).toUpperCase() + brand.slice(1)
+        : 'FitGest';
+    const name = sucursal?.nombre_lugar || fallbackName;
+    const icon = sucursal?.id ? getPublicLogoUrl(req, sucursal.id) : '/fitgest.png';
+
+    res.set('Content-Type', 'application/manifest+json');
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      name: `${name} - Sistema de Gestión`,
+      short_name: name,
+      description: 'Sistema de gestión para Pilates',
+      theme_color: '#0f172a',
+      background_color: '#0f172a',
+      display: 'standalone',
+      orientation: 'portrait',
+      scope: '/',
+      start_url: '/',
+      icons: [
+        { src: icon, sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    });
+  } catch (e) {
+    console.error(e);
+    res.set('Content-Type', 'application/manifest+json');
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      name: 'FitGest - Sistema de Gestión',
+      short_name: 'FitGest',
+      description: 'Sistema de gestión para Pilates',
+      theme_color: '#0f172a',
+      background_color: '#0f172a',
+      display: 'standalone',
+      orientation: 'portrait',
+      scope: '/',
+      start_url: '/',
+      icons: [
+        { src: '/fitgest.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: '/fitgest.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    });
+  }
+});
 
 app.get('/api/public/sucursal-brand', async (req, res) => {
   try {

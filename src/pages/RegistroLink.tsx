@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Actividad } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
 const RegistroLink = () => {
+  const [searchParams] = useSearchParams();
+  const sucursalId = (searchParams.get('sucursalId') || '').trim();
   const [actividades, setActividades] = useState<Actividad[]>([]);
+  const [nombreSucursal, setNombreSucursal] = useState('FitGest');
+  const [logoUrl, setLogoUrl] = useState('/fitgest.png');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -23,10 +28,20 @@ const RegistroLink = () => {
     (async () => {
       try {
         const base = getBase();
-        const res = await fetch(`${base}/api/actividades`);
-        if (res.ok && !cancelled) {
-          const data = await res.json();
+        const [actRes, brandRes] = await Promise.all([
+          fetch(`${base}/api/actividades${sucursalId ? `?sucursalId=${encodeURIComponent(sucursalId)}` : ''}`),
+          sucursalId
+            ? fetch(`${base}/api/public/sucursal-brand?sucursalId=${encodeURIComponent(sucursalId)}`)
+            : Promise.resolve(null),
+        ]);
+        if (actRes.ok && !cancelled) {
+          const data = await actRes.json();
           setActividades(data);
+        }
+        if (brandRes && brandRes.ok && !cancelled) {
+          const brand = await brandRes.json();
+          setNombreSucursal(brand.nombreLugar || 'FitGest');
+          setLogoUrl(brand.logoUrl || '/fitgest.png');
         }
       } catch {
         if (!cancelled) setActividades([]);
@@ -35,7 +50,7 @@ const RegistroLink = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [sucursalId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +68,7 @@ const RegistroLink = () => {
           telefono: form.telefono.trim(),
           email: form.email.trim(),
           actividadId: form.actividadId || undefined,
+          sucursalId: sucursalId || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -90,9 +106,9 @@ const RegistroLink = () => {
     <div className="min-h-screen flex items-center justify-center p-4 py-8 safe-area-pb">
       <div className="card w-full max-w-md">
         <div className="text-center mb-6">
-          <img src="/savia.png" alt="SAVIA" className="h-14 w-auto mx-auto mb-3" />
+          <img src={logoUrl} alt={nombreSucursal} className="h-14 w-auto mx-auto mb-3" />
           <h1 className="text-2xl font-bold text-gray-900">Inscripción</h1>
-          <p className="text-gray-600 text-sm mt-1">Completá tus datos y te contactamos</p>
+          <p className="text-gray-600 text-sm mt-1">Completá tus datos y te contactamos desde {nombreSucursal}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

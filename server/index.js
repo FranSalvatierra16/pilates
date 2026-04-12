@@ -54,6 +54,7 @@ const authSkip = ['/health', '/auth/login', '/manifest.webmanifest'];
 const isAuthSkip = (path) => authSkip.some((p) => path === p || path.startsWith(p + '?'));
 app.use('/api', (req, res, next) => {
   if (isAuthSkip(req.path)) return next();
+  if (req.path.startsWith('/public/')) return next();
   if (req.path.startsWith('/alumno-portal')) return next(); // Portal alumno: solo sumarse/liberar cupo
   if (req.path === '/registro-link' && req.method === 'POST' && !req.path.includes('/agregar')) return next();
   if (req.path === '/actividades' && req.method === 'GET' && !req.headers.authorization) return next();
@@ -2466,9 +2467,164 @@ app.get('/api/manifest.webmanifest', (req, res) => {
   });
 });
 
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getRequestOrigin(req) {
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+async function resolveSucursalBrandForPublicRequest(db, req) {
+  if (!db) return null;
+  const sucursalId = (req.query.sucursalId || '').toString().trim();
+  const token = (req.query.token || '').toString().trim();
+
+  if (sucursalId) {
+    const { rows } = await db.query(
+      'SELECT id, nombre_lugar, foto_perfil FROM sucursales WHERE id = $1 LIMIT 1',
+      [sucursalId]
+    );
+    return rows[0] || null;
+  }
+
+  if (req.path === '/mi-clase' && token) {
+    const { rows } = await db.query(
+      `SELECT s.id, s.nombre_lugar, s.foto_perfil
+         FROM alumnos a
+         JOIN sucursales s ON s.id = a.sucursal_id
+        WHERE a.link_token = $1
+          AND a.activo IS DISTINCT FROM false
+        LIMIT 1`,
+      [token]
+    );
+    return rows[0] || null;
+  }
+
+  return null;
+}
+
+function getPublicLogoUrl(req, sucursalId) {
+  const origin = getRequestOrigin(req);
+  if (!sucursalId) return `${origin}/fitgest.png`;
+  return `${origin}/api/public/sucursal-logo/${encodeURIComponent(sucursalId)}`;
+}
+
+function buildShareMeta(req, sucursal) {
+  const origin = getRequestOrigin(req);
+  const currentUrl = `${origin}${req.originalUrl}`;
+  const nombre = sucursal?.nombre_lugar || 'FitGest';
+  const esRegistro = req.path === '/registro';
+  const title = esRegistro
+    ? `${nombre} - Inscripción`
+    : `${nombre} - Mi Clase`;
+  const description = esRegistro
+    ? `Inscripción online de ${nombre}. Completá tus datos y te contactamos.`
+    : `Portal de alumnos de ${nombre}. Gestioná tus clases y recuperaciones.`;
+  const image = getPublicLogoUrl(req, sucursal?.id);
+  return {
+    title,
+    description,
+    image,
+    url: currentUrl,
+    appleTitle: nombre,
+  };
+}
+
+function injectShareMetaIntoHtml(html, meta) {
+  const cleaned = html
+    .replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(meta.title)}</title>`)
+    .replace(/<meta name="apple-mobile-web-app-title" content=".*?" \/>/i, `<meta name="apple-mobile-web-app-title" content="${escapeHtml(meta.appleTitle)}" />`)
+    .replace(/<link rel="apple-touch-icon" href=".*?" \/>/i, `<link rel="apple-touch-icon" href="${escapeHtml(meta.image)}" />`);
+
+  const injected = `
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${escapeHtml(meta.title)}" />
+    <meta property="og:description" content="${escapeHtml(meta.description)}" />
+    <meta property="og:image" content="${escapeHtml(meta.image)}" />
+    <meta property="og:url" content="${escapeHtml(meta.url)}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(meta.title)}" />
+    <meta name="twitter:description" content="${escapeHtml(meta.description)}" />
+    <meta name="twitter:image" content="${escapeHtml(meta.image)}" />
+  `;
+  return cleaned.replace('</head>', `${injected}\n</head>`);
+}
+
+app.get('/api/public/sucursal-brand', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
+    if (!sucursal) return res.status(404).json({ error: 'Sucursal no encontrada' });
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      id: sucursal.id,
+      nombreLugar: sucursal.nombre_lugar,
+      logoUrl: getPublicLogoUrl(req, sucursal.id),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/public/sucursal-logo/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.redirect('/fitgest.png');
+    const { rows } = await db.query(
+      'SELECT foto_perfil FROM sucursales WHERE id = $1 LIMIT 1',
+      [req.params.id]
+    );
+    const foto = rows[0]?.foto_perfil || '';
+    if (!foto) return res.redirect('/fitgest.png');
+
+    if (foto.startsWith('data:')) {
+      const match = foto.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) return res.redirect('/fitgest.png');
+      const [, mime, base64] = match;
+      res.set('Content-Type', mime);
+      res.set('Cache-Control', 'no-store');
+      return res.send(Buffer.from(base64, 'base64'));
+    }
+
+    if (/^https?:\/\//i.test(foto)) {
+      return res.redirect(foto);
+    }
+
+    if (foto.startsWith('/')) {
+      return res.redirect(foto);
+    }
+
+    return res.redirect('/fitgest.png');
+  } catch (e) {
+    console.error(e);
+    res.redirect('/fitgest.png');
+  }
+});
+
 // Servir frontend estático (después de build)
 const distPath = join(__dirname, '..', 'dist');
 if (existsSync(distPath)) {
+  app.get(['/mi-clase', '/registro'], async (req, res) => {
+    try {
+      const db = await getPool();
+      const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
+      const baseHtml = readFileSync(join(distPath, 'index.html'), 'utf8');
+      const html = injectShareMetaIntoHtml(baseHtml, buildShareMeta(req, sucursal));
+      res.set('Cache-Control', 'no-store');
+      res.send(html);
+    } catch (e) {
+      console.error(e);
+      res.sendFile(join(distPath, 'index.html'));
+    }
+  });
   app.use(express.static(distPath));
   app.get('*', (req, res) => {
     res.sendFile(join(distPath, 'index.html'), (err) => {

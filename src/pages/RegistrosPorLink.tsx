@@ -4,6 +4,7 @@ import { RegistroLink as RegistroLinkType, Actividad } from '../types';
 import { storageApi } from '../utils/storage-api';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate } from '../utils/date';
+import { useAuth } from '../contexts/AuthContext';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 const useApi = () => {
@@ -13,6 +14,7 @@ const useApi = () => {
 };
 
 const RegistrosPorLink = () => {
+  const { sucursalId } = useAuth();
   const [list, setList] = useState<RegistroLinkType[]>([]);
   const [actividades, setActividades] = useState<Actividad[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +78,8 @@ const RegistrosPorLink = () => {
     }
   };
 
-  const linkRegistro = `${typeof window !== 'undefined' ? window.location.origin : ''}/registro`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const linkRegistro = `${origin}/registro${sucursalId ? `?sucursalId=${encodeURIComponent(sucursalId)}` : ''}`;
 
   if (loading) {
     return (

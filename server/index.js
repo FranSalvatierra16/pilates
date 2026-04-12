@@ -1664,20 +1664,27 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
     const alumno = resolved.alumno;
     const semanaVista = (semana || '').toString().trim() || getSemanaActual();
     const turnoIdTarget = (turnoId || '').toString().trim();
+    const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [alumno.sucursal_id]);
     let rowCount = 0;
+    let turnoIdRestaurado = '';
     if (liberacionId) {
       const { rows: libRow } = await db.query(
         'SELECT turno_id FROM liberaciones_semana WHERE id = $1 AND alumno_id = $2',
         [liberacionId, alumno.id]
       );
       if (libRow.length === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
+      turnoIdRestaurado = libRow[0].turno_id;
+      const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
+      if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
+        return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
+      }
       const { rows: turnoRows } = await db.query(
         `SELECT t.id, t.alumno_ids, t.cupo,
                 COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,
                 COALESCE((SELECT COUNT(*)::int FROM liberaciones_semana l WHERE l.turno_id = t.id AND l.semana = $2), 0) AS libs
            FROM turnos t
           WHERE t.id = $1 AND t.sucursal_id = $3`,
-        [libRow[0].turno_id, semanaVista, alumno.sucursal_id]
+        [turnoIdRestaurado, semanaVista, alumno.sucursal_id]
       );
       if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
       const t = turnoRows[0];
@@ -1690,6 +1697,11 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
         [liberacionId, alumno.id]
       ));
     } else if (turnoIdTarget) {
+      turnoIdRestaurado = turnoIdTarget;
+      const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
+      if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
+        return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
+      }
       const { rows: turnoRows } = await db.query(
         `SELECT t.id, t.alumno_ids, t.cupo,
                 COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,

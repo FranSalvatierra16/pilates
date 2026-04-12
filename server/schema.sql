@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS recuperaciones (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE recuperaciones ADD COLUMN IF NOT EXISTS usa_credito BOOLEAN DEFAULT FALSE;
+ALTER TABLE recuperaciones ADD COLUMN IF NOT EXISTS origen_credito TEXT;
 CREATE INDEX IF NOT EXISTS idx_recuperaciones_semana ON recuperaciones(semana);
 
 -- Inscripciones: alumno en turno desde qué semana (semanas anteriores no lo muestran)

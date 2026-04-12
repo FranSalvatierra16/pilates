@@ -1330,7 +1330,7 @@ async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) 
   }).length;
 
   const { rows: recRows } = await db.query(
-    'SELECT id, turno_id, usa_credito FROM recuperaciones WHERE alumno_id = $1 AND semana = $2',
+    'SELECT id, turno_id, usa_credito, origen_credito FROM recuperaciones WHERE alumno_id = $1 AND semana = $2',
     [alumno.id, semanaVista]
   );
 
@@ -1495,14 +1495,18 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     if (totalFijos + recs >= cupo) return res.status(400).json({ error: 'No hay cupo para recuperar esta semana' });
     const clasesUsadasSemana = ctx.clasesFijasSemana + ctx.recuperacionesSemana.length;
     const excedeBase = ctx.clasesPorSemana != null && clasesUsadasSemana >= ctx.clasesPorSemana;
+    const recuperacionesConCreditoPorLiberacion = ctx.recuperacionesSemana.filter((r) => r.origen_credito === 'liberacion').length;
+    const liberacionesPendientes = Math.max(0, ctx.liberacionesSemana.length - recuperacionesConCreditoPorLiberacion);
+    const debeConsumirCreditoPorLiberacion = liberacionesPendientes > 0 && ctx.clasesParaRecuperar > 0;
     if (excedeBase && ctx.clasesParaRecuperar <= 0) {
       return res.status(400).json({ error: 'No te quedan clases para recuperar disponibles.' });
     }
     const id = crypto.randomUUID();
-    const usaCredito = excedeBase;
+    const usaCredito = debeConsumirCreditoPorLiberacion || excedeBase;
+    const origenCredito = debeConsumirCreditoPorLiberacion ? 'liberacion' : excedeBase ? 'saldo' : null;
     await db.query(
-      'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, usa_credito, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
-      [id, turnoId, alumno.id, semanaVista, usaCredito]
+      'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, usa_credito, origen_credito, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
+      [id, turnoId, alumno.id, semanaVista, usaCredito, origenCredito]
     );
     if (usaCredito) {
       await db.query(
@@ -1643,6 +1647,10 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
       'INSERT INTO liberaciones_semana (id, turno_id, alumno_id, semana, created_at) VALUES ($1, $2, $3, $4, NOW())',
       [id, turnoId, alumno.id, semanaVista]
     );
+    await db.query(
+      'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
+      [alumno.id, alumno.sucursal_id]
+    );
     res.json({ ok: true, liberacionId: id });
   } catch (e) {
     console.error(e);
@@ -1665,6 +1673,9 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
     const semanaVista = (semana || '').toString().trim() || getSemanaActual();
     const turnoIdTarget = (turnoId || '').toString().trim();
     const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [alumno.sucursal_id]);
+    const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
+    const recuperacionesConCreditoPorLiberacion = ctx.recuperacionesSemana.filter((r) => r.origen_credito === 'liberacion').length;
+    const hayCreditoDeLiberacionSinUsar = ctx.liberacionesSemana.length > recuperacionesConCreditoPorLiberacion;
     let rowCount = 0;
     let turnoIdRestaurado = '';
     if (liberacionId) {
@@ -1674,7 +1685,6 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
       );
       if (libRow.length === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
       turnoIdRestaurado = libRow[0].turno_id;
-      const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
       if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
         return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
       }
@@ -1698,7 +1708,6 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
       ));
     } else if (turnoIdTarget) {
       turnoIdRestaurado = turnoIdTarget;
-      const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
       if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
         return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
       }
@@ -1724,6 +1733,12 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
       return res.status(400).json({ error: 'Falta turnoId o liberacionId' });
     }
     if (rowCount === 0) return res.status(404).json({ error: 'La clase no estaba liberada para esa semana.' });
+    if (hayCreditoDeLiberacionSinUsar) {
+      await db.query(
+        'UPDATE alumnos SET clases_para_recuperar = GREATEST(0, COALESCE(clases_para_recuperar, 0) - 1) WHERE id = $1 AND sucursal_id = $2',
+        [alumno.id, alumno.sucursal_id]
+      );
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error(e);

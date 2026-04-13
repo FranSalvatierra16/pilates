@@ -1317,11 +1317,19 @@ async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) 
     [alumno.id]
   );
   const insByTurno = new Map(insRows.map((r) => [r.turno_id, r]));
-  const { rows: libRows } = await db.query(
-    'SELECT id, turno_id FROM liberaciones_semana WHERE alumno_id = $1 AND semana = $2',
-    [alumno.id, semanaVista]
+  const { rows: allLibRows } = await db.query(
+    'SELECT id, turno_id, semana, created_at FROM liberaciones_semana WHERE alumno_id = $1 ORDER BY semana, created_at, id',
+    [alumno.id]
   );
-  const libByTurno = new Map(libRows.map((r) => [r.turno_id, r]));
+  const { rows: libCreditUseRows } = await db.query(
+    "SELECT id, semana, created_at FROM recuperaciones WHERE alumno_id = $1 AND origen_credito = 'liberacion' ORDER BY semana, created_at, id",
+    [alumno.id]
+  );
+  const consumedLiberacionCount = libCreditUseRows.length;
+  const outstandingLiberacionIds = new Set(allLibRows.slice(consumedLiberacionCount).map((r) => r.id));
+  const libRows = allLibRows.filter((r) => r.semana === semanaVista);
+  const outstandingLibRows = libRows.filter((r) => outstandingLiberacionIds.has(r.id));
+  const libByTurno = new Map(outstandingLibRows.map((r) => [r.turno_id, r]));
   const clasesFijasSemana = turnoRows.filter((t) => {
     const ids = t.alumno_ids || [];
     if (!ids.includes(alumno.id)) return false;
@@ -1339,6 +1347,8 @@ async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) 
     clasesFijasSemana,
     recuperacionesSemana: recRows,
     liberacionesSemana: libRows,
+    liberacionesPendientesSemana: outstandingLibRows,
+    liberacionesPendientesTotales: outstandingLiberacionIds.size,
     inscripcionesByTurno: insByTurno,
     clasesParaRecuperar: Math.max(0, Number(alumno.clases_para_recuperar ?? 0)),
   };
@@ -1383,7 +1393,7 @@ app.get('/api/alumno-portal', async (req, res) => {
       );
       const recByTurno = new Map(recRows.map((r) => [r.turno_id, r]));
       const recCountByTurno = new Map(recCountRows.map((r) => [r.turno_id, parseInt(r.n, 10)]));
-      const libByTurno = new Map(libRows.map((r) => [r.turno_id, r]));
+      const libByTurno = new Map(ctx.liberacionesPendientesSemana.map((r) => [r.turno_id, r]));
       const libCountByTurno = new Map(libCountRows.map((r) => [r.turno_id, parseInt(r.n, 10)]));
       turnos = turnoRows.map((r) => {
         const alumnoIds = r.alumno_ids || [];
@@ -1495,9 +1505,7 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     if (totalFijos + recs >= cupo) return res.status(400).json({ error: 'No hay cupo para recuperar esta semana' });
     const clasesUsadasSemana = ctx.clasesFijasSemana + ctx.recuperacionesSemana.length;
     const excedeBase = ctx.clasesPorSemana != null && clasesUsadasSemana >= ctx.clasesPorSemana;
-    const recuperacionesConCreditoPorLiberacion = ctx.recuperacionesSemana.filter((r) => r.origen_credito === 'liberacion').length;
-    const liberacionesPendientes = Math.max(0, ctx.liberacionesSemana.length - recuperacionesConCreditoPorLiberacion);
-    const debeConsumirCreditoPorLiberacion = liberacionesPendientes > 0 && ctx.clasesParaRecuperar > 0;
+    const debeConsumirCreditoPorLiberacion = ctx.liberacionesPendientesTotales > 0 && ctx.clasesParaRecuperar > 0;
     if (excedeBase && ctx.clasesParaRecuperar <= 0) {
       return res.status(400).json({ error: 'No te quedan clases para recuperar disponibles.' });
     }

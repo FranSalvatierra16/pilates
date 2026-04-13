@@ -1354,6 +1354,35 @@ async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) 
   };
 }
 
+async function getActividadClasesPorSemana(db, alumno) {
+  const actividadId = alumno.actividad_id || null;
+  if (!actividadId) return null;
+  const { rows } = await db.query(
+    'SELECT clases_por_semana FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
+    [actividadId, alumno.sucursal_id]
+  );
+  if (!rows.length || rows[0].clases_por_semana == null) return null;
+  return Number(rows[0].clases_por_semana);
+}
+
+async function getClasesFijasActivasSemana(db, alumno, semanaVista) {
+  const { rows: turnoRows } = await db.query(
+    'SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1',
+    [alumno.sucursal_id]
+  );
+  const { rows: insRows } = await db.query(
+    'SELECT turno_id, semana_desde FROM inscripciones_turno WHERE alumno_id = $1',
+    [alumno.id]
+  );
+  const insByTurno = new Map(insRows.map((r) => [r.turno_id, r]));
+  return turnoRows.filter((t) => {
+    const ids = t.alumno_ids || [];
+    if (!ids.includes(alumno.id)) return false;
+    const ins = insByTurno.get(t.id);
+    return !ins || ins.semana_desde <= semanaVista;
+  }).length;
+}
+
 app.get('/api/alumno-portal', async (req, res) => {
   try {
     const db = await getPool();
@@ -1767,6 +1796,7 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
     });
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
+    const semanaActual = getSemanaActual();
     const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const t = turnoRows[0];
@@ -1774,8 +1804,19 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
     const cupo = t.cupo != null ? Number(t.cupo) : 6;
     if (ids.includes(alumno.id)) return res.json({ ok: true, message: 'Ya estabas inscripto' });
     if (ids.length >= cupo) return res.status(400).json({ error: 'No hay cupo disponible' });
+    const clasesPorSemana = await getActividadClasesPorSemana(db, alumno);
+    if (clasesPorSemana != null) {
+      const clasesFijasActivas = await getClasesFijasActivasSemana(db, alumno, semanaActual);
+      if (clasesFijasActivas >= clasesPorSemana) {
+        return res.status(400).json({ error: `Este alumno tiene un plan de ${clasesPorSemana} ${clasesPorSemana === 1 ? 'clase' : 'clases'} por semana y ya alcanzó ese límite.` });
+      }
+    }
     const nuevosIds = [...ids, alumno.id];
     await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [nuevosIds, turnoId, alumno.sucursal_id]);
+    await db.query(
+      'INSERT INTO inscripciones_turno (id, turno_id, alumno_id, semana_desde, created_at) VALUES ($1, $2, $3, $4, NOW()) ON CONFLICT DO NOTHING',
+      [crypto.randomUUID(), turnoId, alumno.id, semanaActual]
+    );
     await db.query(
       'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
       [crypto.randomUUID(), alumno.sucursal_id, 'inscribio', alumno.id, turnoId]

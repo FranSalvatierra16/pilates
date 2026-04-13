@@ -1264,7 +1264,11 @@ const Calendario = () => {
         <button
           type="button"
           onClick={async () => {
-            if (!confirm('¿Recortar todas las clases al cupo configurado? Se quitarán alumnos de las clases que tengan más del cupo (los últimos de la lista).')) return;
+            const ok = await toast.confirm('¿Recortar todas las clases al cupo configurado? Se quitarán alumnos de las clases que tengan más del cupo (los últimos de la lista).', {
+              title: 'Ajustar cupos',
+              confirmText: 'Recortar',
+            });
+            if (!ok) return;
             try {
               const { turnosActualizados, alumnosEliminados } = await storageHybrid.turnos.ajustarCupo();
               await loadTurnos();
@@ -1759,11 +1763,15 @@ const Calendario = () => {
                 </button>
               )}
               <button
-                onClick={() => {
+                onClick={async () => {
                   const msg = showPopupAlumno.isRecuperacion
                     ? `¿Quitar a ${showPopupAlumno.alumno.nombre} ${showPopupAlumno.alumno.apellido} de esta recuperación?`
                     : `¿Estás seguro de que querés eliminar a ${showPopupAlumno.alumno.nombre} ${showPopupAlumno.alumno.apellido} de este turno?`;
-                  if (confirm(msg)) {
+                  const ok = await toast.confirm(msg, {
+                    title: showPopupAlumno.isRecuperacion ? 'Quitar recuperación' : 'Eliminar del turno',
+                    confirmText: showPopupAlumno.isRecuperacion ? 'Quitar' : 'Eliminar',
+                  });
+                  if (ok) {
                     handleEliminarAlumno(showPopupAlumno.turnoId, showPopupAlumno.alumno.id, showPopupAlumno.recuperacionId);
                   }
                 }}

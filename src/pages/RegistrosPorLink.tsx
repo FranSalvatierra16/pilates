@@ -70,7 +70,12 @@ const RegistrosPorLink = () => {
   };
 
   const handleEliminar = async (id: string) => {
-    if (!useApi() || !confirm('¿Descartar este registro? No se recupera.')) return;
+    if (!useApi()) return;
+    const ok = await toast.confirm('¿Descartar este registro? No se recupera.', {
+      title: 'Descartar registro',
+      confirmText: 'Descartar',
+    });
+    if (!ok) return;
     setError('');
     try {
       await storageApi.registroLink.delete(id);

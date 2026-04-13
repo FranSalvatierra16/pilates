@@ -150,7 +150,11 @@ const Pagos = () => {
 
   const handleEliminarPago = async (pago: Pago) => {
     const nombre = getAlumnoNombre(pago);
-    if (!confirm(`¿Eliminar el pago de ${formatCurrency(pago.monto)} (${nombre}, ${formatDate(pago.fecha)})? Esta acción no se puede deshacer.`)) return;
+    const ok = await toast.confirm(`¿Eliminar el pago de ${formatCurrency(pago.monto)} (${nombre}, ${formatDate(pago.fecha)})? Esta acción no se puede deshacer.`, {
+      title: 'Eliminar pago',
+      confirmText: 'Eliminar',
+    });
+    if (!ok) return;
     try {
       await storageHybrid.pagos.delete(pago.id);
       await loadPagos();

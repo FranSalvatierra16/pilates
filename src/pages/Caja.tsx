@@ -349,14 +349,17 @@ const Caja = () => {
   };
 
   const handleEliminarGasto = async (id: string) => {
-    if (confirm('¿Estás seguro de que querés eliminar este gasto?')) {
-      try {
-        await storageHybrid.gastos.delete(id);
-        await loadStats();
-      } catch (error) {
-        console.error('Error deleting gasto:', error);
-        toast.error('Error al eliminar el gasto. Revisá la consola para más detalles.');
-      }
+    const ok = await toast.confirm('¿Estás seguro de que querés eliminar este gasto?', {
+      title: 'Eliminar gasto',
+      confirmText: 'Eliminar',
+    });
+    if (!ok) return;
+    try {
+      await storageHybrid.gastos.delete(id);
+      await loadStats();
+    } catch (error) {
+      console.error('Error deleting gasto:', error);
+      toast.error('Error al eliminar el gasto. Revisá la consola para más detalles.');
     }
   };
 
@@ -474,7 +477,11 @@ const Caja = () => {
 
   const handleEliminarPago = async (pago: Pago) => {
     const nombre = getAlumnoNombre(pago);
-    if (!confirm(`¿Eliminar el pago de ${formatCurrency(pago.monto)} (${nombre}, ${formatDate(pago.fecha)})? Esta acción no se puede deshacer.`)) return;
+    const ok = await toast.confirm(`¿Eliminar el pago de ${formatCurrency(pago.monto)} (${nombre}, ${formatDate(pago.fecha)})? Esta acción no se puede deshacer.`, {
+      title: 'Eliminar pago',
+      confirmText: 'Eliminar',
+    });
+    if (!ok) return;
     try {
       await storageHybrid.pagos.delete(pago.id);
       await loadStats();

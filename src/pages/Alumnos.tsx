@@ -366,14 +366,17 @@ const Alumnos = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('¿Desactivar alumno? No se borran pagos ni historial, solo deja de aparecer en la lista activa.')) {
-      try {
-        await storageHybrid.alumnos.delete(id);
-        await loadAlumnos();
-      } catch (error) {
-        console.error('Error deleting alumno:', error);
-        toast.error('Error al eliminar el alumno. Por favor intentá nuevamente.');
-      }
+    const ok = await toast.confirm('¿Desactivar alumno? No se borran pagos ni historial, solo deja de aparecer en la lista activa.', {
+      title: 'Desactivar alumno',
+      confirmText: 'Desactivar',
+    });
+    if (!ok) return;
+    try {
+      await storageHybrid.alumnos.delete(id);
+      await loadAlumnos();
+    } catch (error) {
+      console.error('Error deleting alumno:', error);
+      toast.error('Error al eliminar el alumno. Por favor intentá nuevamente.');
     }
   };
 
@@ -474,7 +477,12 @@ const Alumnos = () => {
   };
 
   const handleEliminarAsistenciaHistorial = async (item: AsistenciaHistorialItem) => {
-    if (!alumnoHistorial || !confirm(`¿Eliminar la asistencia del ${formatDate(item.fecha)} ${item.hora}?`)) return;
+    if (!alumnoHistorial) return;
+    const ok = await toast.confirm(`¿Eliminar la asistencia del ${formatDate(item.fecha)} ${item.hora}?`, {
+      title: 'Eliminar asistencia',
+      confirmText: 'Eliminar',
+    });
+    if (!ok) return;
     try {
       await storageHybrid.asistencias.delete(item.id);
       setHistorialAsistencias((prev) => prev.filter((a) => a.id !== item.id));

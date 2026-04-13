@@ -104,14 +104,17 @@ const Profesores = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('¿Estás seguro de que querés eliminar este profesor?')) {
-      try {
-        await storageHybrid.profesores.delete(id);
-        await loadProfesores();
-      } catch (error) {
-        console.error('Error deleting profesor:', error);
-        toast.error('Error al eliminar el profesor. Por favor intentá nuevamente.');
-      }
+    const ok = await toast.confirm('¿Estás seguro de que querés eliminar este profesor?', {
+      title: 'Eliminar profesor',
+      confirmText: 'Eliminar',
+    });
+    if (!ok) return;
+    try {
+      await storageHybrid.profesores.delete(id);
+      await loadProfesores();
+    } catch (error) {
+      console.error('Error deleting profesor:', error);
+      toast.error('Error al eliminar el profesor. Por favor intentá nuevamente.');
     }
   };
 

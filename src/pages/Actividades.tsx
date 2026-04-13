@@ -113,10 +113,13 @@ const Actividades = () => {
         return;
       }
 
-      if (confirm('¿Estás seguro de que querés eliminar esta actividad?')) {
-        await storageHybrid.actividades.delete(id);
-        await loadActividades();
-      }
+      const ok = await toast.confirm('¿Estás seguro de que querés eliminar esta actividad?', {
+        title: 'Eliminar actividad',
+        confirmText: 'Eliminar',
+      });
+      if (!ok) return;
+      await storageHybrid.actividades.delete(id);
+      await loadActividades();
     } catch (error) {
       console.error('Error deleting actividad:', error);
       toast.error('Error al eliminar la actividad. Revisá la consola para más detalles.');

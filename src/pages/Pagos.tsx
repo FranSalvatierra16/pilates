@@ -6,8 +6,10 @@ import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, calcularFechaVencimiento, horaActualInput, formatHora24, formatDateTime } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 import { cierreFechaCorte, combinarFechaHoraISO, estaEnPeriodoAbiertoCaja, getUltimoCierre } from '../utils/cierre-caja';
+import { useToast } from '../components/ToastProvider';
 
 const Pagos = () => {
+  const toast = useToast();
   const [pagos, setPagos] = useState<Pago[]>([]);
   const [cierres, setCierres] = useState<CierreCaja[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
@@ -96,7 +98,7 @@ const Pagos = () => {
 
     const monto = parseFloat(formData.monto);
     if (isNaN(monto) || monto <= 0) {
-      alert('El monto debe ser un número válido mayor a 0');
+      toast.warning('El monto debe ser un número válido mayor a 0');
       return;
     }
 
@@ -104,7 +106,7 @@ const Pagos = () => {
     if (!esAporte) {
       const alumno = alumnos.find(a => a.id === formData.alumnoId);
       if (!alumno) {
-        alert('Alumno no encontrado');
+        toast.warning('Alumno no encontrado');
         return;
       }
     }
@@ -133,10 +135,10 @@ const Pagos = () => {
       await loadPagos();
       await loadAlumnos();
       handleCloseModal();
-      alert(esAporte ? 'Ingreso registrado en caja.' : 'Pago registrado exitosamente');
+      toast.success(esAporte ? 'Ingreso registrado en caja.' : 'Pago registrado exitosamente');
     } catch (error) {
       console.error('Error saving pago:', error);
-      alert('Error al registrar el pago. Revisá la consola para más detalles.');
+      toast.error('Error al registrar el pago. Revisá la consola para más detalles.');
     }
   };
 
@@ -155,7 +157,7 @@ const Pagos = () => {
       await loadAlumnos();
     } catch (error) {
       console.error('Error al eliminar pago:', error);
-      alert('No se pudo eliminar el pago.');
+      toast.error('No se pudo eliminar el pago.');
     }
   };
 

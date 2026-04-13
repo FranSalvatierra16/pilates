@@ -5,6 +5,7 @@ import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
 import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia } from '../utils/date';
+import { useToast } from '../components/ToastProvider';
 
 // Horarios por defecto (modo local); en API se cargan desde la sucursal
 const horariosManana_DEFAULT = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
@@ -65,6 +66,7 @@ const getSemanaFromDate = (fecha: Date): string => {
 };
 
 const Calendario = () => {
+  const toast = useToast();
   const [horariosManana, setHorariosManana] = useState<string[]>(horariosManana_DEFAULT);
   const [horariosTarde, setHorariosTarde] = useState<string[]>(horariosTarde_DEFAULT);
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -346,7 +348,7 @@ const Calendario = () => {
       const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
       const alumnoActual = alumnos.find((a) => a.id === alumnoSeleccionado);
       if (!alumnoActual) {
-        alert('No se encontró el alumno seleccionado.');
+        toast.warning('No se encontró el alumno seleccionado.');
         return;
       }
       const cupo = turnoExistente?.cupo ?? CUPO_DEFAULT;
@@ -361,7 +363,7 @@ const Calendario = () => {
           return;
         }
         if (totalEnTurno >= cupo) {
-          alert('Esta clase ya tiene el cupo completo.');
+          toast.warning('Esta clase ya tiene el cupo completo.');
           return;
         }
         const actividad = getActividadDelAlumno(alumnoSeleccionado);
@@ -369,7 +371,7 @@ const Calendario = () => {
         const clasesUsadasSemana = getClasesUsadasSemanaAlumno(alumnoSeleccionado);
         const usaCredito = limiteSemanal != null && clasesUsadasSemana >= limiteSemanal;
         if (usaCredito && (alumnoActual.clasesParaRecuperar || 0) <= 0) {
-          alert('Este alumno no tiene clases para recuperar disponibles.');
+          toast.warning('Este alumno no tiene clases para recuperar disponibles.');
           return;
         }
         const rec: Recuperacion = {
@@ -403,7 +405,7 @@ const Calendario = () => {
       } else {
         if (turnoExistente) {
           if (totalEnTurno >= cupo) {
-            alert('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (titulo/profesor) o desde "Aumentar cupo".');
+            toast.warning('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (titulo/profesor) o desde "Aumentar cupo".');
             return;
           }
           if (!turnoExistente.alumnoIds.includes(alumnoSeleccionado)) {
@@ -447,7 +449,7 @@ const Calendario = () => {
       handleCerrarModal();
     } catch (error) {
       console.error('Error guardando turno:', error);
-      alert('Error al guardar el turno. Por favor intentá nuevamente.');
+      toast.error('Error al guardar el turno. Por favor intentá nuevamente.');
     }
   };
 
@@ -479,7 +481,7 @@ const Calendario = () => {
       setTurnoParaEditar(null);
     } catch (error) {
       console.error('Error actualizando turno:', error);
-      alert('Error al actualizar el turno. Por favor intentá nuevamente.');
+      toast.error('Error al actualizar el turno. Por favor intentá nuevamente.');
     }
   };
 
@@ -510,7 +512,7 @@ const Calendario = () => {
       setShowPopupAlumno(null);
     } catch (error) {
       console.error('Error eliminando alumno del turno:', error);
-      alert('Error al eliminar el alumno del turno. Por favor intentá nuevamente.');
+      toast.error('Error al eliminar el alumno del turno. Por favor intentá nuevamente.');
     }
   };
 
@@ -567,7 +569,7 @@ const Calendario = () => {
       setTurnoDestino(null);
     } catch (error) {
       console.error('Error moviendo alumno:', error);
-      alert('Error al mover el alumno. Por favor intentá nuevamente.');
+      toast.error('Error al mover el alumno. Por favor intentá nuevamente.');
     }
   };
 
@@ -593,7 +595,7 @@ const Calendario = () => {
       await loadTurnos();
     } catch (error) {
       console.error('Error al destacar:', error);
-      alert('Error al marcar el horario. Reintentá.');
+      toast.error('Error al marcar el horario. Reintentá.');
     }
   };
 
@@ -716,7 +718,7 @@ const Calendario = () => {
       setShowModalAumentarCupo(false);
     } catch (e) {
       console.error(e);
-      alert('Error al actualizar el cupo. Reintentá.');
+      toast.error('Error al actualizar el cupo. Reintentá.');
     }
   };
 
@@ -1266,12 +1268,12 @@ const Calendario = () => {
             try {
               const { turnosActualizados, alumnosEliminados } = await storageHybrid.turnos.ajustarCupo();
               await loadTurnos();
-              alert(turnosActualizados === 0
+              toast.success(turnosActualizados === 0
                 ? 'Todas las clases ya respetan el cupo.'
                 : `Listo: ${turnosActualizados} clase(s) ajustadas. Se quitaron ${alumnosEliminados} alumno(s) en total.`);
             } catch (e) {
               console.error(e);
-              alert('Error al ajustar. Reintentá.');
+              toast.error('Error al ajustar. Reintentá.');
             }
           }}
           className="btn-secondary flex items-center justify-center gap-2 min-h-[44px] flex-1 sm:flex-initial"

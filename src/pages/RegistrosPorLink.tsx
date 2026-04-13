@@ -5,6 +5,7 @@ import { storageApi } from '../utils/storage-api';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate } from '../utils/date';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../components/ToastProvider';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 const useApi = () => {
@@ -14,6 +15,7 @@ const useApi = () => {
 };
 
 const RegistrosPorLink = () => {
+  const toast = useToast();
   const { sucursalId } = useAuth();
   const [list, setList] = useState<RegistroLinkType[]>([]);
   const [actividades, setActividades] = useState<Actividad[]>([]);
@@ -111,7 +113,7 @@ const RegistrosPorLink = () => {
             type="button"
             onClick={() => {
               navigator.clipboard.writeText(linkRegistro);
-              alert('Link copiado');
+              toast.success('Link copiado');
             }}
             className="btn-secondary flex items-center gap-2 shrink-0"
           >

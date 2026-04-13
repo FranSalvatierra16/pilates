@@ -7,6 +7,7 @@ import { storageApi } from '../utils/storage-api';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal, horaActualInput, formatHora24 } from '../utils/date';
 import { formatCurrency } from '../utils/format';
+import { useToast } from '../components/ToastProvider';
 
 /** Normaliza teléfono para WhatsApp (Argentina: 54 9 área número). Devuelve null si no hay número válido. */
 function normalizePhoneForWhatsApp(telefono: string): string | null {
@@ -59,6 +60,7 @@ function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { ur
 }
 
 const Alumnos = () => {
+  const toast = useToast();
   const { sucursalNombre, sucursalId: sucursalIdContext, token, role } = useAuth();
   // Si la sesión es vieja puede no tener sucursalId guardado; lo sacamos del JWT
   const sucursalId = sucursalIdContext || (role === 'sucursal' && token ? (() => {
@@ -356,9 +358,9 @@ const Alumnos = () => {
       console.error('Error saving alumno:', error);
       const msg = error instanceof Error ? error.message : '';
       if (msg.includes('Ya existe un alumno con este DNI') || msg.includes('409')) {
-        alert('Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.');
+        toast.warning('Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.');
       } else {
-        alert('Error al guardar el alumno. Por favor intentá nuevamente.');
+        toast.error('Error al guardar el alumno. Por favor intentá nuevamente.');
       }
     }
   };
@@ -370,7 +372,7 @@ const Alumnos = () => {
         await loadAlumnos();
       } catch (error) {
         console.error('Error deleting alumno:', error);
-        alert('Error al eliminar el alumno. Por favor intentá nuevamente.');
+        toast.error('Error al eliminar el alumno. Por favor intentá nuevamente.');
       }
     }
   };
@@ -381,7 +383,7 @@ const Alumnos = () => {
       await loadAlumnos();
     } catch (error) {
       console.error('Error reactivando alumno:', error);
-      alert('Error al reactivar el alumno. Por favor intentá nuevamente.');
+      toast.error('Error al reactivar el alumno. Por favor intentá nuevamente.');
     }
   };
 
@@ -417,7 +419,7 @@ const Alumnos = () => {
 
     const monto = parseFloat(formDataPago.monto);
     if (isNaN(monto) || monto <= 0) {
-      alert('El monto debe ser un número válido mayor a 0');
+      toast.warning('El monto debe ser un número válido mayor a 0');
       return;
     }
 
@@ -448,10 +450,10 @@ const Alumnos = () => {
       await loadAlumnos();
       setAlumnoIdsConPago((prev) => new Set(prev).add(alumnoParaPagar.id));
       handleCerrarModalPago();
-      alert('Pago registrado exitosamente. La fecha de vencimiento se actualizó automáticamente.');
+      toast.success('Pago registrado exitosamente. La fecha de vencimiento se actualizó automáticamente.');
     } catch (error) {
       console.error('Error saving pago:', error);
-      alert('Error al registrar el pago. Por favor intentá nuevamente.');
+      toast.error('Error al registrar el pago. Por favor intentá nuevamente.');
     }
   };
 
@@ -478,7 +480,7 @@ const Alumnos = () => {
       setHistorialAsistencias((prev) => prev.filter((a) => a.id !== item.id));
     } catch (e) {
       console.error(e);
-      alert('No se pudo eliminar.');
+      toast.error('No se pudo eliminar.');
     }
   };
 
@@ -513,14 +515,14 @@ const Alumnos = () => {
   const handleCopiarLinkGeneralClases = (modo: 'fijo' | 'recuperar') => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     if (!sucursalId) {
-      alert('No se pudo detectar la sede. Cerrando sesión y volvé a entrar para que el link general incluya tu sede.');
+      toast.error('No se pudo detectar la sede. Cerrando sesión y volvé a entrar para que el link general incluya tu sede.');
       return;
     }
     let url = `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}`;
     if (modo === 'recuperar') url += '&modo=recuperar';
     try {
       navigator.clipboard.writeText(url);
-      alert(modo === 'recuperar'
+      toast.success(modo === 'recuperar'
         ? 'Link general de recuperar copiado. Cada persona ingresa su DNI y puede ver semana actual u otra para elegir día.'
         : 'Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.');
     } catch {
@@ -538,7 +540,7 @@ const Alumnos = () => {
       setAlumnoDescripcion(null);
     } catch (e) {
       console.error(e);
-      alert('Error al guardar la descripción.');
+      toast.error('Error al guardar la descripción.');
     }
   };
 

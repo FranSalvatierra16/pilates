@@ -3,8 +3,10 @@ import { Plus, Edit, Trash2, X, Save } from 'lucide-react';
 import { Actividad } from '../types';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
+import { useToast } from '../components/ToastProvider';
 
 const Actividades = () => {
+  const toast = useToast();
   const [actividades, setActividades] = useState<Actividad[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -27,7 +29,7 @@ const Actividades = () => {
       setActividades(data);
     } catch (error) {
       console.error('Error loading actividades:', error);
-      alert('Error al cargar las actividades');
+      toast.error('Error al cargar las actividades');
     } finally {
       setLoading(false);
     }
@@ -107,7 +109,7 @@ const Actividades = () => {
       const alumnosConActividad = alumnos.filter(a => a.actividadId === id);
       
       if (alumnosConActividad.length > 0) {
-        alert(`No se puede eliminar esta actividad porque ${alumnosConActividad.length} alumno(s) la está(n) usando. Primero actualizá la actividad de esos alumnos.`);
+        toast.warning(`No se puede eliminar esta actividad porque ${alumnosConActividad.length} alumno(s) la está(n) usando. Primero actualizá la actividad de esos alumnos.`);
         return;
       }
 
@@ -117,7 +119,7 @@ const Actividades = () => {
       }
     } catch (error) {
       console.error('Error deleting actividad:', error);
-      alert('Error al eliminar la actividad. Revisá la consola para más detalles.');
+      toast.error('Error al eliminar la actividad. Revisá la consola para más detalles.');
     }
   };
 

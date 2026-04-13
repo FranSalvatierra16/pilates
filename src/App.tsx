@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import { ToastProvider } from './components/ToastProvider';
 
 const APP_NAME_FALLBACK = import.meta.env.VITE_APP_NAME || 'FITGEST';
 
@@ -78,10 +79,11 @@ function RootRedirect() {
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <DocumentTitle />
-        <Routes>
+    <ToastProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <DocumentTitle />
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroLink />} />
           <Route path="/mi-clase" element={<MiClase />} />
@@ -205,9 +207,10 @@ function App() {
               </ProtectedSucursalRoute>
             }
           />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ToastProvider>
   );
 }
 

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Calendar, UserPlus, UserMinus, Loader2 } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { getSemanaActual, getSemanaSiguiente, getRangoSemana } from '../utils/date';
+import { useToast } from '../components/ToastProvider';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -72,6 +73,7 @@ const DEFAULT_HORARIOS: HorariosPortal = {
 };
 
 const MiClase = () => {
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const tokenFromUrl = searchParams.get('token') || '';
   const sucursalIdFromUrl = searchParams.get('sucursalId') || '';
@@ -210,7 +212,7 @@ const MiClase = () => {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(json.error || 'No se pudo inscribir.');
+        toast.error(json.error || 'No se pudo inscribir.');
         return;
       }
       if (esRecuperar && json.recuperacionId) {
@@ -263,7 +265,7 @@ const MiClase = () => {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        alert(json.error || 'No se pudo liberar el cupo.');
+        toast.error(json.error || 'No se pudo liberar el cupo.');
         return;
       }
       setData((prev) =>
@@ -300,7 +302,7 @@ const MiClase = () => {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(json.error || 'No se pudo liberar la clase.');
+        toast.error(json.error || 'No se pudo liberar la clase.');
         return;
       }
       await recargarRecuperar();
@@ -325,7 +327,7 @@ const MiClase = () => {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(json.error || 'No se pudo volver a tomar la clase.');
+        toast.error(json.error || 'No se pudo volver a tomar la clase.');
         return;
       }
       await recargarRecuperar();

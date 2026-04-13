@@ -4,8 +4,10 @@ import { Profesor, Gasto } from '../types';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, formatHora24 } from '../utils/date';
 import { formatCurrency } from '../utils/format';
+import { useToast } from '../components/ToastProvider';
 
 const Profesores = () => {
+  const toast = useToast();
   const [profesores, setProfesores] = useState<Profesor[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -80,11 +82,11 @@ const Profesores = () => {
 
       await loadProfesores();
       handleCloseModal();
-      alert(editingProfesor ? 'Profesor actualizado correctamente.' : 'Profesor guardado correctamente. Se sincroniza en todos los dispositivos.');
+      toast.success(editingProfesor ? 'Profesor actualizado correctamente.' : 'Profesor guardado correctamente. Se sincroniza en todos los dispositivos.');
     } catch (error) {
       console.error('Error saving profesor:', error);
       const msg = error instanceof Error ? error.message : 'Error de conexión';
-      alert(`Error al guardar el profesor: ${msg}. Revisá la conexión e intentá de nuevo.`);
+      toast.error(`Error al guardar el profesor: ${msg}. Revisá la conexión e intentá de nuevo.`);
     }
   };
 
@@ -108,7 +110,7 @@ const Profesores = () => {
         await loadProfesores();
       } catch (error) {
         console.error('Error deleting profesor:', error);
-        alert('Error al eliminar el profesor. Por favor intentá nuevamente.');
+        toast.error('Error al eliminar el profesor. Por favor intentá nuevamente.');
       }
     }
   };

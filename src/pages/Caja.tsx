@@ -13,6 +13,7 @@ import {
   movimientosRangoCierre,
 } from '../utils/cierre-caja';
 import { CierreCaja, Gasto, MetodoPago, Pago, Profesor } from '../types';
+import { useToast } from '../components/ToastProvider';
 
 /** Ingresos − gastos de la sesión cerrada (usa totales guardados si existen). */
 function balanceSesionCierre(c: CierreCaja): number {
@@ -133,6 +134,7 @@ function computeCajaStats(todosPagos: Pago[], todosGastos: Gasto[], listaCierres
 }
 
 const Caja = () => {
+  const toast = useToast();
   const [stats, setStats] = useState<CajaStats>({
     totalEfectivo: 0,
     totalTransferencia: 0,
@@ -305,12 +307,12 @@ const Caja = () => {
     
     const monto = parseFloat(formDataGasto.monto);
     if (isNaN(monto) || monto <= 0) {
-      alert('El monto debe ser un número válido mayor a 0');
+      toast.warning('El monto debe ser un número válido mayor a 0');
       return;
     }
 
     if (!formDataGasto.descripcion.trim()) {
-      alert('Por favor ingresá una descripción del gasto');
+      toast.warning('Por favor ingresá una descripción del gasto');
       return;
     }
 
@@ -318,7 +320,7 @@ const Caja = () => {
       const { fechaMin, fechaMax } = movimientosRangoCierre(cierres, gastoDesdeCierre);
       const f = formDataGasto.fecha;
       if (f < fechaMin || f > fechaMax) {
-        alert(
+        toast.warning(
           `La fecha del gasto tiene que estar entre ${formatDate(fechaMin)} y ${formatDate(fechaMax)}.`
         );
         return;
@@ -339,10 +341,10 @@ const Caja = () => {
       await storageHybrid.gastos.add(nuevoGasto);
       await loadStats();
       handleCerrarModalGasto();
-      alert('Gasto registrado exitosamente');
+      toast.success('Gasto registrado exitosamente');
     } catch (error) {
       console.error('Error saving gasto:', error);
-      alert('Error al registrar el gasto. Por favor intentá nuevamente.');
+      toast.error('Error al registrar el gasto. Por favor intentá nuevamente.');
     }
   };
 
@@ -353,7 +355,7 @@ const Caja = () => {
         await loadStats();
       } catch (error) {
         console.error('Error deleting gasto:', error);
-        alert('Error al eliminar el gasto. Revisá la consola para más detalles.');
+        toast.error('Error al eliminar el gasto. Revisá la consola para más detalles.');
       }
     }
   };
@@ -384,18 +386,18 @@ const Caja = () => {
       const mTr = rawTr ? parseFloat(rawTr) : 0;
       if (!rawEf && !rawTr) continue;
       if ((rawEf && !Number.isFinite(mEf)) || (rawTr && !Number.isFinite(mTr))) {
-        alert(`Los montos para ${p.nombre} ${p.apellido} no son válidos.`);
+        toast.warning(`Los montos para ${p.nombre} ${p.apellido} no son válidos.`);
         return;
       }
       if (mEf < 0 || mTr < 0) {
-        alert(`Los montos para ${p.nombre} ${p.apellido} no pueden ser negativos.`);
+        toast.warning(`Los montos para ${p.nombre} ${p.apellido} no pueden ser negativos.`);
         return;
       }
       if (mEf > 0) creados.push({ prof: p, monto: mEf, metodoPago: 'efectivo' });
       if (mTr > 0) creados.push({ prof: p, monto: mTr, metodoPago: 'transferencia' });
     }
     if (creados.length === 0) {
-      alert('Ingresá al menos un monto en efectivo o transferencia para algún profesor.');
+      toast.warning('Ingresá al menos un monto en efectivo o transferencia para algún profesor.');
       return;
     }
     setGuardandoSueldos(true);
@@ -427,14 +429,14 @@ const Caja = () => {
       }
       setShowModalSueldos(false);
       await loadStats();
-      alert(
+      toast.success(
         creados.length === 1
           ? 'Pago de sueldo registrado.'
           : `${creados.length} movimientos de sueldo registrados.`
       );
     } catch (err) {
       console.error(err);
-      alert('No se pudieron guardar los pagos. Revisá la conexión e intentá de nuevo.');
+      toast.error('No se pudieron guardar los pagos. Revisá la conexión e intentá de nuevo.');
     } finally {
       setGuardandoSueldos(false);
     }
@@ -478,7 +480,7 @@ const Caja = () => {
       await loadStats();
     } catch (error) {
       console.error('Error al eliminar pago:', error);
-      alert('No se pudo eliminar el pago.');
+      toast.error('No se pudo eliminar el pago.');
     }
   };
 
@@ -527,12 +529,12 @@ const Caja = () => {
   const handleSubmitCierre = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formCierre.descripcion.trim()) {
-      alert('Ingresá un nombre para el cierre.');
+      toast.warning('Ingresá un nombre para el cierre.');
       return;
     }
     const monto = parseFloat(String(formCierre.montoRetirado).replace(',', '.'));
     if (!Number.isFinite(monto) || monto < 0) {
-      alert('Indicá cuánto retirás de la caja (número ≥ 0).');
+      toast.warning('Indicá cuánto retirás de la caja (número ≥ 0).');
       return;
     }
     setGuardandoCierre(true);
@@ -548,12 +550,12 @@ const Caja = () => {
       });
       setShowModalCierre(false);
       await loadStats();
-      alert(
+      toast.success(
         'Caja cerrada. La sesión actual ya quedó abierta: podés seguir cargando movimientos y cerrar de nuevo cuando quieras (incluso varias veces en el día).'
       );
     } catch (err) {
       console.error(err);
-      alert('No se pudo guardar el cierre. Revisá la consola o probá de nuevo.');
+      toast.error('No se pudo guardar el cierre. Revisá la consola o probá de nuevo.');
     } finally {
       setGuardandoCierre(false);
     }

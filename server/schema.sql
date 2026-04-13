@@ -20,6 +20,8 @@ ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_inicio_manana TEXT DEFAULT 
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_fin_manana TEXT DEFAULT '12:00';
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_inicio_tarde TEXT DEFAULT '16:00';
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_fin_tarde TEXT DEFAULT '21:00';
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horas_antes_anotarse_clase INTEGER DEFAULT 0;
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horas_antes_liberar_clase INTEGER DEFAULT 0;
 
 -- Admin (una cuenta para gestionar todas las sucursales)
 CREATE TABLE IF NOT EXISTS admin (

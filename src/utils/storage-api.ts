@@ -182,6 +182,8 @@ export const storageApi = {
       horaFinManana?: string;
       horaInicioTarde?: string;
       horaFinTarde?: string;
+      horasAntesAnotarseClase?: number;
+      horasAntesLiberarClase?: number;
     }): Promise<void> =>
       request('/api/sucursal/horarios', { method: 'PATCH', body: JSON.stringify(data) }),
   },
@@ -208,6 +210,8 @@ export const storageApi = {
         horaFinManana?: string;
         horaInicioTarde?: string;
         horaFinTarde?: string;
+        horasAntesAnotarseClase?: number;
+        horasAntesLiberarClase?: number;
       }
     ): Promise<void> =>
       request(`/api/admin/sucursales/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),

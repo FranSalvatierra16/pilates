@@ -3,6 +3,7 @@ import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, Histo
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
+import { storageApi } from '../utils/storage-api';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal, horaActualInput, formatHora24 } from '../utils/date';
 import { formatCurrency } from '../utils/format';
@@ -79,6 +80,7 @@ const Alumnos = () => {
   const [showModal, setShowModal] = useState(false);
   const [showModalPago, setShowModalPago] = useState(false);
   const [showModalDescripcion, setShowModalDescripcion] = useState(false);
+  const [showModalConfigPortal, setShowModalConfigPortal] = useState(false);
   const [alumnoDescripcion, setAlumnoDescripcion] = useState<Alumno | null>(null);
   const [textoDescripcion, setTextoDescripcion] = useState('');
   const [editingAlumno, setEditingAlumno] = useState<Alumno | null>(null);
@@ -90,6 +92,16 @@ const Alumnos = () => {
   const [historialAsistenciasLoading, setHistorialAsistenciasLoading] = useState(false);
   /** IDs de alumnos que tienen al menos un pago (para no mostrar "Al día" si nunca pagó) */
   const [alumnoIdsConPago, setAlumnoIdsConPago] = useState<Set<string>>(new Set());
+  const [configPortal, setConfigPortal] = useState({
+    horasAntesLiberarClase: 0,
+    horasAntesAnotarseClase: 0,
+  });
+  const [configPortalForm, setConfigPortalForm] = useState({
+    horasAntesLiberarClase: '0',
+    horasAntesAnotarseClase: '0',
+  });
+  const [configPortalSaving, setConfigPortalSaving] = useState(false);
+  const [configPortalError, setConfigPortalError] = useState('');
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
@@ -135,6 +147,10 @@ const Alumnos = () => {
   useEffect(() => {
     loadData();
   }, [mostrarInactivos]);
+
+  useEffect(() => {
+    loadConfigPortal();
+  }, []);
 
   useEffect(() => {
     // Filtrar por búsqueda
@@ -218,6 +234,30 @@ const Alumnos = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadConfigPortal = async () => {
+    try {
+      const data = await storageApi.sucursal.getHorarios();
+      const siguiente = {
+        horasAntesLiberarClase: Math.max(0, Number(data.horasAntesLiberarClase ?? 0)),
+        horasAntesAnotarseClase: Math.max(0, Number(data.horasAntesAnotarseClase ?? 0)),
+      };
+      setConfigPortal(siguiente);
+      setConfigPortalForm({
+        horasAntesLiberarClase: String(siguiente.horasAntesLiberarClase),
+        horasAntesAnotarseClase: String(siguiente.horasAntesAnotarseClase),
+      });
+    } catch {
+      setConfigPortal({
+        horasAntesLiberarClase: 0,
+        horasAntesAnotarseClase: 0,
+      });
+      setConfigPortalForm({
+        horasAntesLiberarClase: '0',
+        horasAntesAnotarseClase: '0',
+      });
     }
   };
 
@@ -502,6 +542,42 @@ const Alumnos = () => {
     }
   };
 
+  const handleOpenModalConfigPortal = () => {
+    setConfigPortalError('');
+    setConfigPortalForm({
+      horasAntesLiberarClase: String(configPortal.horasAntesLiberarClase),
+      horasAntesAnotarseClase: String(configPortal.horasAntesAnotarseClase),
+    });
+    setShowModalConfigPortal(true);
+  };
+
+  const handleGuardarConfigPortal = async () => {
+    const horasAntesLiberarClase = Math.max(0, parseInt(configPortalForm.horasAntesLiberarClase, 10) || 0);
+    const horasAntesAnotarseClase = Math.max(0, parseInt(configPortalForm.horasAntesAnotarseClase, 10) || 0);
+    setConfigPortalSaving(true);
+    setConfigPortalError('');
+    try {
+      await storageApi.sucursal.updateHorarios({
+        horasAntesLiberarClase,
+        horasAntesAnotarseClase,
+      });
+      const siguiente = {
+        horasAntesLiberarClase,
+        horasAntesAnotarseClase,
+      };
+      setConfigPortal(siguiente);
+      setConfigPortalForm({
+        horasAntesLiberarClase: String(horasAntesLiberarClase),
+        horasAntesAnotarseClase: String(horasAntesAnotarseClase),
+      });
+      setShowModalConfigPortal(false);
+    } catch (e) {
+      setConfigPortalError(e instanceof Error ? e.message : 'No se pudo guardar la configuración del portal.');
+    } finally {
+      setConfigPortalSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -546,6 +622,26 @@ const Alumnos = () => {
             <Plus className="w-5 h-5" />
             Nuevo Alumno
           </button>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <div className="card border border-primary-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Configuración de links del portal</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Liberar clase: {configPortal.horasAntesLiberarClase} h antes. Anotarse: {configPortal.horasAntesAnotarseClase} h antes.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenModalConfigPortal}
+              className="btn-secondary min-h-[44px]"
+            >
+              Editar tiempos
+            </button>
+          </div>
         </div>
       </div>
 
@@ -981,6 +1077,81 @@ const Alumnos = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showModalConfigPortal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-gray-900">Configurar links</h2>
+              <button
+                type="button"
+                onClick={() => setShowModalConfigPortal(false)}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
+              <p className="text-sm text-gray-600">
+                Elegí cuántas horas antes del turno se puede liberar una clase o anotarse desde los links generales.
+              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Horas mínimas para liberar una clase
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={configPortalForm.horasAntesLiberarClase}
+                  onChange={(e) => setConfigPortalForm((prev) => ({ ...prev, horasAntesLiberarClase: e.target.value }))}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Horas mínimas para anotarse en una clase
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={configPortalForm.horasAntesAnotarseClase}
+                  onChange={(e) => setConfigPortalForm((prev) => ({ ...prev, horasAntesAnotarseClase: e.target.value }))}
+                  className="input-field"
+                />
+              </div>
+
+              {configPortalError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {configPortalError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModalConfigPortal(false)}
+                  className="btn-secondary"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGuardarConfigPortal}
+                  disabled={configPortalSaving}
+                  className="btn-primary"
+                >
+                  {configPortalSaving ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -14,6 +14,8 @@ export interface Sucursal {
   horaFinManana?: string;
   horaInicioTarde?: string;
   horaFinTarde?: string;
+  horasAntesAnotarseClase?: number;
+  horasAntesLiberarClase?: number;
   createdAt: string;
   cantidadAlumnos: number;
   cantidadActividades: number;
@@ -26,6 +28,8 @@ export interface HorariosSucursal {
   horaFinManana: string;
   horaInicioTarde: string;
   horaFinTarde: string;
+  horasAntesAnotarseClase: number;
+  horasAntesLiberarClase: number;
   manana: string[];
   tarde: string[];
 }

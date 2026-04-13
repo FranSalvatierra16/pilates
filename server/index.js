@@ -474,16 +474,6 @@ app.get('/api/alumnos/:id/asistencias', async (req, res) => {
        LIMIT 200`,
       [sid, alumnoId]
     );
-    const getFechaFromSemanaYDia = (semana, diaSemana) => {
-      const [y, w] = semana.split('-').map(Number);
-      const jan1 = new Date(y, 0, 1);
-      const dayOfJan1 = jan1.getDay();
-      const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
-      const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
-      const d = new Date(mondayWeek1);
-      d.setDate(d.getDate() + (w - 1) * 7 + diaSemana);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    };
     res.json(rows.map((r) => {
       const fecha = getFechaFromSemanaYDia(r.semana, r.dia_semana);
       return {
@@ -1221,7 +1211,10 @@ app.get('/api/sucursal/horarios', async (req, res) => {
     const sid = req.user?.sucursalId;
     if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
     const { rows } = await db.query(
-      'SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde FROM sucursales WHERE id = $1',
+      `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
+              horas_antes_anotarse_clase, horas_antes_liberar_clase
+         FROM sucursales
+        WHERE id = $1`,
       [sid]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Sucursal no encontrada' });
@@ -1233,6 +1226,8 @@ app.get('/api/sucursal/horarios', async (req, res) => {
       horaFinManana: r.hora_fin_manana || '12:00',
       horaInicioTarde: r.hora_inicio_tarde || '16:00',
       horaFinTarde: r.hora_fin_tarde || '21:00',
+      horasAntesAnotarseClase: Math.max(0, Number(r.horas_antes_anotarse_clase ?? 0)),
+      horasAntesLiberarClase: Math.max(0, Number(r.horas_antes_liberar_clase ?? 0)),
       manana,
       tarde,
     });
@@ -1256,6 +1251,14 @@ app.patch('/api/sucursal/horarios', async (req, res) => {
     if (b.horaFinManana !== undefined) { updates.push(`hora_fin_manana = $${i++}`); values.push(b.horaFinManana || '12:00'); }
     if (b.horaInicioTarde !== undefined) { updates.push(`hora_inicio_tarde = $${i++}`); values.push(b.horaInicioTarde || '16:00'); }
     if (b.horaFinTarde !== undefined) { updates.push(`hora_fin_tarde = $${i++}`); values.push(b.horaFinTarde || '21:00'); }
+    if (b.horasAntesAnotarseClase !== undefined) {
+      updates.push(`horas_antes_anotarse_clase = $${i++}`);
+      values.push(Math.max(0, parseInt(b.horasAntesAnotarseClase, 10) || 0));
+    }
+    if (b.horasAntesLiberarClase !== undefined) {
+      updates.push(`horas_antes_liberar_clase = $${i++}`);
+      values.push(Math.max(0, parseInt(b.horasAntesLiberarClase, 10) || 0));
+    }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(sid);
     await db.query(`UPDATE sucursales SET ${updates.join(', ')} WHERE id = $${i}`, values);
@@ -1274,6 +1277,53 @@ function getSemanaActual() {
   const dias = Math.floor((d - inicioAño) / (24 * 60 * 60 * 1000));
   const semana = Math.ceil((dias + inicioAño.getDay() + 1) / 7);
   return `${año}-${String(semana).padStart(2, '0')}`;
+}
+
+function getFechaFromSemanaYDia(semana, diaSemana) {
+  const [y, w] = String(semana || '').split('-').map(Number);
+  if (!y || !w || Number.isNaN(Number(diaSemana))) return '';
+  const jan1 = new Date(y, 0, 1);
+  const dayOfJan1 = jan1.getDay();
+  const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+  const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+  const d = new Date(mondayWeek1);
+  d.setDate(d.getDate() + (w - 1) * 7 + Number(diaSemana));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getFechaHoraTurnoSemana(semana, diaSemana, hora) {
+  const fecha = getFechaFromSemanaYDia(semana, diaSemana);
+  if (!fecha) return null;
+  return new Date(`${fecha}T${normalizarHora(hora)}:00-03:00`);
+}
+
+async function getPortalTimeLimits(db, sucursalId) {
+  const { rows } = await db.query(
+    'SELECT horas_antes_anotarse_clase, horas_antes_liberar_clase FROM sucursales WHERE id = $1',
+    [sucursalId]
+  );
+  const row = rows[0] || {};
+  return {
+    horasAntesAnotarseClase: Math.max(0, Number(row.horas_antes_anotarse_clase ?? 0)),
+    horasAntesLiberarClase: Math.max(0, Number(row.horas_antes_liberar_clase ?? 0)),
+  };
+}
+
+async function validarTiempoPortal(db, sucursalId, { accion, semana, turno }) {
+  const turnoInicio = getFechaHoraTurnoSemana(semana, turno?.dia_semana, turno?.hora);
+  if (!turnoInicio || Number.isNaN(turnoInicio.getTime())) return;
+  const limits = await getPortalTimeLimits(db, sucursalId);
+  const horasLimite = accion === 'liberar'
+    ? limits.horasAntesLiberarClase
+    : limits.horasAntesAnotarseClase;
+  if (!horasLimite || horasLimite <= 0) return;
+  const msRestantes = turnoInicio.getTime() - Date.now();
+  if (msRestantes < horasLimite * 60 * 60 * 1000) {
+    const verbo = accion === 'liberar' ? 'liberar' : 'anotarte';
+    const error = new Error(`Ya no se puede ${verbo} con menos de ${horasLimite} hora${horasLimite === 1 ? '' : 's'} de anticipación.`);
+    error.status = 400;
+    throw error;
+  }
 }
 // Resuelve alumno por token o por dni (+ sucursalId opcional). Retorna { alumno, sucursalId } o error.
 async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
@@ -1509,9 +1559,10 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     });
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
-    const semanaVista = (semana || '').toString().trim() || getSemanaActual();
-    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
+    let semanaVista = (semana || '').toString().trim() || getSemanaActual();
+    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: turnoRows[0] });
     const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [alumno.sucursal_id]);
     const { rows: exist } = await db.query(
       'SELECT id FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3',
@@ -1571,7 +1622,7 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     res.json({ ok: true, recuperacionId: id, usoCredito: usaCredito });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
@@ -1588,18 +1639,30 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
     let turnoIdParaPush = turnoId;
+    let semanaObjetivo = (semanaBody || '').toString().trim() || getSemanaActual();
     let devolvioCredito = false;
     if (recuperacionId) {
-      const { rows: recRow } = await db.query('SELECT turno_id, usa_credito FROM recuperaciones WHERE id = $1 AND alumno_id = $2', [recuperacionId, alumno.id]);
+      const { rows: recRow } = await db.query('SELECT turno_id, usa_credito, semana FROM recuperaciones WHERE id = $1 AND alumno_id = $2', [recuperacionId, alumno.id]);
       if (recRow.length > 0) turnoIdParaPush = recRow[0].turno_id;
       devolvioCredito = !!recRow[0]?.usa_credito;
+      if (recRow.length > 0 && recRow[0].semana) semanaObjetivo = recRow[0].semana;
+      if (turnoIdParaPush) {
+        const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoIdParaPush, alumno.sucursal_id]);
+        if (turnoRows.length > 0) {
+          await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'liberar', semana: semanaObjetivo, turno: turnoRows[0] });
+        }
+      }
       const { rowCount } = await db.query(
         'DELETE FROM recuperaciones WHERE id = $1 AND alumno_id = $2',
         [recuperacionId, alumno.id]
       );
       if (rowCount === 0) return res.status(404).json({ error: 'Recuperación no encontrada' });
     } else if (turnoId) {
-      const semana = (semanaBody || '').toString().trim() || getSemanaActual();
+      const semana = semanaObjetivo;
+      const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
+      if (turnoRows.length > 0) {
+        await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'liberar', semana, turno: turnoRows[0] });
+      }
       const { rows: recRows } = await db.query(
         'SELECT id, usa_credito FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3',
         [alumno.id, turnoId, semana]
@@ -1641,7 +1704,7 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
@@ -1658,13 +1721,14 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
     });
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
-    const semanaVista = (semana || '').toString().trim() || getSemanaActual();
+    let semanaVista = (semana || '').toString().trim() || getSemanaActual();
     const { rows: turnoRows } = await db.query(
-      'SELECT id, alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2',
+      'SELECT id, alumno_ids, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2',
       [turnoId, alumno.sucursal_id]
     );
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const t = turnoRows[0];
+    await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'liberar', semana: semanaVista, turno: t });
     const ids = t.alumno_ids || [];
     if (!ids.includes(alumno.id)) return res.status(400).json({ error: 'Esta no es una clase fija tuya.' });
     const { rows: insRows } = await db.query(
@@ -1691,7 +1755,7 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
     res.json({ ok: true, liberacionId: id });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
@@ -1707,7 +1771,7 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
     });
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
-    const semanaVista = (semana || '').toString().trim() || getSemanaActual();
+    let semanaVista = (semana || '').toString().trim() || getSemanaActual();
     const turnoIdTarget = (turnoId || '').toString().trim();
     const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [alumno.sucursal_id]);
     const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
@@ -1717,16 +1781,17 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
     let turnoIdRestaurado = '';
     if (liberacionId) {
       const { rows: libRow } = await db.query(
-        'SELECT turno_id FROM liberaciones_semana WHERE id = $1 AND alumno_id = $2',
+        'SELECT turno_id, semana FROM liberaciones_semana WHERE id = $1 AND alumno_id = $2',
         [liberacionId, alumno.id]
       );
       if (libRow.length === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
       turnoIdRestaurado = libRow[0].turno_id;
+      if (libRow[0].semana) semanaVista = libRow[0].semana;
       if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
         return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
       }
       const { rows: turnoRows } = await db.query(
-        `SELECT t.id, t.alumno_ids, t.cupo,
+        `SELECT t.id, t.alumno_ids, t.cupo, t.dia_semana, t.hora,
                 COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,
                 COALESCE((SELECT COUNT(*)::int FROM liberaciones_semana l WHERE l.turno_id = t.id AND l.semana = $2), 0) AS libs
            FROM turnos t
@@ -1735,6 +1800,7 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
       );
       if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
       const t = turnoRows[0];
+      await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: t });
       const ocupacionActual = Math.max(0, (t.alumno_ids || []).length - Number(t.libs || 0) + Number(t.recs || 0));
       if (ocupacionActual >= Number(t.cupo ?? 6)) {
         return res.status(400).json({ error: 'No se puede volver a tomar la clase porque ya no hay cupo.' });
@@ -1749,7 +1815,7 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
         return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
       }
       const { rows: turnoRows } = await db.query(
-        `SELECT t.id, t.alumno_ids, t.cupo,
+        `SELECT t.id, t.alumno_ids, t.cupo, t.dia_semana, t.hora,
                 COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,
                 COALESCE((SELECT COUNT(*)::int FROM liberaciones_semana l WHERE l.turno_id = t.id AND l.semana = $2), 0) AS libs
            FROM turnos t
@@ -1758,6 +1824,7 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
       );
       if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
       const t = turnoRows[0];
+      await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: t });
       const ocupacionActual = Math.max(0, (t.alumno_ids || []).length - Number(t.libs || 0) + Number(t.recs || 0));
       if (ocupacionActual >= Number(t.cupo ?? 6)) {
         return res.status(400).json({ error: 'No se puede volver a tomar la clase porque ya no hay cupo.' });
@@ -1779,7 +1846,7 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
@@ -1797,9 +1864,10 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
     const semanaActual = getSemanaActual();
-    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
+    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const t = turnoRows[0];
+    await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaActual, turno: t });
     const ids = t.alumno_ids || [];
     const cupo = t.cupo != null ? Number(t.cupo) : 6;
     if (ids.includes(alumno.id)) return res.json({ ok: true, message: 'Ya estabas inscripto' });
@@ -1837,7 +1905,7 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
@@ -1854,8 +1922,9 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
     });
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
-    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
+    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'liberar', semana: getSemanaActual(), turno: turnoRows[0] });
     const ids = (turnoRows[0].alumno_ids || []).filter((id) => id !== alumno.id);
     await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [ids, turnoId, alumno.sucursal_id]);
     await db.query(
@@ -1878,7 +1947,7 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: e.message });
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
@@ -2424,7 +2493,8 @@ app.get('/api/admin/sucursales', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query(
       `SELECT s.id, s.nombre_lugar, s.usuario, s.foto_perfil, s.pago_mensual, s.fecha_vencimiento_cuenta, s.activa,
-        s.hora_inicio_manana, s.hora_fin_manana, s.hora_inicio_tarde, s.hora_fin_tarde, s.created_at,
+        s.hora_inicio_manana, s.hora_fin_manana, s.hora_inicio_tarde, s.hora_fin_tarde,
+        s.horas_antes_anotarse_clase, s.horas_antes_liberar_clase, s.created_at,
         (SELECT COUNT(*) FROM alumnos a WHERE a.sucursal_id = s.id) AS cantidad_alumnos,
         (SELECT COUNT(*) FROM actividades ac WHERE ac.sucursal_id = s.id) AS cantidad_actividades,
         (SELECT COUNT(*) FROM profesores p WHERE p.sucursal_id = s.id) AS cantidad_profesores
@@ -2442,6 +2512,8 @@ app.get('/api/admin/sucursales', async (req, res) => {
       horaFinManana: r.hora_fin_manana || '12:00',
       horaInicioTarde: r.hora_inicio_tarde || '16:00',
       horaFinTarde: r.hora_fin_tarde || '21:00',
+      horasAntesAnotarseClase: Math.max(0, Number(r.horas_antes_anotarse_clase ?? 0)),
+      horasAntesLiberarClase: Math.max(0, Number(r.horas_antes_liberar_clase ?? 0)),
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
       cantidadAlumnos: Number(r.cantidad_alumnos ?? 0),
       cantidadActividades: Number(r.cantidad_actividades ?? 0),
@@ -2503,6 +2575,8 @@ app.patch('/api/admin/sucursales/:id', async (req, res) => {
     if (b.horaFinManana !== undefined) { updates.push(`hora_fin_manana = $${i++}`); values.push(b.horaFinManana || '12:00'); }
     if (b.horaInicioTarde !== undefined) { updates.push(`hora_inicio_tarde = $${i++}`); values.push(b.horaInicioTarde || '16:00'); }
     if (b.horaFinTarde !== undefined) { updates.push(`hora_fin_tarde = $${i++}`); values.push(b.horaFinTarde || '21:00'); }
+    if (b.horasAntesAnotarseClase !== undefined) { updates.push(`horas_antes_anotarse_clase = $${i++}`); values.push(Math.max(0, parseInt(b.horasAntesAnotarseClase, 10) || 0)); }
+    if (b.horasAntesLiberarClase !== undefined) { updates.push(`horas_antes_liberar_clase = $${i++}`); values.push(Math.max(0, parseInt(b.horasAntesLiberarClase, 10) || 0)); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id);
     await db.query(`UPDATE sucursales SET ${updates.join(', ')} WHERE id = $${i}`, values);

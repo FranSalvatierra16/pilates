@@ -115,7 +115,7 @@ const Calendario = () => {
   const [horariosSaved, setHorariosSaved] = useState(false);
   const [cupoGlobal, setCupoGlobal] = useState(CUPO_DEFAULT);
   const [formCompartirDisponibles, setFormCompartirDisponibles] = useState({
-    diasSeleccionados: [0, 1, 2, 3, 4, 5],
+    diasSeleccionados: [] as number[],
     horaDesde: '',
     horaHasta: '',
   });
@@ -291,7 +291,7 @@ const Calendario = () => {
 
   const abrirModalCompartirDisponibles = () => {
     setFormCompartirDisponibles({
-      diasSeleccionados: diasSemana,
+      diasSeleccionados: [],
       horaDesde: '',
       horaHasta: '',
     });
@@ -362,7 +362,7 @@ const Calendario = () => {
       });
 
       const mensaje = lineasPorDia.length > 0
-        ? [encabezado, '', ...cuerpo, 'Escribime si querés reservar alguno.'].join('\n').trim()
+        ? [encabezado, '', ...cuerpo].join('\n').trim()
         : `${encabezado}\n\nNo hay turnos con lugares disponibles en esos días y horarios.`;
 
       setMensajeDisponibles(mensaje);
@@ -1810,13 +1810,22 @@ const Calendario = () => {
               <div>
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <label className="block text-sm font-medium text-gray-700">Días</label>
-                  <button
-                    type="button"
-                    onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, diasSeleccionados: diasSemana }))}
-                    className="text-sm text-primary-600 hover:underline"
-                  >
-                    Todos los días
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, diasSeleccionados: diasSemana }))}
+                      className="text-sm text-primary-600 hover:underline"
+                    >
+                      Todos los días
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, diasSeleccionados: [] }))}
+                      className="text-sm text-gray-500 hover:underline"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {diasSemana.map((dia) => {

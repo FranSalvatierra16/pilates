@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
-import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia } from '../utils/date';
+import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia, parseFechaLocal } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 
 // Horarios por defecto (modo local); en API se cargan desde la sucursal
@@ -104,6 +104,7 @@ const Calendario = () => {
     destacado: false,
   });
   const [showModalAumentarCupo, setShowModalAumentarCupo] = useState(false);
+  const [showModalCompartirDisponibles, setShowModalCompartirDisponibles] = useState(false);
   const [showModalHorarios, setShowModalHorarios] = useState(false);
   const [horaInicioManana, setHoraInicioManana] = useState('07:00');
   const [horaFinManana, setHoraFinManana] = useState('12:00');
@@ -113,6 +114,14 @@ const Calendario = () => {
   const [horariosError, setHorariosError] = useState('');
   const [horariosSaved, setHorariosSaved] = useState(false);
   const [cupoGlobal, setCupoGlobal] = useState(CUPO_DEFAULT);
+  const [formCompartirDisponibles, setFormCompartirDisponibles] = useState({
+    fechaDesde: '',
+    fechaHasta: '',
+    horaDesde: '',
+    horaHasta: '',
+  });
+  const [mensajeDisponibles, setMensajeDisponibles] = useState('');
+  const [generandoDisponibles, setGenerandoDisponibles] = useState(false);
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
@@ -234,6 +243,10 @@ const Calendario = () => {
   const labelTardeShort = horariosTarde.length
     ? `${parseInt(horariosTarde[0].split(':')[0], 10)}–${parseInt(horariosTarde[horariosTarde.length - 1].split(':')[0], 10)}h`
     : '16–21h';
+  const todasLasHoras = useMemo(
+    () => Array.from(new Set([...horariosManana, ...horariosTarde])).sort((a, b) => a.localeCompare(b)),
+    [horariosManana, horariosTarde]
+  );
 
   const getTurnoDelDia = (diaSemana: number, hora: string): Turno | undefined => {
     return turnos.find(t => t.diaSemana === diaSemana && t.hora === hora);
@@ -275,6 +288,125 @@ const Calendario = () => {
     }).length;
     const clasesRecuperacion = recuperaciones.filter((r) => r.alumnoId === alumnoId && r.semana === semanaVista).length;
     return clasesFijas + clasesRecuperacion;
+  };
+
+  const abrirModalCompartirDisponibles = () => {
+    setFormCompartirDisponibles({
+      fechaDesde: getFechaFromSemanaYDia(semanaVista, 0),
+      fechaHasta: getFechaFromSemanaYDia(semanaVista, 5),
+      horaDesde: '',
+      horaHasta: '',
+    });
+    setMensajeDisponibles('');
+    setShowModalCompartirDisponibles(true);
+  };
+
+  const generarMensajeTurnosDisponibles = async () => {
+    const { fechaDesde, fechaHasta, horaDesde, horaHasta } = formCompartirDisponibles;
+    if (!fechaDesde || !fechaHasta) {
+      toast.warning('Elegí un rango de fechas para generar el mensaje.');
+      return;
+    }
+    if (fechaHasta < fechaDesde) {
+      toast.warning('La fecha hasta no puede ser anterior a la fecha desde.');
+      return;
+    }
+    if (horaDesde && horaHasta && horaHasta < horaDesde) {
+      toast.warning('La hora hasta no puede ser anterior a la hora desde.');
+      return;
+    }
+
+    setGenerandoDisponibles(true);
+    try {
+      const desde = parseFechaLocal(fechaDesde);
+      const hasta = parseFechaLocal(fechaHasta);
+      const fechas: Date[] = [];
+      const cursor = new Date(desde);
+      while (cursor <= hasta) {
+        fechas.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      const fechasHabiles = fechas.filter((fecha) => fecha.getDay() !== 0);
+      const semanas = Array.from(new Set(fechasHabiles.map((fecha) => getSemanaFromDate(fecha))));
+      const recuperacionesPorSemana = new Map<string, Recuperacion[]>();
+      await Promise.all(
+        semanas.map(async (semana) => {
+          try {
+            recuperacionesPorSemana.set(semana, await storageHybrid.recuperaciones.getBySemana(semana));
+          } catch {
+            recuperacionesPorSemana.set(semana, []);
+          }
+        })
+      );
+
+      const lineasPorFecha = fechasHabiles.map((fecha) => {
+        const diaSemana = fecha.getDay() - 1;
+        const semana = getSemanaFromDate(fecha);
+        const recuperacionesSemana = recuperacionesPorSemana.get(semana) || [];
+        const turnosDelDia = turnos
+          .filter((turno) => turno.diaSemana === diaSemana)
+          .filter((turno) => !horaDesde || turno.hora >= horaDesde)
+          .filter((turno) => !horaHasta || turno.hora <= horaHasta)
+          .sort((a, b) => a.hora.localeCompare(b.hora))
+          .map((turno) => {
+            const regulares = turno.alumnoIds.filter((id) => {
+              const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === id);
+              return !ins || ins.semanaDesde <= semana;
+            }).length;
+            const recuperos = recuperacionesSemana.filter((r) => r.turnoId === turno.id).length;
+            const cupo = turno.cupo ?? CUPO_DEFAULT;
+            const disponibles = Math.max(0, cupo - regulares - recuperos);
+            return {
+              hora: turno.hora,
+              titulo: turno.titulo?.trim() || 'Clase',
+              disponibles,
+            };
+          })
+          .filter((turno) => turno.disponibles > 0);
+
+        return {
+          fecha,
+          turnos: turnosDelDia,
+        };
+      }).filter((item) => item.turnos.length > 0);
+
+      const encabezado = `Turnos disponibles del ${formatDate(fechaDesde)} al ${formatDate(fechaHasta)}${horaDesde || horaHasta ? ` (${horaDesde || '00:00'} a ${horaHasta || '23:59'})` : ''}:`;
+      const cuerpo = lineasPorFecha.flatMap(({ fecha, turnos }) => {
+        const tituloFecha = `${DIAS_SEMANA[fecha.getDay() - 1]} ${formatDate(fecha.toISOString().slice(0, 10))}`;
+        const detalleTurnos = turnos.map((turno) => `- ${turno.hora} | ${turno.titulo} | ${turno.disponibles} ${turno.disponibles === 1 ? 'lugar' : 'lugares'}`);
+        return [tituloFecha, ...detalleTurnos, ''];
+      });
+
+      const mensaje = lineasPorFecha.length > 0
+        ? [encabezado, '', ...cuerpo, 'Escribime si querés reservar alguno.'].join('\n').trim()
+        : `${encabezado}\n\nNo hay turnos con lugares disponibles en ese rango.`;
+
+      setMensajeDisponibles(mensaje);
+    } finally {
+      setGenerandoDisponibles(false);
+    }
+  };
+
+  const copiarMensajeDisponibles = async () => {
+    if (!mensajeDisponibles.trim()) {
+      toast.warning('Primero generá el mensaje.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(mensajeDisponibles);
+      toast.success('Mensaje copiado.');
+    } catch {
+      toast.error('No se pudo copiar el mensaje.');
+    }
+  };
+
+  const abrirWhatsAppDisponibles = () => {
+    if (!mensajeDisponibles.trim()) {
+      toast.warning('Primero generá el mensaje.');
+      return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(mensajeDisponibles)}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleAgregarAlumno = (diaSemana: number, hora: string) => {
@@ -861,6 +993,15 @@ const Calendario = () => {
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={abrirModalCompartirDisponibles}
+            className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
+            title="Compartir turnos disponibles por WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Compartir disponibles
+          </button>
           <button
             type="button"
             onClick={() => setShowModalHorarios(true)}
@@ -1659,6 +1800,112 @@ const Calendario = () => {
               <button type="button" onClick={handleAumentarCupo} className="btn-primary">
                 Aplicar a todas las clases
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModalCompartirDisponibles && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Compartir turnos disponibles</h2>
+                <p className="text-sm text-gray-600 mt-1">Elegí fechas y horario para armar un mensaje listo para WhatsApp.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModalCompartirDisponibles(false)}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Fecha desde</label>
+                  <input
+                    type="date"
+                    value={formCompartirDisponibles.fechaDesde}
+                    onChange={(e) => setFormCompartirDisponibles((prev) => ({ ...prev, fechaDesde: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Fecha hasta</label>
+                  <input
+                    type="date"
+                    value={formCompartirDisponibles.fechaHasta}
+                    onChange={(e) => setFormCompartirDisponibles((prev) => ({ ...prev, fechaHasta: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Hora desde</label>
+                  <select
+                    value={formCompartirDisponibles.horaDesde}
+                    onChange={(e) => setFormCompartirDisponibles((prev) => ({ ...prev, horaDesde: e.target.value }))}
+                    className="input-field"
+                  >
+                    <option value="">Cualquier hora</option>
+                    {todasLasHoras.map((hora) => (
+                      <option key={hora} value={hora}>{hora}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Hora hasta</label>
+                  <select
+                    value={formCompartirDisponibles.horaHasta}
+                    onChange={(e) => setFormCompartirDisponibles((prev) => ({ ...prev, horaHasta: e.target.value }))}
+                    className="input-field"
+                  >
+                    <option value="">Cualquier hora</option>
+                    {todasLasHoras.map((hora) => (
+                      <option key={hora} value={hora}>{hora}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={generarMensajeTurnosDisponibles}
+                  disabled={generandoDisponibles}
+                  className="btn-primary min-h-[44px]"
+                >
+                  {generandoDisponibles ? 'Generando...' : 'Generar mensaje'}
+                </button>
+                <button
+                  type="button"
+                  onClick={copiarMensajeDisponibles}
+                  className="btn-secondary min-h-[44px]"
+                >
+                  Copiar mensaje
+                </button>
+                <button
+                  type="button"
+                  onClick={abrirWhatsAppDisponibles}
+                  className="btn-secondary min-h-[44px]"
+                >
+                  Abrir WhatsApp
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Vista previa</label>
+                <textarea
+                  value={mensajeDisponibles}
+                  readOnly
+                  rows={12}
+                  className="input-field min-h-[260px] resize-y"
+                  placeholder="Acá va a aparecer el mensaje para compartir."
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -4,7 +4,7 @@ import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistenc
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
-import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia, parseFechaLocal } from '../utils/date';
+import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 
 // Horarios por defecto (modo local); en API se cargan desde la sucursal
@@ -115,8 +115,7 @@ const Calendario = () => {
   const [horariosSaved, setHorariosSaved] = useState(false);
   const [cupoGlobal, setCupoGlobal] = useState(CUPO_DEFAULT);
   const [formCompartirDisponibles, setFormCompartirDisponibles] = useState({
-    fechaDesde: '',
-    fechaHasta: '',
+    diasSeleccionados: [0, 1, 2, 3, 4, 5],
     horaDesde: '',
     horaHasta: '',
   });
@@ -292,8 +291,7 @@ const Calendario = () => {
 
   const abrirModalCompartirDisponibles = () => {
     setFormCompartirDisponibles({
-      fechaDesde: getFechaFromSemanaYDia(semanaVista, 0),
-      fechaHasta: getFechaFromSemanaYDia(semanaVista, 5),
+      diasSeleccionados: diasSemana,
       horaDesde: '',
       horaHasta: '',
     });
@@ -301,14 +299,22 @@ const Calendario = () => {
     setShowModalCompartirDisponibles(true);
   };
 
+  const toggleDiaCompartir = (dia: number) => {
+    setFormCompartirDisponibles((prev) => {
+      const yaEsta = prev.diasSeleccionados.includes(dia);
+      return {
+        ...prev,
+        diasSeleccionados: yaEsta
+          ? prev.diasSeleccionados.filter((d) => d !== dia)
+          : [...prev.diasSeleccionados, dia].sort((a, b) => a - b),
+      };
+    });
+  };
+
   const generarMensajeTurnosDisponibles = async () => {
-    const { fechaDesde, fechaHasta, horaDesde, horaHasta } = formCompartirDisponibles;
-    if (!fechaDesde || !fechaHasta) {
-      toast.warning('Elegí un rango de fechas para generar el mensaje.');
-      return;
-    }
-    if (fechaHasta < fechaDesde) {
-      toast.warning('La fecha hasta no puede ser anterior a la fecha desde.');
+    const { diasSeleccionados, horaDesde, horaHasta } = formCompartirDisponibles;
+    if (diasSeleccionados.length === 0) {
+      toast.warning('Elegí al menos un día para generar el mensaje.');
       return;
     }
     if (horaDesde && horaHasta && horaHasta < horaDesde) {
@@ -318,32 +324,7 @@ const Calendario = () => {
 
     setGenerandoDisponibles(true);
     try {
-      const desde = parseFechaLocal(fechaDesde);
-      const hasta = parseFechaLocal(fechaHasta);
-      const fechas: Date[] = [];
-      const cursor = new Date(desde);
-      while (cursor <= hasta) {
-        fechas.push(new Date(cursor));
-        cursor.setDate(cursor.getDate() + 1);
-      }
-
-      const fechasHabiles = fechas.filter((fecha) => fecha.getDay() !== 0);
-      const semanas = Array.from(new Set(fechasHabiles.map((fecha) => getSemanaFromDate(fecha))));
-      const recuperacionesPorSemana = new Map<string, Recuperacion[]>();
-      await Promise.all(
-        semanas.map(async (semana) => {
-          try {
-            recuperacionesPorSemana.set(semana, await storageHybrid.recuperaciones.getBySemana(semana));
-          } catch {
-            recuperacionesPorSemana.set(semana, []);
-          }
-        })
-      );
-
-      const lineasPorFecha = fechasHabiles.map((fecha) => {
-        const diaSemana = fecha.getDay() - 1;
-        const semana = getSemanaFromDate(fecha);
-        const recuperacionesSemana = recuperacionesPorSemana.get(semana) || [];
+      const lineasPorDia = diasSeleccionados.map((diaSemana) => {
         const turnosDelDia = turnos
           .filter((turno) => turno.diaSemana === diaSemana)
           .filter((turno) => !horaDesde || turno.hora >= horaDesde)
@@ -352,11 +333,10 @@ const Calendario = () => {
           .map((turno) => {
             const regulares = turno.alumnoIds.filter((id) => {
               const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === id);
-              return !ins || ins.semanaDesde <= semana;
+              return !ins || ins.semanaDesde <= semanaVista;
             }).length;
-            const recuperos = recuperacionesSemana.filter((r) => r.turnoId === turno.id).length;
             const cupo = turno.cupo ?? CUPO_DEFAULT;
-            const disponibles = Math.max(0, cupo - regulares - recuperos);
+            const disponibles = Math.max(0, cupo - regulares);
             return {
               hora: turno.hora,
               titulo: turno.titulo?.trim() || 'Clase',
@@ -366,21 +346,24 @@ const Calendario = () => {
           .filter((turno) => turno.disponibles > 0);
 
         return {
-          fecha,
+          diaSemana,
           turnos: turnosDelDia,
         };
       }).filter((item) => item.turnos.length > 0);
 
-      const encabezado = `Turnos disponibles del ${formatDate(fechaDesde)} al ${formatDate(fechaHasta)}${horaDesde || horaHasta ? ` (${horaDesde || '00:00'} a ${horaHasta || '23:59'})` : ''}:`;
-      const cuerpo = lineasPorFecha.flatMap(({ fecha, turnos }) => {
-        const tituloFecha = `${DIAS_SEMANA[fecha.getDay() - 1]} ${formatDate(fecha.toISOString().slice(0, 10))}`;
+      const descripcionDias = diasSeleccionados.length === diasSemana.length
+        ? 'todos los días'
+        : diasSeleccionados.map((dia) => DIAS_SEMANA[dia]).join(', ');
+      const encabezado = `Turnos disponibles ${horaDesde || horaHasta ? `(${horaDesde || '00:00'} a ${horaHasta || '23:59'}) ` : ''}para ${descripcionDias}:`;
+      const cuerpo = lineasPorDia.flatMap(({ diaSemana, turnos }) => {
+        const tituloFecha = `${DIAS_SEMANA[diaSemana]}`;
         const detalleTurnos = turnos.map((turno) => `- ${turno.hora} | ${turno.titulo} | ${turno.disponibles} ${turno.disponibles === 1 ? 'lugar' : 'lugares'}`);
         return [tituloFecha, ...detalleTurnos, ''];
       });
 
-      const mensaje = lineasPorFecha.length > 0
+      const mensaje = lineasPorDia.length > 0
         ? [encabezado, '', ...cuerpo, 'Escribime si querés reservar alguno.'].join('\n').trim()
-        : `${encabezado}\n\nNo hay turnos con lugares disponibles en ese rango.`;
+        : `${encabezado}\n\nNo hay turnos con lugares disponibles en esos días y horarios.`;
 
       setMensajeDisponibles(mensaje);
     } finally {
@@ -1811,7 +1794,7 @@ const Calendario = () => {
             <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Compartir turnos disponibles</h2>
-                <p className="text-sm text-gray-600 mt-1">Elegí fechas y horario para armar un mensaje listo para WhatsApp.</p>
+                <p className="text-sm text-gray-600 mt-1">Elegí días y horario para armar un mensaje listo para WhatsApp.</p>
               </div>
               <button
                 type="button"
@@ -1824,25 +1807,39 @@ const Calendario = () => {
             </div>
 
             <div className="p-4 sm:p-6 space-y-4">
+              <div>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Días</label>
+                  <button
+                    type="button"
+                    onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, diasSeleccionados: diasSemana }))}
+                    className="text-sm text-primary-600 hover:underline"
+                  >
+                    Todos los días
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {diasSemana.map((dia) => {
+                    const activo = formCompartirDisponibles.diasSeleccionados.includes(dia);
+                    return (
+                      <button
+                        key={dia}
+                        type="button"
+                        onClick={() => toggleDiaCompartir(dia)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                          activo
+                            ? 'bg-primary-600 text-white border-primary-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
+                        }`}
+                      >
+                        {DIAS_SEMANA[dia]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Fecha desde</label>
-                  <input
-                    type="date"
-                    value={formCompartirDisponibles.fechaDesde}
-                    onChange={(e) => setFormCompartirDisponibles((prev) => ({ ...prev, fechaDesde: e.target.value }))}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Fecha hasta</label>
-                  <input
-                    type="date"
-                    value={formCompartirDisponibles.fechaHasta}
-                    onChange={(e) => setFormCompartirDisponibles((prev) => ({ ...prev, fechaHasta: e.target.value }))}
-                    className="input-field"
-                  />
-                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Hora desde</label>
                   <select

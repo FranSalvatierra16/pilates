@@ -118,7 +118,7 @@ const Calendario = () => {
     diasSeleccionados: [] as number[],
     horaDesde: '',
     horaHasta: '',
-    incluirSinLugares: false,
+    mostrarLugares: true,
   });
   const [mensajeDisponibles, setMensajeDisponibles] = useState('');
   const [generandoDisponibles, setGenerandoDisponibles] = useState(false);
@@ -295,7 +295,7 @@ const Calendario = () => {
       diasSeleccionados: [],
       horaDesde: '',
       horaHasta: '',
-      incluirSinLugares: false,
+      mostrarLugares: true,
     });
     setMensajeDisponibles('');
     setShowModalCompartirDisponibles(true);
@@ -314,7 +314,7 @@ const Calendario = () => {
   };
 
   const generarMensajeTurnosDisponibles = async () => {
-    const { diasSeleccionados, horaDesde, horaHasta, incluirSinLugares } = formCompartirDisponibles;
+    const { diasSeleccionados, horaDesde, horaHasta, mostrarLugares } = formCompartirDisponibles;
     if (diasSeleccionados.length === 0) {
       toast.warning('Elegí al menos un día para generar el mensaje.');
       return;
@@ -345,7 +345,7 @@ const Calendario = () => {
               disponibles,
             };
           })
-          .filter((turno) => incluirSinLugares || turno.disponibles > 0);
+          .filter((turno) => turno.disponibles > 0);
 
         return {
           diaSemana,
@@ -359,7 +359,11 @@ const Calendario = () => {
       const encabezado = `Turnos disponibles ${horaDesde || horaHasta ? `(${horaDesde || '00:00'} a ${horaHasta || '23:59'}) ` : ''}para ${descripcionDias}:`;
       const cuerpo = lineasPorDia.flatMap(({ diaSemana, turnos }) => {
         const tituloFecha = `${DIAS_SEMANA[diaSemana]}`;
-        const detalleTurnos = turnos.map((turno) => `- ${turno.hora} | ${turno.titulo} | ${turno.disponibles} ${turno.disponibles === 1 ? 'lugar' : 'lugares'}`);
+        const detalleTurnos = turnos.map((turno) =>
+          mostrarLugares
+            ? `- ${turno.hora} | ${turno.titulo} | ${turno.disponibles} ${turno.disponibles === 1 ? 'lugar' : 'lugares'}`
+            : `- ${turno.hora} | ${turno.titulo}`
+        );
         return [tituloFecha, ...detalleTurnos, ''];
       });
 
@@ -1884,25 +1888,25 @@ const Calendario = () => {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, incluirSinLugares: false }))}
+                    onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, mostrarLugares: true }))}
                     className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                      !formCompartirDisponibles.incluirSinLugares
+                      formCompartirDisponibles.mostrarLugares
                         ? 'bg-primary-600 text-white border-primary-600'
                         : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
                     }`}
                   >
-                    Solo con lugares
+                    Con lugares
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, incluirSinLugares: true }))}
+                    onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, mostrarLugares: false }))}
                     className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                      formCompartirDisponibles.incluirSinLugares
+                      !formCompartirDisponibles.mostrarLugares
                         ? 'bg-primary-600 text-white border-primary-600'
                         : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
                     }`}
                   >
-                    Con y sin lugares
+                    Sin lugares
                   </button>
                 </div>
               </div>

@@ -118,6 +118,7 @@ const Calendario = () => {
     diasSeleccionados: [] as number[],
     horaDesde: '',
     horaHasta: '',
+    incluirSinLugares: false,
   });
   const [mensajeDisponibles, setMensajeDisponibles] = useState('');
   const [generandoDisponibles, setGenerandoDisponibles] = useState(false);
@@ -294,6 +295,7 @@ const Calendario = () => {
       diasSeleccionados: [],
       horaDesde: '',
       horaHasta: '',
+      incluirSinLugares: false,
     });
     setMensajeDisponibles('');
     setShowModalCompartirDisponibles(true);
@@ -312,7 +314,7 @@ const Calendario = () => {
   };
 
   const generarMensajeTurnosDisponibles = async () => {
-    const { diasSeleccionados, horaDesde, horaHasta } = formCompartirDisponibles;
+    const { diasSeleccionados, horaDesde, horaHasta, incluirSinLugares } = formCompartirDisponibles;
     if (diasSeleccionados.length === 0) {
       toast.warning('Elegí al menos un día para generar el mensaje.');
       return;
@@ -343,7 +345,7 @@ const Calendario = () => {
               disponibles,
             };
           })
-          .filter((turno) => turno.disponibles > 0);
+          .filter((turno) => incluirSinLugares || turno.disponibles > 0);
 
         return {
           diaSemana,
@@ -1874,6 +1876,34 @@ const Calendario = () => {
                       <option key={hora} value={hora}>{hora}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Mostrar en el mensaje</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, incluirSinLugares: false }))}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      !formCompartirDisponibles.incluirSinLugares
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
+                    }`}
+                  >
+                    Solo con lugares
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormCompartirDisponibles((prev) => ({ ...prev, incluirSinLugares: true }))}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      formCompartirDisponibles.incluirSinLugares
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
+                    }`}
+                  >
+                    Con y sin lugares
+                  </button>
                 </div>
               </div>
 

@@ -327,18 +327,15 @@ const Calendario = () => {
     setGenerandoDisponibles(true);
     try {
       const lineasPorDia = diasSeleccionados.map((diaSemana) => {
-        const turnosDelDia = turnos
-          .filter((turno) => turno.diaSemana === diaSemana)
-          .filter((turno) => !horaDesde || turno.hora >= horaDesde)
-          .filter((turno) => !horaHasta || turno.hora <= horaHasta)
-          .sort((a, b) => a.hora.localeCompare(b.hora))
+        const turnosDelDia = todasLasHoras
+          .filter((hora) => !horaDesde || hora >= horaDesde)
+          .filter((hora) => !horaHasta || hora <= horaHasta)
+          .map((hora) => getTurnoDelDia(diaSemana, hora))
+          .filter((turno): turno is Turno => turno !== undefined)
           .map((turno) => {
-            const regulares = turno.alumnoIds.filter((id) => {
-              const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === id);
-              return !ins || ins.semanaDesde <= semanaVista;
-            }).length;
+            const alumnasFijasVisibles = getAlumnosDelTurno(turno).filter((item) => !item.isRecuperacion).length;
             const cupo = turno.cupo ?? CUPO_DEFAULT;
-            const disponibles = Math.max(0, cupo - regulares);
+            const disponibles = Math.max(0, cupo - alumnasFijasVisibles);
             return {
               hora: turno.hora,
               titulo: turno.titulo?.trim() || 'Clase',
@@ -753,29 +750,37 @@ const Calendario = () => {
     };
   }, [showPopupAlumno]);
 
-  const getEstadoAsistencia = (turnoId: string, alumnoId: string): 'asistio' | 'no_asistio' | null => {
-    const asistencia = asistencias.find(
-      a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaVista
+  const getAsistenciaSemana = (turnoId: string, alumnoId: string): Asistencia | undefined => {
+    return asistencias.find(
+      (a) => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaVista
     );
-    return asistencia?.estado || null;
+  };
+
+  const getEstadoAsistencia = (turnoId: string, alumnoId: string): 'asistio' | 'no_asistio' | null => {
+    return getAsistenciaSemana(turnoId, alumnoId)?.estado || null;
   };
 
   const handleMarcarAsistencia = async (turnoId: string, alumnoId: string, estado: 'asistio' | 'no_asistio') => {
-    const asistenciaExistente = asistencias.find(
-      a => a.turnoId === turnoId && a.alumnoId === alumnoId && a.semana === semanaVista
-    );
+    const asistenciaExistente = getAsistenciaSemana(turnoId, alumnoId);
     const siguienteEstado = asistenciaExistente
       ? (asistenciaExistente.estado === estado ? null : estado)
       : estado;
     const alumno = alumnos.find((a) => a.id === alumnoId);
     const eraNoAsistio = asistenciaExistente?.estado === 'no_asistio';
     const seraNoAsistio = siguienteEstado === 'no_asistio';
+    const teniaCreditoOtorgado = asistenciaExistente?.creditoOtorgado === true;
 
     if (asistenciaExistente) {
       if (asistenciaExistente.estado === estado) {
-        await storageHybrid.asistencias.update(asistenciaExistente.id, { estado: null });
+        await storageHybrid.asistencias.update(asistenciaExistente.id, {
+          estado: null,
+          creditoOtorgado: false,
+        });
       } else {
-        await storageHybrid.asistencias.update(asistenciaExistente.id, { estado });
+        await storageHybrid.asistencias.update(asistenciaExistente.id, {
+          estado,
+          creditoOtorgado: false,
+        });
       }
     } else {
       const nuevaAsistencia: Asistencia = {
@@ -783,22 +788,56 @@ const Calendario = () => {
         turnoId,
         alumnoId,
         estado,
+        creditoOtorgado: false,
         semana: semanaVista,
         createdAt: new Date().toISOString(),
       };
       await storageHybrid.asistencias.add(nuevaAsistencia);
     }
 
-    if (alumno && eraNoAsistio !== seraNoAsistio) {
-      const delta = seraNoAsistio ? 1 : -1;
+    if (alumno && eraNoAsistio && !seraNoAsistio && teniaCreditoOtorgado) {
       await storageHybrid.alumnos.update(alumnoId, {
-        clasesParaRecuperar: Math.max(0, (alumno.clasesParaRecuperar || 0) + delta),
+        clasesParaRecuperar: Math.max(0, (alumno.clasesParaRecuperar || 0) - 1),
       });
       await loadAlumnos();
     }
 
     // La recuperación se mantiene para el historial de esa semana (no se elimina al confirmar asistencia)
     await loadAsistencias();
+  };
+
+  const handleToggleCreditoInasistencia = async (turnoId: string, alumnoId: string) => {
+    const asistencia = getAsistenciaSemana(turnoId, alumnoId);
+    const alumno = alumnos.find((a) => a.id === alumnoId);
+
+    if (!asistencia || asistencia.estado !== 'no_asistio') {
+      toast.warning('Primero marcá la inasistencia para poder dar un crédito.');
+      return;
+    }
+    if (!alumno) {
+      toast.warning('No se encontró el alumno seleccionado.');
+      return;
+    }
+
+    const otorgarCredito = asistencia.creditoOtorgado !== true;
+    const ok = await toast.confirm(
+      otorgarCredito
+        ? `¿Querés darle un crédito a ${alumno.nombre} ${alumno.apellido} por esta inasistencia?`
+        : `¿Querés quitar el crédito otorgado a ${alumno.nombre} ${alumno.apellido}?`,
+      {
+        title: otorgarCredito ? 'Dar crédito' : 'Quitar crédito',
+        confirmText: otorgarCredito ? 'Dar crédito' : 'Quitar crédito',
+      }
+    );
+    if (!ok) return;
+
+    await storageHybrid.asistencias.update(asistencia.id, { creditoOtorgado: otorgarCredito });
+    await storageHybrid.alumnos.update(alumnoId, {
+      clasesParaRecuperar: Math.max(0, (alumno.clasesParaRecuperar || 0) + (otorgarCredito ? 1 : -1)),
+    });
+    await loadAsistencias();
+    await loadAlumnos();
+    toast.success(otorgarCredito ? 'Crédito otorgado.' : 'Crédito quitado.');
   };
 
   const handleSaveHorarios = async (e: React.FormEvent) => {
@@ -1801,6 +1840,7 @@ const Calendario = () => {
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Compartir turnos disponibles</h2>
                 <p className="text-sm text-gray-600 mt-1">Elegí días y horario para armar un mensaje listo para WhatsApp.</p>
+                <p className="text-xs text-amber-700 mt-1">Las recuperaciones no se cuentan como ocupación en este mensaje.</p>
               </div>
               <button
                 type="button"
@@ -2007,7 +2047,8 @@ const Calendario = () => {
             <div className="space-y-2">
               <div className="flex gap-2">
                 {(() => {
-                  const estadoAsistencia = getEstadoAsistencia(showPopupAlumno.turnoId, showPopupAlumno.alumno.id);
+                  const asistenciaActual = getAsistenciaSemana(showPopupAlumno.turnoId, showPopupAlumno.alumno.id);
+                  const estadoAsistencia = asistenciaActual?.estado || null;
                   return (
                     <>
                       <button
@@ -2038,6 +2079,28 @@ const Calendario = () => {
                   );
                 })()}
               </div>
+              {(() => {
+                const asistenciaActual = getAsistenciaSemana(showPopupAlumno.turnoId, showPopupAlumno.alumno.id);
+                if (asistenciaActual?.estado !== 'no_asistio') return null;
+                const creditoOtorgado = asistenciaActual.creditoOtorgado === true;
+                return (
+                  <>
+                    <div className={`px-3 py-2 rounded-lg text-xs font-medium ${creditoOtorgado ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                      {creditoOtorgado ? 'Esta inasistencia ya tiene un crédito otorgado.' : 'Esta inasistencia no otorga crédito automáticamente.'}
+                    </div>
+                    <button
+                      onClick={() => handleToggleCreditoInasistencia(showPopupAlumno.turnoId, showPopupAlumno.alumno.id)}
+                      className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors ${
+                        creditoOtorgado
+                          ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                          : 'bg-primary-600 text-white hover:bg-primary-700'
+                      }`}
+                    >
+                      {creditoOtorgado ? 'Quitar crédito' : 'Dar crédito'}
+                    </button>
+                  </>
+                );
+              })()}
               {!showPopupAlumno.isRecuperacion && (
                 <button
                   onClick={() => {

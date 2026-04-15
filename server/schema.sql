@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS asistencias (
   semana TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE asistencias ADD COLUMN IF NOT EXISTS credito_otorgado BOOLEAN DEFAULT false;
 
 -- Registros desde link público
 CREATE TABLE IF NOT EXISTS registros_link (

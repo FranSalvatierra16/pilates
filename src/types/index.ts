@@ -148,6 +148,7 @@ export interface Asistencia {
   turnoId: string;
   alumnoId: string;
   estado: 'asistio' | 'no_asistio' | null; // null = sin marcar (gris)
+  creditoOtorgado?: boolean;
   semana: string; // YYYY-WW (año-semana) para identificar la semana
   createdAt: string;
 }

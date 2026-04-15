@@ -2103,6 +2103,7 @@ app.get('/api/asistencias', async (req, res) => {
       turnoId: r.turno_id,
       alumnoId: r.alumno_id,
       estado: r.estado,
+      creditoOtorgado: r.credito_otorgado === true,
       semana: r.semana,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
@@ -2125,6 +2126,7 @@ app.get('/api/asistencias/by-semana/:semana', async (req, res) => {
       turnoId: r.turno_id,
       alumnoId: r.alumno_id,
       estado: r.estado,
+      creditoOtorgado: r.credito_otorgado === true,
       semana: r.semana,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
@@ -2140,8 +2142,8 @@ app.post('/api/asistencias', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     await db.query(
-      'INSERT INTO asistencias (id, turno_id, alumno_id, estado, semana, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-      [b.id, b.turnoId, b.alumnoId, b.estado || null, b.semana, b.createdAt || new Date().toISOString()]
+      'INSERT INTO asistencias (id, turno_id, alumno_id, estado, credito_otorgado, semana, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [b.id, b.turnoId, b.alumnoId, b.estado || null, b.creditoOtorgado === true, b.semana, b.createdAt || new Date().toISOString()]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -2159,6 +2161,7 @@ app.patch('/api/asistencias/:id', async (req, res) => {
     const values = [];
     let i = 1;
     if (b.estado !== undefined) { updates.push(`estado = $${i++}`); values.push(b.estado); }
+    if (b.creditoOtorgado !== undefined) { updates.push(`credito_otorgado = $${i++}`); values.push(b.creditoOtorgado === true); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id);
     await db.query(`UPDATE asistencias SET ${updates.join(', ')} WHERE id = $${i}`, values);

@@ -30,6 +30,7 @@ export interface HorariosSucursal {
   horaFinTarde: string;
   horasAntesAnotarseClase: number;
   horasAntesLiberarClase: number;
+  horariosNoDisponiblesPorDia?: Record<number, string[]>;
   manana: string[];
   tarde: string[];
 }

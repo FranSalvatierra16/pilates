@@ -20,6 +20,7 @@ ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_inicio_manana TEXT DEFAULT 
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_fin_manana TEXT DEFAULT '12:00';
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_inicio_tarde TEXT DEFAULT '16:00';
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_fin_tarde TEXT DEFAULT '21:00';
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horarios_no_disponibles_por_dia JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horas_antes_anotarse_clase INTEGER DEFAULT 0;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horas_antes_liberar_clase INTEGER DEFAULT 0;
 

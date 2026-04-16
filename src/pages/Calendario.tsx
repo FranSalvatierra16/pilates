@@ -11,6 +11,48 @@ import { useToast } from '../components/ToastProvider';
 const horariosManana_DEFAULT = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
 const horariosTarde_DEFAULT = ['16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
 const HORAS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0') + ':00');
+const HORARIOS_NO_DISPONIBLES_VACIOS: Record<number, string[]> = {
+  0: [],
+  1: [],
+  2: [],
+  3: [],
+  4: [],
+  5: [],
+  6: [],
+};
+
+const generarHorasDesdeHasta = (inicio: string, fin: string): string[] => {
+  const [hI, mI] = (inicio || '07:00').split(':').map(Number);
+  const [hF, mF] = (fin || '12:00').split(':').map(Number);
+  let min = hI * 60 + mI;
+  const end = hF * 60 + mF;
+  const out: string[] = [];
+  while (min <= end) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    out.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+    min += 60;
+  }
+  return out;
+};
+
+const normalizarHorariosNoDisponibles = (
+  raw?: Record<number | string, string[]>,
+  horasValidas?: string[]
+): Record<number, string[]> => {
+  const out: Record<number, string[]> = { ...HORARIOS_NO_DISPONIBLES_VACIOS };
+  const horasPermitidas = horasValidas ? new Set(horasValidas) : null;
+  if (!raw) return out;
+  for (let dia = 0; dia <= 6; dia++) {
+    const lista = raw[dia] ?? raw[String(dia)];
+    if (!Array.isArray(lista)) continue;
+    out[dia] = Array.from(new Set(
+      lista.filter((hora) => !horasPermitidas || horasPermitidas.has(hora))
+    )).sort((a, b) => a.localeCompare(b));
+  }
+  return out;
+};
+
 const useApi = () => import.meta.env.VITE_USE_API === 'true' || (import.meta.env.VITE_USE_API !== 'false' && import.meta.env.PROD);
 
 // Función para obtener el número de semana (YYYY-WW)
@@ -116,6 +158,9 @@ const Calendario = () => {
   const [horaFinManana, setHoraFinManana] = useState('12:00');
   const [horaInicioTarde, setHoraInicioTarde] = useState('16:00');
   const [horaFinTarde, setHoraFinTarde] = useState('21:00');
+  const [horariosNoDisponiblesPorDia, setHorariosNoDisponiblesPorDia] = useState<Record<number, string[]>>(
+    HORARIOS_NO_DISPONIBLES_VACIOS
+  );
   const [horariosSaving, setHorariosSaving] = useState(false);
   const [horariosError, setHorariosError] = useState('');
   const [horariosSaved, setHorariosSaved] = useState(false);
@@ -135,6 +180,18 @@ const Calendario = () => {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [selectedDiaMobile, setSelectedDiaMobile] = useState<number | null>(null);
   const [selectedBloqueMobile, setSelectedBloqueMobile] = useState<'todos' | 'manana' | 'tarde'>('todos');
+  const horariosMananaModal = useMemo(
+    () => generarHorasDesdeHasta(horaInicioManana, horaFinManana),
+    [horaInicioManana, horaFinManana]
+  );
+  const horariosTardeModal = useMemo(
+    () => generarHorasDesdeHasta(horaInicioTarde, horaFinTarde),
+    [horaInicioTarde, horaFinTarde]
+  );
+  const todasLasHorasModal = useMemo(
+    () => Array.from(new Set([...horariosMananaModal, ...horariosTardeModal])).sort((a, b) => a.localeCompare(b)),
+    [horariosMananaModal, horariosTardeModal]
+  );
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
@@ -151,9 +208,11 @@ const Calendario = () => {
           const h = await storageApi.sucursal.getHorarios();
           setHorariosManana(h.manana?.length ? h.manana : horariosManana_DEFAULT);
           setHorariosTarde(h.tarde?.length ? h.tarde : horariosTarde_DEFAULT);
+          setHorariosNoDisponiblesPorDia(normalizarHorariosNoDisponibles(h.horariosNoDisponiblesPorDia, [...(h.manana || []), ...(h.tarde || [])]));
         } catch {
           setHorariosManana(horariosManana_DEFAULT);
           setHorariosTarde(horariosTarde_DEFAULT);
+          setHorariosNoDisponiblesPorDia(HORARIOS_NO_DISPONIBLES_VACIOS);
         }
       }
       await loadTurnos();
@@ -173,6 +232,9 @@ const Calendario = () => {
         setHoraFinManana(data.horaFinManana || '12:00');
         setHoraInicioTarde(data.horaInicioTarde || '16:00');
         setHoraFinTarde(data.horaFinTarde || '21:00');
+        setHorariosNoDisponiblesPorDia(
+          normalizarHorariosNoDisponibles(data.horariosNoDisponiblesPorDia, [...(data.manana || []), ...(data.tarde || [])])
+        );
       }).catch(() => {});
     }
   }, [showModalHorarios]);
@@ -254,6 +316,23 @@ const Calendario = () => {
     () => Array.from(new Set([...horariosManana, ...horariosTarde])).sort((a, b) => a.localeCompare(b)),
     [horariosManana, horariosTarde]
   );
+
+  const isHorarioDisponibleEnDia = (diaSemana: number, hora: string) => {
+    return !(horariosNoDisponiblesPorDia[diaSemana] || []).includes(hora);
+  };
+
+  const toggleHorarioNoDisponible = (diaSemana: number, hora: string) => {
+    setHorariosNoDisponiblesPorDia((prev) => {
+      const actuales = prev[diaSemana] || [];
+      const siguiente = actuales.includes(hora)
+        ? actuales.filter((item) => item !== hora)
+        : [...actuales, hora].sort((a, b) => a.localeCompare(b));
+      return {
+        ...prev,
+        [diaSemana]: siguiente,
+      };
+    });
+  };
 
   const getTurnoDelDia = (diaSemana: number, hora: string): Turno | undefined => {
     return turnos.find(t => t.diaSemana === diaSemana && t.hora === hora);
@@ -337,6 +416,7 @@ const Calendario = () => {
         const turnosDelDia = todasLasHoras
           .filter((hora) => !horaDesde || hora >= horaDesde)
           .filter((hora) => !horaHasta || hora <= horaHasta)
+          .filter((hora) => isHorarioDisponibleEnDia(diaSemana, hora))
           .map((hora) => getTurnoDelDia(diaSemana, hora))
           .filter((turno): turno is Turno => turno !== undefined)
           .map((turno) => {
@@ -403,6 +483,10 @@ const Calendario = () => {
   };
 
   const handleAgregarAlumno = (diaSemana: number, hora: string) => {
+    if (!isHorarioDisponibleEnDia(diaSemana, hora)) {
+      toast.warning('Ese horario está marcado como no disponible para ese día.');
+      return;
+    }
     setTurnoSeleccionado({ diaSemana, hora });
     setAlumnoSeleccionado('');
     setEsRecuperacion(false);
@@ -860,15 +944,21 @@ const Calendario = () => {
     setHorariosSaved(false);
     setHorariosSaving(true);
     try {
+      const horariosNoDisponiblesNormalizados = normalizarHorariosNoDisponibles(
+        horariosNoDisponiblesPorDia,
+        todasLasHorasModal
+      );
       await storageApi.sucursal.updateHorarios({
         horaInicioManana,
         horaFinManana,
         horaInicioTarde,
         horaFinTarde,
+        horariosNoDisponiblesPorDia: horariosNoDisponiblesNormalizados,
       });
       const h = await storageApi.sucursal.getHorarios();
       setHorariosManana(h.manana?.length ? h.manana : horariosManana_DEFAULT);
       setHorariosTarde(h.tarde?.length ? h.tarde : horariosTarde_DEFAULT);
+      setHorariosNoDisponiblesPorDia(normalizarHorariosNoDisponibles(h.horariosNoDisponiblesPorDia, [...(h.manana || []), ...(h.tarde || [])]));
       setHorariosSaved(true);
       setTimeout(() => setHorariosSaved(false), 3000);
     } catch (err) {
@@ -1129,41 +1219,53 @@ const Calendario = () => {
                       const cupo = turno?.cupo ?? CUPO_DEFAULT;
                       const lleno = alumnosTurno.length >= cupo;
                       const destacado = turno?.destacado ?? false;
+                      const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
                         <div
                           key={hora}
-                          className={`border rounded-xl p-3 ${destacado ? 'border-amber-300 bg-amber-100' : 'border-gray-200 bg-gray-50/80'}`}
+                          className={`border rounded-xl p-3 ${
+                            !horarioDisponible
+                              ? 'border-slate-300 bg-slate-100'
+                              : destacado
+                                ? 'border-amber-300 bg-amber-100'
+                                : 'border-gray-200 bg-gray-50/80'
+                          }`}
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <span className="font-semibold text-gray-900">{hora}</span>
                             <div className="flex gap-2">
                               <button
                                 type="button"
-                                onClick={() => handleToggleDestacado(diaIndex, hora)}
-                                className={`p-2 rounded-lg touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600'}`}
+                                onClick={() => horarioDisponible && handleToggleDestacado(diaIndex, hora)}
+                                disabled={!horarioDisponible}
+                                className={`p-2 rounded-lg touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600'} disabled:opacity-40`}
                                 title={destacado ? 'Quitar destacado' : 'Destacar horario importante'}
                               >
                                 <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleEditarTurno(diaIndex, hora)}
-                                className="p-2 rounded-lg bg-purple-600 text-white touch-manipulation"
+                                onClick={() => horarioDisponible && handleEditarTurno(diaIndex, hora)}
+                                disabled={!horarioDisponible}
+                                className="p-2 rounded-lg bg-purple-600 text-white touch-manipulation disabled:opacity-40"
                                 title="Editar título y profesor"
                               >
                                 <GraduationCap className="w-4 h-4" />
                               </button>
                               <button
                                 type="button"
-                                onClick={() => !lleno && handleAgregarAlumno(diaIndex, hora)}
-                                disabled={lleno}
+                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
+                                disabled={lleno || !horarioDisponible}
                                 className="p-2 rounded-lg bg-primary-600 text-white disabled:opacity-50 touch-manipulation"
-                                title={lleno ? 'Clase llena' : 'Agregar alumno'}
+                                title={!horarioDisponible ? 'Horario no disponible' : lleno ? 'Clase llena' : 'Agregar alumno'}
                               >
                                 <Plus className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
+                          {!horarioDisponible && (
+                            <p className="text-xs font-medium text-slate-600 mb-2">Horario no disponible</p>
+                          )}
                           {turno && (
                             <div className="mb-2 text-sm">
                               {turno.titulo && <p className="font-medium text-gray-800">{turno.titulo}</p>}
@@ -1177,7 +1279,7 @@ const Calendario = () => {
                           <div className="space-y-1.5">
                             {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                           </div>
-                          {!lleno && alumnosTurno.length === 0 && (
+                          {horarioDisponible && !lleno && alumnosTurno.length === 0 && (
                             <button
                               type="button"
                               onClick={() => handleAgregarAlumno(diaIndex, hora)}
@@ -1203,41 +1305,53 @@ const Calendario = () => {
                       const cupo = turno?.cupo ?? CUPO_DEFAULT;
                       const lleno = alumnosTurno.length >= cupo;
                       const destacado = turno?.destacado ?? false;
+                      const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
                         <div
                           key={hora}
-                          className={`border rounded-xl p-3 ${destacado ? 'border-amber-300 bg-amber-100' : 'border-gray-200 bg-gray-50/80'}`}
+                          className={`border rounded-xl p-3 ${
+                            !horarioDisponible
+                              ? 'border-slate-300 bg-slate-100'
+                              : destacado
+                                ? 'border-amber-300 bg-amber-100'
+                                : 'border-gray-200 bg-gray-50/80'
+                          }`}
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <span className="font-semibold text-gray-900">{hora}</span>
                             <div className="flex gap-2">
                               <button
                                 type="button"
-                                onClick={() => handleToggleDestacado(diaIndex, hora)}
-                                className={`p-2 rounded-lg touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600'}`}
+                                onClick={() => horarioDisponible && handleToggleDestacado(diaIndex, hora)}
+                                disabled={!horarioDisponible}
+                                className={`p-2 rounded-lg touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600'} disabled:opacity-40`}
                                 title={destacado ? 'Quitar destacado' : 'Destacar horario importante'}
                               >
                                 <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleEditarTurno(diaIndex, hora)}
-                                className="p-2 rounded-lg bg-purple-600 text-white touch-manipulation"
+                                onClick={() => horarioDisponible && handleEditarTurno(diaIndex, hora)}
+                                disabled={!horarioDisponible}
+                                className="p-2 rounded-lg bg-purple-600 text-white touch-manipulation disabled:opacity-40"
                                 title="Editar título y profesor"
                               >
                                 <GraduationCap className="w-4 h-4" />
                               </button>
                               <button
                                 type="button"
-                                onClick={() => !lleno && handleAgregarAlumno(diaIndex, hora)}
-                                disabled={lleno}
+                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
+                                disabled={lleno || !horarioDisponible}
                                 className="p-2 rounded-lg bg-primary-600 text-white disabled:opacity-50 touch-manipulation"
-                                title={lleno ? 'Clase llena' : 'Agregar alumno'}
+                                title={!horarioDisponible ? 'Horario no disponible' : lleno ? 'Clase llena' : 'Agregar alumno'}
                               >
                                 <Plus className="w-4 h-4" />
                               </button>
                             </div>
                           </div>
+                          {!horarioDisponible && (
+                            <p className="text-xs font-medium text-slate-600 mb-2">Horario no disponible</p>
+                          )}
                           {turno && (
                             <div className="mb-2 text-sm">
                               {turno.titulo && <p className="font-medium text-gray-800">{turno.titulo}</p>}
@@ -1251,7 +1365,7 @@ const Calendario = () => {
                           <div className="space-y-1.5">
                             {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                           </div>
-                          {!lleno && alumnosTurno.length === 0 && (
+                          {horarioDisponible && !lleno && alumnosTurno.length === 0 && (
                             <button
                               type="button"
                               onClick={() => handleAgregarAlumno(diaIndex, hora)}
@@ -1303,25 +1417,35 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const destacado = turno?.destacado ?? false;
+                      const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
                         <div
                           key={`${diaIndex}-${hora}`}
-                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${destacado ? 'bg-amber-100' : 'hover:bg-gray-50'}`}
+                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${
+                            !horarioDisponible ? 'bg-slate-100' : destacado ? 'bg-amber-100' : 'hover:bg-gray-50'
+                          }`}
                         >
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleEditarTurno(diaIndex, hora); }}
-                            className="absolute top-1 left-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-purple-600 hover:bg-purple-700 rounded text-white z-20"
-                            title="Editar título y profesor"
+                            onClick={(e) => { e.stopPropagation(); if (horarioDisponible) handleEditarTurno(diaIndex, hora); }}
+                            disabled={!horarioDisponible}
+                            className="absolute top-1 left-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-purple-600 hover:bg-purple-700 rounded text-white z-20 disabled:opacity-40"
+                            title={horarioDisponible ? 'Editar título y profesor' : 'Horario no disponible'}
                           >
                             <GraduationCap className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleToggleDestacado(diaIndex, hora); }}
-                            className={`absolute top-1 right-9 sm:right-8 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity rounded z-20 touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600 hover:bg-amber-200 hover:text-amber-700'}`}
-                            title={destacado ? 'Quitar destacado' : 'Destacar horario importante'}
+                            onClick={(e) => { e.stopPropagation(); if (horarioDisponible) handleToggleDestacado(diaIndex, hora); }}
+                            disabled={!horarioDisponible}
+                            className={`absolute top-1 right-9 sm:right-8 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity rounded z-20 touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600 hover:bg-amber-200 hover:text-amber-700'} disabled:opacity-40`}
+                            title={!horarioDisponible ? 'Horario no disponible' : destacado ? 'Quitar destacado' : 'Destacar horario importante'}
                           >
                             <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
                           </button>
+                          {!horarioDisponible && !turno && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <span className="text-[11px] font-medium text-slate-500">No disponible</span>
+                            </div>
+                          )}
                           {turno && (
                             <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
                               {turno.titulo && <div className="text-xs font-semibold text-gray-700 mb-0.5 truncate">{turno.titulo}</div>}
@@ -1346,10 +1470,10 @@ const Calendario = () => {
                             const lleno = alumnosTurno.length >= cupo;
                             return (
                               <button
-                                onClick={() => !lleno && handleAgregarAlumno(diaIndex, hora)}
-                                disabled={lleno}
+                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
+                                disabled={lleno || !horarioDisponible}
                                 className="absolute top-1 right-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20 disabled:opacity-50 touch-manipulation"
-                                title={lleno ? 'Clase llena' : 'Agregar alumno'}
+                                title={!horarioDisponible ? 'Horario no disponible' : lleno ? 'Clase llena' : 'Agregar alumno'}
                               >
                                 <Plus className="w-4 h-4" />
                               </button>
@@ -1375,25 +1499,35 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const destacado = turno?.destacado ?? false;
+                      const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
                         <div
                           key={`${diaIndex}-${hora}`}
-                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${destacado ? 'bg-amber-100' : 'hover:bg-gray-50'}`}
+                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${
+                            !horarioDisponible ? 'bg-slate-100' : destacado ? 'bg-amber-100' : 'hover:bg-gray-50'
+                          }`}
                         >
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleEditarTurno(diaIndex, hora); }}
-                            className="absolute top-1 left-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-purple-600 hover:bg-purple-700 rounded text-white z-20"
-                            title="Editar título y profesor"
+                            onClick={(e) => { e.stopPropagation(); if (horarioDisponible) handleEditarTurno(diaIndex, hora); }}
+                            disabled={!horarioDisponible}
+                            className="absolute top-1 left-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-purple-600 hover:bg-purple-700 rounded text-white z-20 disabled:opacity-40"
+                            title={horarioDisponible ? 'Editar título y profesor' : 'Horario no disponible'}
                           >
                             <GraduationCap className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleToggleDestacado(diaIndex, hora); }}
-                            className={`absolute top-1 right-9 sm:right-8 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity rounded z-20 touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600 hover:bg-amber-200 hover:text-amber-700'}`}
-                            title={destacado ? 'Quitar destacado' : 'Destacar horario importante'}
+                            onClick={(e) => { e.stopPropagation(); if (horarioDisponible) handleToggleDestacado(diaIndex, hora); }}
+                            disabled={!horarioDisponible}
+                            className={`absolute top-1 right-9 sm:right-8 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity rounded z-20 touch-manipulation ${destacado ? 'bg-amber-500 text-amber-950' : 'bg-gray-200 text-gray-600 hover:bg-amber-200 hover:text-amber-700'} disabled:opacity-40`}
+                            title={!horarioDisponible ? 'Horario no disponible' : destacado ? 'Quitar destacado' : 'Destacar horario importante'}
                           >
                             <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
                           </button>
+                          {!horarioDisponible && !turno && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <span className="text-[11px] font-medium text-slate-500">No disponible</span>
+                            </div>
+                          )}
                           {turno && (
                             <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
                               {turno.titulo && <div className="text-xs font-semibold text-gray-700 mb-0.5 truncate">{turno.titulo}</div>}
@@ -1418,10 +1552,10 @@ const Calendario = () => {
                             const lleno = alumnosTurno.length >= cupo;
                             return (
                               <button
-                                onClick={() => !lleno && handleAgregarAlumno(diaIndex, hora)}
-                                disabled={lleno}
+                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
+                                disabled={lleno || !horarioDisponible}
                                 className="absolute top-1 right-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20 disabled:opacity-50 touch-manipulation"
-                                title={lleno ? 'Clase llena' : 'Agregar alumno'}
+                                title={!horarioDisponible ? 'Horario no disponible' : lleno ? 'Clase llena' : 'Agregar alumno'}
                               >
                                 <Plus className="w-4 h-4" />
                               </button>
@@ -1689,6 +1823,55 @@ const Calendario = () => {
                         {HORAS.map((h) => <option key={h} value={h}>{h}</option>)}
                       </select>
                     </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 p-4">
+                    <div className="mb-3">
+                      <h3 className="text-sm font-semibold text-gray-800">Horarios no disponibles por día</h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Marcá los horarios que no existen ese día. Esos casilleros se verán grisados en el calendario.
+                      </p>
+                    </div>
+                    {todasLasHorasModal.length === 0 ? (
+                      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        Ajustá primero al menos un rango de mañana o tarde.
+                      </p>
+                    ) : (
+                      <div className="space-y-4">
+                        {diasSemana.map((dia) => (
+                          <div key={dia}>
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <span className="text-sm font-medium text-gray-700">{DIAS_SEMANA[dia]}</span>
+                              <button
+                                type="button"
+                                onClick={() => setHorariosNoDisponiblesPorDia((prev) => ({ ...prev, [dia]: [] }))}
+                                className="text-xs text-gray-500 hover:underline"
+                              >
+                                Limpiar
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {todasLasHorasModal.map((hora) => {
+                                const deshabilitado = (horariosNoDisponiblesPorDia[dia] || []).includes(hora);
+                                return (
+                                  <button
+                                    key={`${dia}-${hora}`}
+                                    type="button"
+                                    onClick={() => toggleHorarioNoDisponible(dia, hora)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                      deshabilitado
+                                        ? 'bg-slate-200 text-slate-700 border-slate-300'
+                                        : 'bg-white text-gray-700 border-gray-300 hover:border-primary-300'
+                                    }`}
+                                  >
+                                    {hora}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {horariosError && (
                     <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{horariosError}</div>

@@ -182,6 +182,7 @@ export const storageApi = {
       horaFinManana?: string;
       horaInicioTarde?: string;
       horaFinTarde?: string;
+      horariosNoDisponiblesPorDia?: Record<number, string[]>;
       horasAntesAnotarseClase?: number;
       horasAntesLiberarClase?: number;
     }): Promise<void> =>

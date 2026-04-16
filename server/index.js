@@ -1204,6 +1204,22 @@ function generarHorasDesdeHasta(inicio, fin) {
   return out;
 }
 
+function normalizarHorariosNoDisponiblesPorDia(raw, horasValidas = null) {
+  const out = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  if (!raw || typeof raw !== 'object') return out;
+  const horasPermitidas = horasValidas ? new Set(horasValidas) : null;
+  for (let dia = 0; dia <= 6; dia++) {
+    const lista = raw[dia] ?? raw[String(dia)];
+    if (!Array.isArray(lista)) continue;
+    out[dia] = Array.from(new Set(
+      lista
+        .map((hora) => String(hora || '').slice(0, 5))
+        .filter((hora) => /^\d{2}:\d{2}$/.test(hora) && (!horasPermitidas || horasPermitidas.has(hora)))
+    )).sort();
+  }
+  return out;
+}
+
 app.get('/api/sucursal/horarios', async (req, res) => {
   try {
     const db = await getPool();
@@ -1212,6 +1228,7 @@ app.get('/api/sucursal/horarios', async (req, res) => {
     if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
     const { rows } = await db.query(
       `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
+              horarios_no_disponibles_por_dia,
               horas_antes_anotarse_clase, horas_antes_liberar_clase
          FROM sucursales
         WHERE id = $1`,
@@ -1221,11 +1238,13 @@ app.get('/api/sucursal/horarios', async (req, res) => {
     const r = rows[0];
     const manana = generarHorasDesdeHasta(r.hora_inicio_manana || '07:00', r.hora_fin_manana || '12:00');
     const tarde = generarHorasDesdeHasta(r.hora_inicio_tarde || '16:00', r.hora_fin_tarde || '21:00');
+    const horasValidas = [...manana, ...tarde];
     res.json({
       horaInicioManana: r.hora_inicio_manana || '07:00',
       horaFinManana: r.hora_fin_manana || '12:00',
       horaInicioTarde: r.hora_inicio_tarde || '16:00',
       horaFinTarde: r.hora_fin_tarde || '21:00',
+      horariosNoDisponiblesPorDia: normalizarHorariosNoDisponiblesPorDia(r.horarios_no_disponibles_por_dia, horasValidas),
       horasAntesAnotarseClase: Math.max(0, Number(r.horas_antes_anotarse_clase ?? 0)),
       horasAntesLiberarClase: Math.max(0, Number(r.horas_antes_liberar_clase ?? 0)),
       manana,
@@ -1251,6 +1270,13 @@ app.patch('/api/sucursal/horarios', async (req, res) => {
     if (b.horaFinManana !== undefined) { updates.push(`hora_fin_manana = $${i++}`); values.push(b.horaFinManana || '12:00'); }
     if (b.horaInicioTarde !== undefined) { updates.push(`hora_inicio_tarde = $${i++}`); values.push(b.horaInicioTarde || '16:00'); }
     if (b.horaFinTarde !== undefined) { updates.push(`hora_fin_tarde = $${i++}`); values.push(b.horaFinTarde || '21:00'); }
+    if (b.horariosNoDisponiblesPorDia !== undefined) {
+      const manana = generarHorasDesdeHasta(b.horaInicioManana || '07:00', b.horaFinManana || '12:00');
+      const tarde = generarHorasDesdeHasta(b.horaInicioTarde || '16:00', b.horaFinTarde || '21:00');
+      const horasValidas = [...manana, ...tarde];
+      updates.push(`horarios_no_disponibles_por_dia = $${i++}`);
+      values.push(JSON.stringify(normalizarHorariosNoDisponiblesPorDia(b.horariosNoDisponiblesPorDia, horasValidas)));
+    }
     if (b.horasAntesAnotarseClase !== undefined) {
       updates.push(`horas_antes_anotarse_clase = $${i++}`);
       values.push(Math.max(0, parseInt(b.horasAntesAnotarseClase, 10) || 0));

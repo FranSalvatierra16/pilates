@@ -448,8 +448,8 @@ const Calendario = () => {
       const cuerpo = lineasPorDia.map(({ diaSemana, turnos }) => {
         const detalleTurnos = turnos.map((turno) =>
           mostrarLugares
-            ? `${turno.hora} ${turno.titulo} (${turno.disponibles})`
-            : `${turno.hora} ${turno.titulo}`
+            ? `${turno.hora} (${turno.disponibles})`
+            : `${turno.hora}`
         );
         return `${diasCortos[diaSemana]}: ${detalleTurnos.join(' | ')}`;
       });

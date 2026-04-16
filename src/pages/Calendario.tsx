@@ -97,12 +97,18 @@ const Calendario = () => {
   const [recuperaciones, setRecuperaciones] = useState<Recuperacion[]>([]);
   const [inscripciones, setInscripciones] = useState<{ id: string; turnoId: string; alumnoId: string; semanaDesde: string }[]>([]);
   const CUPO_DEFAULT = 6;
+  const parseCupo = (value: string, fallback = CUPO_DEFAULT) => {
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed)) return fallback;
+    return Math.max(1, parsed);
+  };
   const [formDataTurno, setFormDataTurno] = useState({
     titulo: '',
     profesorId: '',
     cupo: CUPO_DEFAULT,
     destacado: false,
   });
+  const [cupoTurnoInput, setCupoTurnoInput] = useState(String(CUPO_DEFAULT));
   const [showModalAumentarCupo, setShowModalAumentarCupo] = useState(false);
   const [showModalCompartirDisponibles, setShowModalCompartirDisponibles] = useState(false);
   const [showModalHorarios, setShowModalHorarios] = useState(false);
@@ -114,6 +120,7 @@ const Calendario = () => {
   const [horariosError, setHorariosError] = useState('');
   const [horariosSaved, setHorariosSaved] = useState(false);
   const [cupoGlobal, setCupoGlobal] = useState(CUPO_DEFAULT);
+  const [cupoGlobalInput, setCupoGlobalInput] = useState(String(CUPO_DEFAULT));
   const [formCompartirDisponibles, setFormCompartirDisponibles] = useState({
     diasSeleccionados: [] as number[],
     horaDesde: '',
@@ -414,6 +421,7 @@ const Calendario = () => {
         cupo: turno.cupo ?? CUPO_DEFAULT,
         destacado: turno.destacado ?? false,
       });
+      setCupoTurnoInput(String(turno.cupo ?? CUPO_DEFAULT));
     } else {
       setTurnoParaEditar({
         id: Date.now().toString(),
@@ -431,6 +439,7 @@ const Calendario = () => {
         cupo: CUPO_DEFAULT,
         destacado: false,
       });
+      setCupoTurnoInput(String(CUPO_DEFAULT));
     }
     setShowModalEditarTurno(true);
   };
@@ -576,12 +585,13 @@ const Calendario = () => {
 
     try {
       const turnoExistente = getTurnoDelDia(turnoParaEditar.diaSemana, turnoParaEditar.hora);
+      const cupo = parseCupo(cupoTurnoInput, formDataTurno.cupo);
       
       if (turnoExistente) {
         await storageHybrid.turnos.update(turnoExistente.id, {
           titulo: formDataTurno.titulo,
           profesorId: formDataTurno.profesorId,
-          cupo: formDataTurno.cupo,
+          cupo,
           destacado: formDataTurno.destacado,
         });
       } else {
@@ -589,7 +599,7 @@ const Calendario = () => {
           ...turnoParaEditar,
           titulo: formDataTurno.titulo,
           profesorId: formDataTurno.profesorId,
-          cupo: formDataTurno.cupo,
+          cupo,
           destacado: formDataTurno.destacado,
         });
       }
@@ -869,7 +879,7 @@ const Calendario = () => {
   };
 
   const handleAumentarCupo = async () => {
-    const valor = Math.max(1, Math.floor(Number(cupoGlobal)) || CUPO_DEFAULT);
+    const valor = parseCupo(cupoGlobalInput, cupoGlobal);
     try {
       for (const t of turnos) {
         await storageHybrid.turnos.update(t.id, { cupo: valor });
@@ -1458,6 +1468,7 @@ const Calendario = () => {
           type="button"
           onClick={() => {
             setCupoGlobal(CUPO_DEFAULT);
+            setCupoGlobalInput(String(CUPO_DEFAULT));
             setShowModalAumentarCupo(true);
           }}
           className="btn-primary flex items-center justify-center gap-2 min-h-[44px] flex-1 sm:flex-initial"
@@ -1771,8 +1782,13 @@ const Calendario = () => {
                 <input
                   type="number"
                   min={1}
-                  value={formDataTurno.cupo}
-                  onChange={(e) => setFormDataTurno({ ...formDataTurno, cupo: Math.max(1, parseInt(e.target.value, 10) || 6) })}
+                  value={cupoTurnoInput}
+                  onChange={(e) => {
+                    setCupoTurnoInput(e.target.value);
+                    if (e.target.value !== '') {
+                      setFormDataTurno({ ...formDataTurno, cupo: parseCupo(e.target.value, formDataTurno.cupo) });
+                    }
+                  }}
                   className="input-field"
                 />
               </div>
@@ -1812,8 +1828,13 @@ const Calendario = () => {
               <input
                 type="number"
                 min={1}
-                value={cupoGlobal}
-                onChange={(e) => setCupoGlobal(Math.max(1, parseInt(e.target.value, 10) || CUPO_DEFAULT))}
+                value={cupoGlobalInput}
+                onChange={(e) => {
+                  setCupoGlobalInput(e.target.value);
+                  if (e.target.value !== '') {
+                    setCupoGlobal(parseCupo(e.target.value, cupoGlobal));
+                  }
+                }}
                 className="input-field"
               />
             </div>

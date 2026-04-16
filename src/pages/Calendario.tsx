@@ -437,23 +437,26 @@ const Calendario = () => {
         };
       }).filter((item) => item.turnos.length > 0);
 
+      const diasCortos = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
       const descripcionDias = diasSeleccionados.length === diasSemana.length
-        ? 'todos los días'
-        : diasSeleccionados.map((dia) => DIAS_SEMANA[dia]).join(', ');
-      const encabezado = `Turnos disponibles ${horaDesde || horaHasta ? `(${horaDesde || '00:00'} a ${horaHasta || '23:59'}) ` : ''}para ${descripcionDias}:`;
-      const cuerpo = lineasPorDia.flatMap(({ diaSemana, turnos }) => {
-        const tituloFecha = `${DIAS_SEMANA[diaSemana]}`;
+        ? 'Todos'
+        : diasSeleccionados.map((dia) => diasCortos[dia]).join('/');
+      const rangoHorario = horaDesde || horaHasta
+        ? ` ${horaDesde || '00:00'}-${horaHasta || '23:59'}`
+        : '';
+      const encabezado = `Disponibles ${descripcionDias}${rangoHorario}`;
+      const cuerpo = lineasPorDia.map(({ diaSemana, turnos }) => {
         const detalleTurnos = turnos.map((turno) =>
           mostrarLugares
-            ? `- ${turno.hora} | ${turno.titulo} | ${turno.disponibles} ${turno.disponibles === 1 ? 'lugar' : 'lugares'}`
-            : `- ${turno.hora} | ${turno.titulo}`
+            ? `${turno.hora} ${turno.titulo} (${turno.disponibles})`
+            : `${turno.hora} ${turno.titulo}`
         );
-        return [tituloFecha, ...detalleTurnos, ''];
+        return `${diasCortos[diaSemana]}: ${detalleTurnos.join(' | ')}`;
       });
 
       const mensaje = lineasPorDia.length > 0
-        ? [encabezado, '', ...cuerpo].join('\n').trim()
-        : `${encabezado}\n\nNo hay turnos con lugares disponibles en esos días y horarios.`;
+        ? [encabezado, ...cuerpo].join('\n').trim()
+        : `${encabezado}\nSin lugares.`;
 
       setMensajeDisponibles(mensaje);
     } finally {

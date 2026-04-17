@@ -1439,18 +1439,27 @@ async function validarTiempoPortal(db, sucursalId, { accion, semana, turno }) {
 // Resuelve alumno por token o por dni (+ sucursalId opcional). Retorna { alumno, sucursalId } o error.
 async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
   if (token && token.trim()) {
-    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id, actividad_id, clases_para_recuperar FROM alumnos WHERE link_token = $1 AND activo IS DISTINCT FROM false', [token.trim()]);
+    const { rows } = await db.query(
+      'SELECT id, nombre, apellido, dni, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota FROM alumnos WHERE link_token = $1 AND activo IS DISTINCT FROM false',
+      [token.trim()]
+    );
     if (rows.length === 0) return { error: 404, message: 'Link inválido o expirado' };
     return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   }
   const dniTrim = (dni || '').toString().trim();
   if (!dniTrim) return { error: 400, message: 'Ingresá tu DNI' };
   if (sucursalId && sucursalId.trim()) {
-    const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id, actividad_id, clases_para_recuperar FROM alumnos WHERE dni = $1 AND sucursal_id = $2 AND activo IS DISTINCT FROM false', [dniTrim, sucursalId.trim()]);
+    const { rows } = await db.query(
+      'SELECT id, nombre, apellido, dni, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota FROM alumnos WHERE dni = $1 AND sucursal_id = $2 AND activo IS DISTINCT FROM false',
+      [dniTrim, sucursalId.trim()]
+    );
     if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI en esta sede' };
     return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   }
-  const { rows } = await db.query('SELECT id, nombre, apellido, sucursal_id, actividad_id, clases_para_recuperar FROM alumnos WHERE dni = $1 AND activo IS DISTINCT FROM false', [dniTrim]);
+  const { rows } = await db.query(
+    'SELECT id, nombre, apellido, dni, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota FROM alumnos WHERE dni = $1 AND activo IS DISTINCT FROM false',
+    [dniTrim]
+  );
   if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI' };
   if (rows.length === 1) return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   const { rows: sucursales } = await db.query(
@@ -1526,6 +1535,30 @@ async function getActividadClasesPorSemana(db, alumno) {
   return Number(rows[0].clases_por_semana);
 }
 
+async function getPortalHistorialAsistencias(db, alumnoId, sucursalId) {
+  const { rows } = await db.query(
+    `SELECT asi.id, asi.turno_id, asi.semana, asi.estado, asi.created_at,
+            t.dia_semana, t.hora, t.titulo
+       FROM asistencias asi
+       JOIN turnos t ON asi.turno_id = t.id AND t.sucursal_id = $2
+      WHERE asi.alumno_id = $1 AND asi.estado IN ('asistio', 'no_asistio')
+      ORDER BY asi.created_at DESC
+      LIMIT 60`,
+    [alumnoId, sucursalId]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    turnoId: r.turno_id,
+    semana: r.semana,
+    diaSemana: r.dia_semana,
+    hora: r.hora,
+    titulo: r.titulo || 'Clase',
+    fecha: getFechaFromSemanaYDia(r.semana, r.dia_semana),
+    estado: r.estado,
+    createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+  }));
+}
+
 async function getClasesFijasActivasSemana(db, alumno, semanaVista) {
   const { rows: turnoRows } = await db.query(
     'SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1',
@@ -1562,11 +1595,33 @@ app.get('/api/alumno-portal', async (req, res) => {
     }
     const { alumno, sucursalId: sid } = resolved;
     const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora, titulo, alumno_ids, cupo FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora', [sid]);
+    const { rows: insRows } = await db.query(
+      'SELECT turno_id, semana_desde FROM inscripciones_turno WHERE alumno_id = $1',
+      [alumno.id]
+    );
     const { rows: horRows } = await db.query(
       'SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde FROM sucursales WHERE id = $1',
       [sid]
     );
+    const insByTurno = new Map(insRows.map((r) => [r.turno_id, r]));
     const hor = horRows[0] || {};
+    const actividadNombre = alumno.actividad_id
+      ? (await db.query('SELECT nombre FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1', [alumno.actividad_id, sid])).rows[0]?.nombre || ''
+      : '';
+    const historialAsistencias = await getPortalHistorialAsistencias(db, alumno.id, sid);
+    const clasesFijas = turnoRows
+      .filter((r) => {
+        const alumnoIds = r.alumno_ids || [];
+        if (!alumnoIds.includes(alumno.id)) return false;
+        const ins = insByTurno.get(r.id);
+        return !ins || ins.semana_desde <= getSemanaActual();
+      })
+      .map((r) => ({
+        id: r.id,
+        diaSemana: r.dia_semana,
+        hora: r.hora,
+        titulo: r.titulo || 'Clase',
+      }));
     let turnos;
     let recuperacionStats = null;
     if (esRecuperar && semanaVista) {
@@ -1637,8 +1692,17 @@ app.get('/api/alumno-portal', async (req, res) => {
       });
     }
     const payload = {
-      alumno: { id: alumno.id, nombre: alumno.nombre, apellido: alumno.apellido },
+      alumno: {
+        id: alumno.id,
+        nombre: alumno.nombre,
+        apellido: alumno.apellido,
+        fechaVencimientoCuota: alumno.fecha_vencimiento_cuota?.toISOString?.().slice(0, 10) ?? alumno.fecha_vencimiento_cuota ?? '',
+        clasesParaRecuperar: Math.max(0, Number(alumno.clases_para_recuperar ?? 0)),
+        actividadNombre,
+      },
       turnos,
+      clasesFijas,
+      historialAsistencias,
       sucursalId: sid,
       modo: esRecuperar ? 'recuperar' : 'fijo',
       ...(esRecuperar && semanaVista && { semanaVista }),
@@ -1651,6 +1715,39 @@ app.get('/api/alumno-portal', async (req, res) => {
       },
     };
     res.json(payload);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/alumno-portal/push-vapid-public', (req, res) => {
+  if (!VAPID_PUBLIC) return res.status(503).json({ error: 'Notificaciones push no configuradas' });
+  res.json({ vapidPublicKey: VAPID_PUBLIC });
+});
+
+app.post('/api/alumno-portal/push-subscribe', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { token, dni, sucursalId, subscription } = req.body || {};
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      return res.status(400).json({ error: 'Suscripción inválida' });
+    }
+    const resolved = await resolveAlumnoPortal(db, {
+      token: (token || '').toString().trim(),
+      dni: (dni || '').toString().trim(),
+      sucursalId: (sucursalId || '').toString().trim(),
+    });
+    if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
+    const id = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO push_subscriptions (id, sucursal_id, endpoint, p256dh, auth)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, p256dh = $4, auth = $5`,
+      [id, resolved.sucursalId, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
+    );
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

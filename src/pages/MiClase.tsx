@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
-import { formatDate, getSemanaActual, getSemanaSiguiente, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
+import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getSemanaSiguiente, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -310,8 +310,9 @@ const MiClase = () => {
     }
     setFiltroDia(target.diaSemana);
     void (async () => {
+      const fechaClase = formatDate(getFechaFromSemanaYDia(data.semanaVista || notifSemana || semanaActualBase, target.diaSemana));
       const confirmo = await toast.confirm(
-        `¿Deseás tomar ${target.titulo || 'esta clase'} del ${NOMBRE_DIA[target.diaSemana] ?? 'día'} a las ${target.hora}?`,
+        `¿Deseás tomar la clase ${target.hora} del ${NOMBRE_DIA[target.diaSemana] ?? 'día'} ${fechaClase}?`,
         { title: 'Clase liberada', confirmText: 'Sí, tomar clase', cancelText: 'No ahora', tone: 'primary' }
       );
       if (!confirmo) return;

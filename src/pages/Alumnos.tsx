@@ -526,8 +526,7 @@ const Alumnos = () => {
       toast.error('No se pudo detectar la sede. Cerrando sesión y volvé a entrar para que el link general incluya tu sede.');
       return;
     }
-    let url = `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}`;
-    if (modo === 'recuperar') url += '&modo=recuperar';
+    let url = `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=${modo}`;
     try {
       navigator.clipboard.writeText(url);
       toast.success(modo === 'recuperar'

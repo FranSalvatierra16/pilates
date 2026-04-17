@@ -2843,7 +2843,7 @@ async function resolveSucursalBrandForPublicRequest(db, req) {
     return rows[0] || null;
   }
 
-  if (req.path === '/mi-clase' && token) {
+  if (token) {
     const { rows } = await db.query(
       `SELECT s.id, s.nombre_lugar, s.foto_perfil
          FROM alumnos a
@@ -2911,6 +2911,10 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
   try {
     const db = await getPool();
     const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
+    const esPortalAlumno = (req.query.portal || '').toString().trim().toLowerCase() === 'alumno';
+    const modoPortal = (req.query.modo || '').toString().trim().toLowerCase() === 'recuperar' ? 'recuperar' : 'fijo';
+    const token = (req.query.token || '').toString().trim();
+    const sucursalId = (req.query.sucursalId || '').toString().trim();
     const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '');
     const fallbackName = brand === 'fitgest'
       ? 'FitGest'
@@ -2919,19 +2923,32 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
         : 'FitGest';
     const name = sucursal?.nombre_lugar || fallbackName;
     const icon = sucursal?.id ? getPublicLogoUrl(req, sucursal.id) : '/fitgest.png';
+    const startUrl = esPortalAlumno
+      ? token
+        ? `/mi-clase?token=${encodeURIComponent(token)}&modo=${modoPortal}`
+        : sucursalId
+          ? `/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=${modoPortal}`
+          : `/mi-clase?modo=${modoPortal}`
+      : '/';
+    const appName = esPortalAlumno ? `${name} - Mi Clase` : `${name} - Sistema de Gestión`;
+    const shortName = esPortalAlumno ? 'Mi Clase' : name;
+    const description = esPortalAlumno
+      ? 'Portal de alumnos para ver perfil, clases y recuperaciones'
+      : 'Sistema de gestión para Pilates';
+    const scope = esPortalAlumno ? '/mi-clase' : '/';
 
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
     res.json({
-      name: `${name} - Sistema de Gestión`,
-      short_name: name,
-      description: 'Sistema de gestión para Pilates',
+      name: appName,
+      short_name: shortName,
+      description,
       theme_color: '#0f172a',
       background_color: '#0f172a',
       display: 'standalone',
       orientation: 'portrait',
-      scope: '/',
-      start_url: '/',
+      scope,
+      start_url: startUrl,
       icons: [
         { src: icon, sizes: '192x192', type: 'image/png', purpose: 'any' },
         { src: icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
@@ -2939,18 +2956,29 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
     });
   } catch (e) {
     console.error(e);
+    const esPortalAlumno = (req.query.portal || '').toString().trim().toLowerCase() === 'alumno';
+    const modoPortal = (req.query.modo || '').toString().trim().toLowerCase() === 'recuperar' ? 'recuperar' : 'fijo';
+    const token = (req.query.token || '').toString().trim();
+    const sucursalId = (req.query.sucursalId || '').toString().trim();
+    const startUrl = esPortalAlumno
+      ? token
+        ? `/mi-clase?token=${encodeURIComponent(token)}&modo=${modoPortal}`
+        : sucursalId
+          ? `/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=${modoPortal}`
+          : `/mi-clase?modo=${modoPortal}`
+      : '/';
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
     res.json({
-      name: 'FitGest - Sistema de Gestión',
-      short_name: 'FitGest',
-      description: 'Sistema de gestión para Pilates',
+      name: esPortalAlumno ? 'Mi Clase' : 'FitGest - Sistema de Gestión',
+      short_name: esPortalAlumno ? 'Mi Clase' : 'FitGest',
+      description: esPortalAlumno ? 'Portal de alumnos para ver perfil, clases y recuperaciones' : 'Sistema de gestión para Pilates',
       theme_color: '#0f172a',
       background_color: '#0f172a',
       display: 'standalone',
       orientation: 'portrait',
-      scope: '/',
-      start_url: '/',
+      scope: esPortalAlumno ? '/mi-clase' : '/',
+      start_url: startUrl,
       icons: [
         { src: '/fitgest.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
         { src: '/fitgest.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },

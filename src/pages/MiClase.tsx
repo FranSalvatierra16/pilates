@@ -197,6 +197,25 @@ const MiClase = () => {
     }
   }, [tokenFromUrl, modoFromUrl, semanaElegida]);
 
+  useEffect(() => {
+    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+    const sid = data?.sucursalId || sucursalIdFromUrl;
+    const params = new URLSearchParams({ portal: 'alumno', modo: modoFromUrl });
+    if (tokenFromUrl.trim()) params.set('token', tokenFromUrl.trim());
+    else if (sid.trim()) params.set('sucursalId', sid.trim());
+    const manifestHref = `/api/manifest.webmanifest?${params.toString()}`;
+    const iconHref = sid.trim() ? `/api/public/sucursal-logo/${encodeURIComponent(sid.trim())}` : '/fitgest.png';
+
+    if (manifestLink) manifestLink.href = manifestHref;
+    if (appleTouch) appleTouch.href = iconHref;
+    if (favicon) favicon.href = iconHref;
+    if (appleTitle) appleTitle.content = 'Mi Clase';
+    document.title = 'Mi Clase';
+  }, [data?.sucursalId, modoFromUrl, sucursalIdFromUrl, tokenFromUrl]);
+
   const cargarPorDni = async (dni: string, sucursalIdElegida?: string) => {
     setEnviandoDni(true);
     setError('');

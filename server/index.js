@@ -1835,7 +1835,7 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
       const nombre = [infoRec[0].apellido, infoRec[0].nombre].filter(Boolean).join(', ');
       const dia = DIAS_SEMANA_ES[infoRec[0].dia_semana] ?? '';
       const turno = `${dia} ${infoRec[0].hora} - ${infoRec[0].titulo || 'Clase'}`;
-      await sendPushToSucursal(db, alumno.sucursal_id, {
+      queuePushToSucursal(db, alumno.sucursal_id, {
         title: 'Recuperación: nueva anotación',
         body: `${nombre} se anotó para recuperar en ${turno}`,
       });
@@ -1916,7 +1916,7 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
         const nombre = [infoLib[0].apellido, infoLib[0].nombre].filter(Boolean).join(', ');
         const dia = DIAS_SEMANA_ES[infoLib[0].dia_semana] ?? '';
         const turno = `${dia} ${infoLib[0].hora} - ${infoLib[0].titulo || 'Clase'}`;
-        await sendPushToSucursal(db, alumno.sucursal_id, {
+        queuePushToSucursal(db, alumno.sucursal_id, {
           title: 'Recuperación: cupo liberado',
           body: `${nombre} liberó recuperación en ${turno}`,
         });
@@ -1980,7 +1980,7 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
     const nombre = [alumno.apellido, alumno.nombre].filter(Boolean).join(', ');
     const dia = DIAS_SEMANA_ES[t.dia_semana] ?? '';
     const turno = `${dia} ${t.hora} - ${t.titulo || 'Clase'}`;
-    await sendPushToSucursal(db, alumno.sucursal_id, {
+    queuePushToSucursal(db, alumno.sucursal_id, {
       title: 'Cupo liberado',
       body: `${nombre} liberó cupo en ${turno}`,
     });
@@ -2129,7 +2129,7 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
       const nombre = [info[0].apellido, info[0].nombre].filter(Boolean).join(', ');
       const dia = DIAS_SEMANA_ES[info[0].dia_semana] ?? '';
       const turno = `${dia} ${info[0].hora} - ${info[0].titulo || 'Clase'}`;
-      await sendPushToSucursal(db, alumno.sucursal_id, {
+      queuePushToSucursal(db, alumno.sucursal_id, {
         title: 'Nueva anotación',
         body: `${nombre} se anotó en ${turno}`,
       });
@@ -2171,7 +2171,7 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
       const nombre = [info[0].apellido, info[0].nombre].filter(Boolean).join(', ');
       const dia = DIAS_SEMANA_ES[info[0].dia_semana] ?? '';
       const turno = `${dia} ${info[0].hora} - ${info[0].titulo || 'Clase'}`;
-      await sendPushToSucursal(db, alumno.sucursal_id, {
+      queuePushToSucursal(db, alumno.sucursal_id, {
         title: 'Cupo liberado',
         body: `${nombre} liberó cupo en ${turno}`,
       });
@@ -2272,6 +2272,14 @@ async function sendPushToSucursal(db, sucursalId, payload) {
     }
   }
   if (sent > 0) console.log('[Push] Enviado a', sent, 'dispositivo(s):', payload.title);
+}
+
+function queuePushToSucursal(db, sucursalId, payload) {
+  Promise.resolve()
+    .then(() => sendPushToSucursal(db, sucursalId, payload))
+    .catch((err) => {
+      console.error('[Push] Error async', err?.statusCode || err?.message || err);
+    });
 }
 
 app.get('/api/push-vapid-public', (req, res) => {

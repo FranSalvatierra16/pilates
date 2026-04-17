@@ -228,7 +228,7 @@ const MiClase = () => {
         url += '&modo=recuperar';
         url += `&semana=${encodeURIComponent(semanaElegida === 'actual' ? getSemanaActual() : getSemanaSiguiente(getSemanaActual()))}`;
       }
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url);
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (res.status === 400 && json.sucursales?.length) {
@@ -291,7 +291,7 @@ const MiClase = () => {
         ? { token: portalAuth.token, turnoId, ...(esRecuperar && { semana }) }
         : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId, ...(esRecuperar && { semana }) };
       const endpoint = esRecuperar ? '/api/alumno-portal/inscribir-recuperacion' : '/api/alumno-portal/inscribir';
-      const res = await fetch(`${base}${endpoint}`, {
+      const res = await fetchWithTimeout(`${base}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -344,7 +344,7 @@ const MiClase = () => {
         ? { ...baseBody, ...(recuperacionId ? { recuperacionId } : { turnoId, semana }) }
         : { ...baseBody, turnoId };
       const endpoint = esRecuperar ? '/api/alumno-portal/liberar-recuperacion' : '/api/alumno-portal/liberar';
-      const res = await fetch(`${base}${endpoint}`, {
+      const res = await fetchWithTimeout(`${base}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -381,7 +381,7 @@ const MiClase = () => {
       const body = portalAuth.type === 'token'
         ? { token: portalAuth.token, turnoId, semana }
         : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId, semana };
-      const res = await fetch(`${base}/api/alumno-portal/liberar-clase-semana`, {
+      const res = await fetchWithTimeout(`${base}/api/alumno-portal/liberar-clase-semana`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -406,7 +406,7 @@ const MiClase = () => {
       const body = portalAuth.type === 'token'
         ? { token: portalAuth.token, turnoId, semana, liberacionId }
         : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, turnoId, semana, liberacionId };
-      const res = await fetch(`${base}/api/alumno-portal/restaurar-clase-semana`, {
+      const res = await fetchWithTimeout(`${base}/api/alumno-portal/restaurar-clase-semana`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

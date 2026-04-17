@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja, AgendaNota } from '../types';
 import { getFechaFromSemanaYDia } from './date';
 
 const STORAGE_KEYS = {
@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   recuperaciones: 'savia_recuperaciones',
   inscripcionesTurno: 'savia_inscripciones_turno',
   cierresCaja: 'savia_cierres_caja',
+  agendaNotas: 'savia_agenda_notas',
 } as const;
 
 export const storage = {
@@ -303,6 +304,33 @@ export const storage = {
     },
     getById: (id: string): CierreCaja | undefined => {
       return storage.cierresCaja.getAll().find((c) => c.id === id);
+    },
+  },
+
+  agendaNotas: {
+    getAll: (): AgendaNota[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.agendaNotas);
+      return data ? JSON.parse(data) : [];
+    },
+    save: (notas: AgendaNota[]): void => {
+      localStorage.setItem(STORAGE_KEYS.agendaNotas, JSON.stringify(notas));
+    },
+    add: (nota: AgendaNota): void => {
+      const notas = storage.agendaNotas.getAll();
+      notas.push(nota);
+      storage.agendaNotas.save(notas);
+    },
+    update: (id: string, updates: Partial<AgendaNota>): void => {
+      const notas = storage.agendaNotas.getAll();
+      const index = notas.findIndex((n) => n.id === id);
+      if (index !== -1) {
+        notas[index] = { ...notas[index], ...updates };
+        storage.agendaNotas.save(notas);
+      }
+    },
+    delete: (id: string): void => {
+      const notas = storage.agendaNotas.getAll().filter((n) => n.id !== id);
+      storage.agendaNotas.save(notas);
     },
   },
 };

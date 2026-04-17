@@ -10,6 +10,7 @@ import {
   CreditCard, 
   Wallet,
   Calendar,
+  FileText,
   LogOut,
   GraduationCap,
   AlertCircle,
@@ -152,6 +153,7 @@ const Layout = ({ children }: LayoutProps) => {
     { path: '/acceso', label: 'Acceso', icon: DoorOpen },
     { path: '/pagos', label: 'Pagos', icon: CreditCard },
     { path: '/caja', label: 'Caja', icon: Wallet },
+    { path: '/agenda', label: 'Agenda', icon: FileText },
     { path: '/notificaciones', label: 'Notif.', icon: Bell },
   ];
 

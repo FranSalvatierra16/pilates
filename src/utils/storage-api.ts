@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal, HorariosSucursal, Recuperacion, InscripcionTurno, CierreCaja } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal, HorariosSucursal, Recuperacion, InscripcionTurno, CierreCaja, AgendaNota } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -106,6 +106,14 @@ export const storageApi = {
       horaCierre?: string;
     }): Promise<CierreCaja> =>
       request<CierreCaja>('/api/cierres-caja', { method: 'POST', body: JSON.stringify(body) }),
+  },
+  agendaNotas: {
+    getAll: (): Promise<AgendaNota[]> => request<AgendaNota[]>('/api/agenda-notas'),
+    add: (nota: AgendaNota): Promise<void> =>
+      request('/api/agenda-notas', { method: 'POST', body: JSON.stringify(nota) }),
+    update: (id: string, updates: Partial<AgendaNota>): Promise<void> =>
+      request(`/api/agenda-notas/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+    delete: (id: string): Promise<void> => request(`/api/agenda-notas/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
   profesores: {
     getAll: (): Promise<Profesor[]> => request<Profesor[]>('/api/profesores'),

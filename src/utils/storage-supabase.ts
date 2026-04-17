@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, AgendaNota } from '../types';
 import { supabase } from '../config/supabase';
 
 // Verificar si Supabase está configurado
@@ -133,6 +133,26 @@ const turnoToDb = (turno: Turno) => ({
   profesor_id: turno.profesorId || null,
   alumno_ids: turno.alumnoIds,
   created_at: turno.createdAt,
+});
+
+const dbToAgendaNota = (row: any): AgendaNota => ({
+  id: row.id,
+  titulo: row.titulo,
+  contenido: row.contenido || '',
+  fecha: typeof row.fecha === 'string' ? row.fecha.slice(0, 10) : row.fecha,
+  hora: row.hora ? String(row.hora).slice(0, 5) : '',
+  importante: row.importante === true,
+  createdAt: row.created_at,
+});
+
+const agendaNotaToDb = (nota: AgendaNota) => ({
+  id: nota.id,
+  titulo: nota.titulo,
+  contenido: nota.contenido || '',
+  fecha: nota.fecha,
+  hora: nota.hora || null,
+  importante: nota.importante === true,
+  created_at: nota.createdAt,
 });
 
 export const storageSupabase = {
@@ -391,6 +411,47 @@ export const storageSupabase = {
         return [];
       }
       return (data || []).filter((t: any) => t.alumno_ids?.includes(alumnoId)).map(dbToTurno);
+    },
+  },
+  agendaNotas: {
+    getAll: async (): Promise<AgendaNota[]> => {
+      if (!useSupabase()) return [];
+      const { data, error } = await supabase.from('agenda_notas').select('*').order('fecha', { ascending: true }).order('hora', { ascending: true }).order('created_at', { ascending: false });
+      if (error) {
+        console.error('Error fetching agenda notas:', error);
+        return [];
+      }
+      return (data || []).map(dbToAgendaNota);
+    },
+    add: async (nota: AgendaNota): Promise<void> => {
+      if (!useSupabase()) return;
+      const { error } = await supabase.from('agenda_notas').insert(agendaNotaToDb(nota));
+      if (error) {
+        console.error('Error adding agenda nota:', error);
+        throw error;
+      }
+    },
+    update: async (id: string, updates: Partial<AgendaNota>): Promise<void> => {
+      if (!useSupabase()) return;
+      const dbUpdates: any = {};
+      if (updates.titulo !== undefined) dbUpdates.titulo = updates.titulo;
+      if (updates.contenido !== undefined) dbUpdates.contenido = updates.contenido;
+      if (updates.fecha !== undefined) dbUpdates.fecha = updates.fecha;
+      if (updates.hora !== undefined) dbUpdates.hora = updates.hora || null;
+      if (updates.importante !== undefined) dbUpdates.importante = updates.importante === true;
+      const { error } = await supabase.from('agenda_notas').update(dbUpdates).eq('id', id);
+      if (error) {
+        console.error('Error updating agenda nota:', error);
+        throw error;
+      }
+    },
+    delete: async (id: string): Promise<void> => {
+      if (!useSupabase()) return;
+      const { error } = await supabase.from('agenda_notas').delete().eq('id', id);
+      if (error) {
+        console.error('Error deleting agenda nota:', error);
+        throw error;
+      }
     },
   },
 };

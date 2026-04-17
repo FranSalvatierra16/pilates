@@ -215,6 +215,16 @@ export interface RegistroLink {
   createdAt: string;
 }
 
+export interface AgendaNota {
+  id: string;
+  titulo: string;
+  contenido: string;
+  fecha: string; // YYYY-MM-DD
+  hora?: string;
+  importante?: boolean;
+  createdAt: string;
+}
+
 // Nombres de días de la semana (sin domingo)
 export const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 

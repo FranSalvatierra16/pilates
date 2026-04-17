@@ -1188,6 +1188,92 @@ app.get('/api/turnos/by-alumno/:alumnoId', async (req, res) => {
   }
 });
 
+// --- Agenda / Notas ---
+app.get('/api/agenda-notas', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { rows } = await db.query(
+      'SELECT * FROM agenda_notas WHERE sucursal_id = $1 ORDER BY fecha ASC, hora ASC NULLS LAST, created_at DESC',
+      [req.user.sucursalId]
+    );
+    res.json(rows.map((r) => ({
+      id: r.id,
+      titulo: r.titulo || '',
+      contenido: r.contenido || '',
+      fecha: typeof r.fecha === 'string' ? r.fecha.slice(0, 10) : r.fecha?.toISOString?.().slice(0, 10),
+      hora: r.hora || '',
+      importante: r.importante === true,
+      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+    })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/agenda-notas', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const b = req.body || {};
+    if (!String(b.titulo || '').trim()) return res.status(400).json({ error: 'Falta el título' });
+    if (!String(b.fecha || '').trim()) return res.status(400).json({ error: 'Falta la fecha' });
+    await db.query(
+      'INSERT INTO agenda_notas (id, sucursal_id, titulo, contenido, fecha, hora, importante, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [
+        b.id,
+        req.user.sucursalId,
+        String(b.titulo || '').trim(),
+        String(b.contenido || ''),
+        String(b.fecha).slice(0, 10),
+        String(b.hora || '').trim() || null,
+        b.importante === true,
+        b.createdAt || new Date().toISOString(),
+      ]
+    );
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/agenda-notas/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const b = req.body || {};
+    const updates = [];
+    const values = [];
+    let i = 1;
+    if (b.titulo !== undefined) { updates.push(`titulo = $${i++}`); values.push(String(b.titulo || '').trim()); }
+    if (b.contenido !== undefined) { updates.push(`contenido = $${i++}`); values.push(String(b.contenido || '')); }
+    if (b.fecha !== undefined) { updates.push(`fecha = $${i++}`); values.push(String(b.fecha || '').slice(0, 10)); }
+    if (b.hora !== undefined) { updates.push(`hora = $${i++}`); values.push(String(b.hora || '').trim() || null); }
+    if (b.importante !== undefined) { updates.push(`importante = $${i++}`); values.push(b.importante === true); }
+    if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
+    values.push(req.params.id, req.user.sucursalId);
+    await db.query(`UPDATE agenda_notas SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/agenda-notas/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    await db.query('DELETE FROM agenda_notas WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Horarios de sucursal (configurables por sucursal: ej. Savia 7-12, Nes 9-13) ---
 function generarHorasDesdeHasta(inicio, fin) {
   const out = [];

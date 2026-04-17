@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja, AgendaNota } from '../types';
 import { buildCierreRetiro } from './cierre-caja';
 import { horaActualInput } from './date';
 import { storage } from './storage';
@@ -161,6 +161,39 @@ export const storageHybrid = {
       );
       storage.cierresCaja.add(cierre);
       return cierre;
+    },
+  },
+
+  agendaNotas: {
+    getAll: async (): Promise<AgendaNota[]> => {
+      if (useApi()) return storageApi.agendaNotas.getAll();
+      const b: any = backend();
+      if (b?.agendaNotas) return await b.agendaNotas.getAll();
+      return storage.agendaNotas.getAll();
+    },
+    add: async (nota: AgendaNota): Promise<void> => {
+      if (useApi()) await storageApi.agendaNotas.add(nota);
+      else {
+        const b: any = backend();
+        if (b?.agendaNotas) await b.agendaNotas.add(nota);
+        else storage.agendaNotas.add(nota);
+      }
+    },
+    update: async (id: string, updates: Partial<AgendaNota>): Promise<void> => {
+      if (useApi()) await storageApi.agendaNotas.update(id, updates);
+      else {
+        const b: any = backend();
+        if (b?.agendaNotas) await b.agendaNotas.update(id, updates);
+        else storage.agendaNotas.update(id, updates);
+      }
+    },
+    delete: async (id: string): Promise<void> => {
+      if (useApi()) await storageApi.agendaNotas.delete(id);
+      else {
+        const b: any = backend();
+        if (b?.agendaNotas) await b.agendaNotas.delete(id);
+        else storage.agendaNotas.delete(id);
+      }
     },
   },
 

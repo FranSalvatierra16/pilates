@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, Save, Star, Trash2 } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, Save, Star, Trash2, X } from 'lucide-react';
 import { AgendaNota } from '../types';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { useToast } from '../components/ToastProvider';
@@ -60,6 +60,7 @@ export default function Agenda() {
   const [notas, setNotas] = useState<AgendaNota[]>([]);
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(hoyISO);
   const [monthCursor, setMonthCursor] = useState(() => inicioMes(new Date()));
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -109,6 +110,8 @@ export default function Agenda() {
     return notas.filter((nota) => !nota.fecha).sort(compareAgendaNotas);
   }, [notas]);
 
+  const selectedDateLabel = selectedDate === hoyISO() ? 'Hoy' : formatFechaLarga(selectedDate);
+
   const resetForm = () => {
     setEditingId(null);
     setForm({
@@ -118,6 +121,16 @@ export default function Agenda() {
       importante: false,
       sinFecha: false,
     });
+  };
+
+  const openNuevaNotaModal = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    resetForm();
   };
 
   const handleSave = async () => {
@@ -152,7 +165,7 @@ export default function Agenda() {
         toast.success('Nota agregada.');
       }
       await loadNotas();
-      resetForm();
+      closeModal();
     } catch (error) {
       console.error('Error saving agenda nota:', error);
       toast.error('No se pudo guardar la nota.');
@@ -175,6 +188,7 @@ export default function Agenda() {
       importante: nota.importante === true,
       sinFecha: !nota.fecha,
     });
+    setShowModal(true);
   };
 
   const handleDelete = async (nota: AgendaNota) => {
@@ -186,13 +200,58 @@ export default function Agenda() {
     try {
       await storageHybrid.agendaNotas.delete(nota.id);
       await loadNotas();
-      if (editingId === nota.id) resetForm();
+      if (editingId === nota.id) closeModal();
       toast.success('Nota eliminada.');
     } catch (error) {
       console.error('Error deleting agenda nota:', error);
       toast.error('No se pudo eliminar la nota.');
     }
   };
+
+  const renderNotaCard = (nota: AgendaNota) => (
+    <div
+      key={nota.id}
+      className={`rounded-xl border p-3 sm:p-4 ${nota.importante ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="font-semibold text-gray-900">{nota.titulo}</h4>
+            {nota.importante && (
+              <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                Importante
+              </span>
+            )}
+            {nota.hora && (
+              <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
+                {nota.hora}
+              </span>
+            )}
+          </div>
+          {nota.contenido && (
+            <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{nota.contenido}</p>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 sm:flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => handleEdit(nota)}
+            className="text-sm text-primary-600 hover:underline min-h-[36px] px-2"
+          >
+            Editar
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDelete(nota)}
+            className="p-2 rounded-lg text-red-600 hover:bg-red-50"
+            aria-label="Eliminar nota"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -208,7 +267,7 @@ export default function Agenda() {
         </div>
         <button
           type="button"
-          onClick={resetForm}
+          onClick={openNuevaNotaModal}
           className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
         >
           <Plus className="w-4 h-4" />
@@ -285,9 +344,9 @@ export default function Agenda() {
           </div>
 
           <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
-            <p className="text-xs font-medium text-primary-700">Fecha elegida</p>
+            <p className="text-xs font-medium text-primary-700">{selectedDate === hoyISO() ? 'Día actual' : 'Fecha elegida'}</p>
             <div className="mt-1 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold text-primary-900 capitalize">{formatFechaLarga(selectedDate)}</p>
+              <p className="text-sm font-semibold text-primary-900 capitalize">{selectedDateLabel}</p>
               <span className="text-xs sm:text-sm text-primary-700">
                 {notasDelDia.length} nota{notasDelDia.length === 1 ? '' : 's'}
               </span>
@@ -299,63 +358,10 @@ export default function Agenda() {
           <div className="card p-4 sm:p-5">
             <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h2 className="text-lg font-bold text-gray-900 capitalize">{formatFechaLarga(selectedDate)}</h2>
+                <h2 className="text-lg font-bold text-gray-900 capitalize">{selectedDateLabel}</h2>
                 <p className="text-sm text-gray-500">{notasDelDia.length} nota{notasDelDia.length === 1 ? '' : 's'} en esta fecha</p>
               </div>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  const [y, m] = e.target.value.split('-').map(Number);
-                  setMonthCursor(new Date(y, (m || 1) - 1, 1));
-                }}
-                className="input-field w-full sm:w-auto"
-              />
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Título</label>
-                <input
-                  type="text"
-                  value={form.titulo}
-                  onChange={(e) => setForm((prev) => ({ ...prev, titulo: e.target.value }))}
-                  className="input-field"
-                  placeholder="Ej: Llamar al service de reformers"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora</label>
-                  <input
-                    type="time"
-                    value={form.hora}
-                    onChange={(e) => setForm((prev) => ({ ...prev, hora: e.target.value }))}
-                    className="input-field"
-                  />
-                </div>
-                <label className="flex items-start gap-2 mt-1 sm:mt-7 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.importante}
-                    onChange={(e) => setForm((prev) => ({ ...prev, importante: e.target.checked }))}
-                    className="rounded border-gray-300 text-amber-500 focus:ring-amber-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Marcar como importante</span>
-                </label>
-              </div>
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.sinFecha}
-                  onChange={(e) => setForm((prev) => ({ ...prev, sinFecha: e.target.checked }))}
-                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm font-medium text-gray-700">Nota sin fecha (aparece abajo del calendario)</span>
-              </label>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+              <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   type="date"
                   value={selectedDate}
@@ -364,90 +370,25 @@ export default function Agenda() {
                     const [y, m] = e.target.value.split('-').map(Number);
                     setMonthCursor(new Date(y, (m || 1) - 1, 1));
                   }}
-                  disabled={form.sinFecha}
-                  className="input-field disabled:bg-gray-100 disabled:text-gray-400"
+                  className="input-field w-full sm:w-auto"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nota</label>
-                <textarea
-                  value={form.contenido}
-                  onChange={(e) => setForm((prev) => ({ ...prev, contenido: e.target.value }))}
-                  className="input-field min-h-[110px]"
-                  placeholder="Recordatorio, tarea, aviso interno..."
-                />
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
-                  onClick={handleSave}
-                  disabled={guardando}
+                  onClick={openNuevaNotaModal}
                   className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
                 >
-                  <Save className="w-4 h-4" />
-                  {guardando ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar nota'}
+                  <Plus className="w-4 h-4" />
+                  Nueva nota
                 </button>
-                {editingId && (
-                  <button type="button" onClick={resetForm} className="btn-secondary w-full sm:w-auto min-h-[44px]">
-                    Cancelar edición
-                  </button>
-                )}
               </div>
             </div>
-          </div>
-
-          <div className="card p-4 sm:p-5">
-            <h3 className="text-base font-bold text-gray-900 mb-4">Notas del día</h3>
             {loading ? (
               <p className="text-sm text-gray-500">Cargando notas...</p>
             ) : notasDelDia.length === 0 ? (
               <p className="text-sm text-gray-500">No hay notas para esta fecha.</p>
             ) : (
               <div className="space-y-3">
-                {notasDelDia.map((nota) => (
-                  <div
-                    key={nota.id}
-                    className={`rounded-xl border p-3 sm:p-4 ${nota.importante ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-semibold text-gray-900">{nota.titulo}</h4>
-                          {nota.importante && (
-                            <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                              Importante
-                            </span>
-                          )}
-                          {nota.hora && (
-                            <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
-                              {nota.hora}
-                            </span>
-                          )}
-                        </div>
-                        {nota.contenido && (
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{nota.contenido}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-end gap-2 sm:flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(nota)}
-                          className="text-sm text-primary-600 hover:underline min-h-[36px] px-2"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(nota)}
-                          className="p-2 rounded-lg text-red-600 hover:bg-red-50"
-                          aria-label="Eliminar nota"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                {notasDelDia.map(renderNotaCard)}
               </div>
             )}
           </div>
@@ -470,53 +411,123 @@ export default function Agenda() {
           <p className="text-sm text-gray-500">No hay notas sin fecha.</p>
         ) : (
           <div className="space-y-3">
-            {notasSinFecha.map((nota) => (
-              <div
-                key={nota.id}
-                className={`rounded-xl border p-3 sm:p-4 ${nota.importante ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-semibold text-gray-900">{nota.titulo}</h4>
-                      {nota.importante && (
-                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                          Importante
-                        </span>
-                      )}
-                      {nota.hora && (
-                        <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
-                          {nota.hora}
-                        </span>
-                      )}
-                    </div>
-                    {nota.contenido && (
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{nota.contenido}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-end gap-2 sm:flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleEdit(nota)}
-                      className="text-sm text-primary-600 hover:underline min-h-[36px] px-2"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(nota)}
-                      className="p-2 rounded-lg text-red-600 hover:bg-red-50"
-                      aria-label="Eliminar nota"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+            {notasSinFecha.map(renderNotaCard)}
           </div>
         )}
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {editingId ? 'Editar nota' : 'Nueva nota'}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {form.sinFecha ? 'Nota general sin fecha.' : `Fecha: ${selectedDateLabel}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Título</label>
+                <input
+                  type="text"
+                  value={form.titulo}
+                  onChange={(e) => setForm((prev) => ({ ...prev, titulo: e.target.value }))}
+                  className="input-field"
+                  placeholder="Ej: Llamar al service de reformers"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora</label>
+                  <input
+                    type="time"
+                    value={form.hora}
+                    onChange={(e) => setForm((prev) => ({ ...prev, hora: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+                <label className="flex items-start gap-2 mt-1 sm:mt-7 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.importante}
+                    onChange={(e) => setForm((prev) => ({ ...prev, importante: e.target.checked }))}
+                    className="rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Marcar como importante</span>
+                </label>
+              </div>
+
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.sinFecha}
+                  onChange={(e) => setForm((prev) => ({ ...prev, sinFecha: e.target.checked }))}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Nota sin fecha (aparece abajo del calendario)</span>
+              </label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    const [y, m] = e.target.value.split('-').map(Number);
+                    setMonthCursor(new Date(y, (m || 1) - 1, 1));
+                  }}
+                  disabled={form.sinFecha}
+                  className="input-field disabled:bg-gray-100 disabled:text-gray-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nota</label>
+                <textarea
+                  value={form.contenido}
+                  onChange={(e) => setForm((prev) => ({ ...prev, contenido: e.target.value }))}
+                  className="input-field min-h-[120px]"
+                  placeholder="Recordatorio, tarea, aviso interno..."
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={guardando}
+                  className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
+                >
+                  <Save className="w-4 h-4" />
+                  {guardando ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar nota'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="btn-secondary w-full sm:w-auto min-h-[44px]"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

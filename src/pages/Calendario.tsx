@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -176,6 +176,7 @@ const Calendario = () => {
   const [generandoDisponibles, setGenerandoDisponibles] = useState(false);
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const [exportandoPdf, setExportandoPdf] = useState(false);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [selectedDiaMobile, setSelectedDiaMobile] = useState<number | null>(null);
@@ -1011,6 +1012,113 @@ const Calendario = () => {
     };
   };
 
+  const exportarResumenSemanalPDF = async () => {
+    try {
+      setExportandoPdf(true);
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const marginX = 14;
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const maxWidth = doc.internal.pageSize.getWidth() - marginX * 2;
+      let y = 16;
+
+      const addLine = (text: string, opts?: { bold?: boolean; size?: number; gapBefore?: number }) => {
+        if (opts?.gapBefore) y += opts.gapBefore;
+        doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal');
+        doc.setFontSize(opts?.size || 11);
+        const lines = doc.splitTextToSize(text, maxWidth);
+        const blockHeight = lines.length * ((opts?.size || 11) * 0.38 + 1.5);
+        if (y + blockHeight > pageHeight - 12) {
+          doc.addPage();
+          y = 16;
+        }
+        doc.text(lines, marginX, y);
+        y += blockHeight;
+      };
+
+      const turnosActivos = turnos
+        .filter((turno) => diasSemana.includes(turno.diaSemana))
+        .sort((a, b) => a.diaSemana - b.diaSemana || a.hora.localeCompare(b.hora));
+
+      const resumenPorDia = diasSemana.map((dia) => {
+        const turnosDelDia = turnosActivos.filter((turno) => turno.diaSemana === dia);
+        const clases = turnosDelDia.length;
+        const alumnasFijas = turnosDelDia.reduce(
+          (acc, turno) => acc + getAlumnosDelTurno(turno).filter((item) => !item.isRecuperacion).length,
+          0
+        );
+        const recuperacionesDia = recuperaciones.filter((rec) => {
+          const turno = turnos.find((t) => t.id === rec.turnoId);
+          return turno?.diaSemana === dia;
+        }).length;
+        const asistenciasDia = asistencias.filter((asi) => {
+          const turno = turnos.find((t) => t.id === asi.turnoId);
+          return turno?.diaSemana === dia && asi.estado === 'asistio';
+        }).length;
+        const faltasDia = asistencias.filter((asi) => {
+          const turno = turnos.find((t) => t.id === asi.turnoId);
+          return turno?.diaSemana === dia && asi.estado === 'no_asistio';
+        }).length;
+        const libresDia = turnosDelDia.reduce((acc, turno) => {
+          const ocupacion = getAlumnosDelTurno(turno).length;
+          return acc + Math.max(0, (turno.cupo ?? CUPO_DEFAULT) - ocupacion);
+        }, 0);
+        return {
+          dia,
+          clases,
+          alumnasFijas,
+          recuperacionesDia,
+          asistenciasDia,
+          faltasDia,
+          libresDia,
+          turnos: turnosDelDia,
+        };
+      });
+
+      const totalClases = resumenPorDia.reduce((acc, item) => acc + item.clases, 0);
+      const totalFijas = resumenPorDia.reduce((acc, item) => acc + item.alumnasFijas, 0);
+      const totalRecuperaciones = resumenPorDia.reduce((acc, item) => acc + item.recuperacionesDia, 0);
+      const totalAsistencias = resumenPorDia.reduce((acc, item) => acc + item.asistenciasDia, 0);
+      const totalFaltas = resumenPorDia.reduce((acc, item) => acc + item.faltasDia, 0);
+      const totalLibres = resumenPorDia.reduce((acc, item) => acc + item.libresDia, 0);
+      const turnosLlenos = turnosActivos.filter((turno) => getAlumnosDelTurno(turno).length >= (turno.cupo ?? CUPO_DEFAULT)).length;
+
+      addLine('Resumen semanal', { bold: true, size: 18 });
+      addLine(getRangoSemana(semanaVista), { size: 11 });
+      addLine(`Clases: ${totalClases} | Fijas: ${totalFijas} | Recuperaciones: ${totalRecuperaciones}`, { gapBefore: 4 });
+      addLine(`Asistencias: ${totalAsistencias} | Inasistencias: ${totalFaltas} | Lugares libres: ${totalLibres} | Llenas: ${turnosLlenos}`);
+
+      resumenPorDia.forEach((item) => {
+        if (item.clases === 0) return;
+        addLine(DIAS_SEMANA[item.dia], { bold: true, size: 13, gapBefore: 5 });
+        addLine(
+          `Clases ${item.clases} | Fijas ${item.alumnasFijas} | Recuperaciones ${item.recuperacionesDia} | Asistencias ${item.asistenciasDia} | Faltas ${item.faltasDia} | Libres ${item.libresDia}`,
+          { size: 10 }
+        );
+        item.turnos.forEach((turno) => {
+          const alumnosTurno = getAlumnosDelTurno(turno);
+          const recs = alumnosTurno.filter((alumno) => alumno.isRecuperacion).length;
+          const fijas = alumnosTurno.length - recs;
+          const libres = Math.max(0, (turno.cupo ?? CUPO_DEFAULT) - alumnosTurno.length);
+          const titulo = turno.titulo?.trim() || 'Clase';
+          addLine(
+            `${turno.hora} - ${titulo} | ${alumnosTurno.length}/${turno.cupo ?? CUPO_DEFAULT} | Fijas ${fijas} | Rec ${recs} | Libres ${libres}`,
+            { size: 10 }
+          );
+        });
+      });
+
+      const nombreArchivo = `resumen-semanal-${semanaVista}.pdf`;
+      doc.save(nombreArchivo);
+      toast.success('PDF generado.');
+    } catch (error) {
+      console.error('Error exportando PDF:', error);
+      toast.error('No se pudo generar el PDF.');
+    } finally {
+      setExportandoPdf(false);
+    }
+  };
+
   const renderAlumnoEnTurno = (item: AlumnoEnTurno, turno: Turno | undefined, diaSemana: number, hora: string) => {
     if (!turno) return null;
     const { alumno, isRecuperacion } = item;
@@ -1124,6 +1232,16 @@ const Calendario = () => {
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={exportarResumenSemanalPDF}
+            disabled={exportandoPdf}
+            className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px] disabled:opacity-60"
+            title="Exportar resumen semanal en PDF"
+          >
+            <FileText className="w-4 h-4" />
+            {exportandoPdf ? 'Generando PDF...' : 'Exportar PDF'}
+          </button>
           <button
             type="button"
             onClick={abrirModalCompartirDisponibles}

@@ -1744,6 +1744,9 @@ app.post('/api/alumno-portal/push-subscribe', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { token, dni, sucursalId, subscription } = req.body || {};
+    if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+      return res.status(503).json({ error: 'Faltan configurar las notificaciones push en el servidor.' });
+    }
     if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
       return res.status(400).json({ error: 'Suscripción inválida' });
     }
@@ -1760,7 +1763,20 @@ app.post('/api/alumno-portal/push-subscribe', async (req, res) => {
        ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, p256dh = $4, auth = $5`,
       [id, resolved.sucursalId, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
     );
-    res.json({ ok: true });
+    try {
+      await webpush.sendNotification(
+        { endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } },
+        JSON.stringify({
+          title: 'Notificaciones activadas',
+          body: 'Listo: este dispositivo ya puede recibir avisos del estudio.',
+        }),
+        { TTL: 60 }
+      );
+    } catch (err) {
+      console.error('[Push test alumno] Error', err?.statusCode || err?.message, 'endpoint:', subscription.endpoint?.slice(0, 60));
+      return res.status(500).json({ error: 'Se registró el dispositivo, pero falló la notificación de prueba.' });
+    }
+    res.json({ ok: true, testSent: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -2312,6 +2328,9 @@ app.post('/api/push-subscribe', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
     const { subscription } = req.body || {};
+    if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+      return res.status(503).json({ error: 'Faltan configurar las notificaciones push en el servidor.' });
+    }
     if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
       return res.status(400).json({ error: 'Suscripción inválida' });
     }
@@ -2322,7 +2341,20 @@ app.post('/api/push-subscribe', async (req, res) => {
        ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, p256dh = $4, auth = $5`,
       [id, sid, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
     );
-    res.json({ ok: true });
+    try {
+      await webpush.sendNotification(
+        { endpoint: subscription.endpoint, keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth } },
+        JSON.stringify({
+          title: 'Notificaciones activadas',
+          body: 'Listo: este dispositivo ya puede recibir avisos del estudio.',
+        }),
+        { TTL: 60 }
+      );
+    } catch (err) {
+      console.error('[Push test sucursal] Error', err?.statusCode || err?.message, 'endpoint:', subscription.endpoint?.slice(0, 60));
+      return res.status(500).json({ error: 'Se registró el dispositivo, pero falló la notificación de prueba.' });
+    }
+    res.json({ ok: true, testSent: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

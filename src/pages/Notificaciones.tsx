@@ -177,7 +177,7 @@ export default function Notificaciones() {
         setTimeout(() => reject(new Error('timeout')), 20000)
       );
       const reg = await Promise.race([readyPromise, timeoutPromise]);
-      const sub = await reg.pushManager.subscribe({
+      const sub = await reg.pushManager.getSubscription() ?? await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
       });
@@ -186,13 +186,14 @@ export default function Notificaciones() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ subscription: sub.toJSON() }),
       }, 10000);
+      const subscribeJson = await subscribeRes.json().catch(() => ({}));
       if (!subscribeRes.ok) {
         setPushStatus('error');
-        setPushMessage('No se pudo registrar el dispositivo.');
+        setPushMessage(subscribeJson.error || 'No se pudo registrar el dispositivo.');
         return;
       }
       setPushStatus('ok');
-      setPushMessage('Listo: cuando alguien se anote o libere cupo, te llegará una notificación al celular.');
+      setPushMessage('Listo: te tendría que llegar una notificación de prueba en unos segundos.');
       const statusRes = await fetch(base + '/api/push-status', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (statusRes.ok) {
         const statusData = await statusRes.json();

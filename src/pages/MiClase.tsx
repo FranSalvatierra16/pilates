@@ -452,7 +452,7 @@ const MiClase = () => {
         return;
       }
       const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({
+      const sub = await reg.pushManager.getSubscription() ?? await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
       });
@@ -464,13 +464,14 @@ const MiClase = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      const subscribeJson = await subscribeRes.json().catch(() => ({}));
       if (!subscribeRes.ok) {
         setPushStatus('error');
-        setPushMessage('No se pudo registrar este dispositivo para avisos.');
+        setPushMessage(subscribeJson.error || 'No se pudo registrar este dispositivo para avisos.');
         return;
       }
       setPushStatus('ok');
-      setPushMessage('Avisos activados: cuando se libere un cupo, te va a llegar una notificación.');
+      setPushMessage('Avisos activados: te tendría que llegar una notificación de prueba en unos segundos.');
     } catch (e) {
       setPushStatus('error');
       setPushMessage(e instanceof Error ? e.message : 'No se pudo activar las notificaciones.');

@@ -289,10 +289,18 @@ const MiClase = () => {
   useEffect(() => {
     if (notifPromptHandledRef.current || !promptTomarDesdeNotif || !notifTurnoId || !data || !portalAuth) return;
     if (data.modo !== 'recuperar') return;
-    if (notifSemana && data.semanaVista && notifSemana !== data.semanaVista) return;
-    notifPromptHandledRef.current = true;
+    if (notifSemana && data.semanaVista && notifSemana !== data.semanaVista) {
+      if (notifSemana === semanaActualBase && semanaElegida !== 'actual') {
+        setSemanaElegida('actual');
+      } else if (notifSemana === semanaSiguienteBase && semanaElegida !== 'siguiente') {
+        setSemanaElegida('siguiente');
+      }
+      return;
+    }
     const target = data.turnos.find((t) => t.id === notifTurnoId);
-    if (!target || target.inscriptos >= target.cupo) {
+    if (!target) return;
+    notifPromptHandledRef.current = true;
+    if (target.inscriptos >= target.cupo) {
       toast.error('Clase no disponible, ya fue ocupada.');
       return;
     }
@@ -309,7 +317,7 @@ const MiClase = () => {
       if (!confirmo) return;
       await inscribir(target.id);
     })();
-  }, [data, notifSemana, notifTurnoId, portalAuth, promptTomarDesdeNotif, toast]);
+  }, [data, notifSemana, notifTurnoId, portalAuth, promptTomarDesdeNotif, semanaActualBase, semanaElegida, semanaSiguienteBase, toast]);
 
   const inscribir = async (turnoId: string) => {
     if (!portalAuth || !data) return;

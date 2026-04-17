@@ -1944,7 +1944,7 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
     const alumno = resolved.alumno;
     let semanaVista = (semana || '').toString().trim() || getSemanaActual();
     const { rows: turnoRows } = await db.query(
-      'SELECT id, alumno_ids, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2',
+      'SELECT id, alumno_ids, dia_semana, hora, titulo FROM turnos WHERE id = $1 AND sucursal_id = $2',
       [turnoId, alumno.sucursal_id]
     );
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
@@ -1973,6 +1973,17 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
       'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
       [alumno.id, alumno.sucursal_id]
     );
+    await db.query(
+      'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+      [crypto.randomUUID(), alumno.sucursal_id, 'liberar', alumno.id, turnoId]
+    );
+    const nombre = [alumno.apellido, alumno.nombre].filter(Boolean).join(', ');
+    const dia = DIAS_SEMANA_ES[t.dia_semana] ?? '';
+    const turno = `${dia} ${t.hora} - ${t.titulo || 'Clase'}`;
+    await sendPushToSucursal(db, alumno.sucursal_id, {
+      title: 'Cupo liberado',
+      body: `${nombre} liberó cupo en ${turno}`,
+    });
     res.json({ ok: true, liberacionId: id });
   } catch (e) {
     console.error(e);

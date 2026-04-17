@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2 } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -51,6 +51,52 @@ const normalizarHorariosNoDisponibles = (
     )).sort((a, b) => a.localeCompare(b));
   }
   return out;
+};
+
+type ReporteTurnoItem = {
+  id: string;
+  fecha: string;
+  diaSemana: number;
+  diaLabel: string;
+  hora: string;
+  titulo: string;
+  profesor: string;
+  cupo: number;
+  ocupacion: number;
+  fijas: number;
+  recuperaciones: number;
+  libres: number;
+  llena: boolean;
+};
+
+type ReporteDiaItem = {
+  fecha: string;
+  titulo: string;
+  turnos: ReporteTurnoItem[];
+};
+
+type ReporteVistaPrevia = {
+  desde: string;
+  hasta: string;
+  totalClases: number;
+  totalFijas: number;
+  totalRecuperaciones: number;
+  totalLlenas: number;
+  totalLibres: number;
+  dias: ReporteDiaItem[];
+};
+
+const getFechasEntre = (desde: string, hasta: string) => {
+  const start = new Date(`${desde}T00:00:00`);
+  const end = new Date(`${hasta}T00:00:00`);
+  const fechas: string[] = [];
+  const current = new Date(start);
+  while (current <= end) {
+    const iso = new Date(current.getTime() - current.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    fechas.push(iso);
+    current.setDate(current.getDate() + 1);
+  }
+  return fechas;
 };
 
 const useApi = () => import.meta.env.VITE_USE_API === 'true' || (import.meta.env.VITE_USE_API !== 'false' && import.meta.env.PROD);
@@ -177,6 +223,11 @@ const Calendario = () => {
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const [exportandoPdf, setExportandoPdf] = useState(false);
+  const [showModalReporte, setShowModalReporte] = useState(false);
+  const [reporteDesde, setReporteDesde] = useState(getFechaFromSemanaYDia(getSemanaActual(), 0));
+  const [reporteHasta, setReporteHasta] = useState(getFechaFromSemanaYDia(getSemanaActual(), 5));
+  const [generandoVistaReporte, setGenerandoVistaReporte] = useState(false);
+  const [reportePreview, setReportePreview] = useState<ReporteVistaPrevia | null>(null);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [selectedDiaMobile, setSelectedDiaMobile] = useState<number | null>(null);
@@ -1012,108 +1063,258 @@ const Calendario = () => {
     };
   };
 
-  const exportarResumenSemanalPDF = async () => {
+  const getDiaSemanaFromFecha = (fechaIso: string) => {
+    const day = new Date(`${fechaIso}T12:00:00`).getDay();
+    return day === 0 ? 6 : day - 1;
+  };
+
+  const getAlumnosDelTurnoEnSemana = (
+    turno: Turno | undefined,
+    semana: string,
+    recuperacionesSemana: Recuperacion[]
+  ): AlumnoEnTurno[] => {
+    if (!turno) return [];
+    const regulares: AlumnoEnTurno[] = turno.alumnoIds
+      .filter((id) => {
+        const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === id);
+        return !ins || ins.semanaDesde <= semana;
+      })
+      .map((id) => alumnos.find((a) => a.id === id))
+      .filter((a): a is Alumno => a !== undefined)
+      .map((alumno) => ({ alumno, isRecuperacion: false }));
+    const recs: AlumnoEnTurno[] = recuperacionesSemana
+      .filter((r) => r.turnoId === turno.id)
+      .map((r) => {
+        const alumno = alumnos.find((item) => item.id === r.alumnoId);
+        return alumno ? { alumno, isRecuperacion: true, recuperacionId: r.id, usaCredito: r.usaCredito } : null;
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    return [...regulares, ...recs];
+  };
+
+  const abrirModalReporte = () => {
+    setReporteDesde(getFechaFromSemanaYDia(semanaVista, 0));
+    setReporteHasta(getFechaFromSemanaYDia(semanaVista, 5));
+    setReportePreview(null);
+    setShowModalReporte(true);
+  };
+
+  const generarVistaPreviaReporte = async () => {
+    if (!reporteDesde || !reporteHasta) {
+      toast.warning('Elegí ambas fechas para generar el reporte.');
+      return;
+    }
+    if (reporteDesde > reporteHasta) {
+      toast.warning('La fecha desde no puede ser mayor que la fecha hasta.');
+      return;
+    }
+
+    try {
+      setGenerandoVistaReporte(true);
+      const fechas = getFechasEntre(reporteDesde, reporteHasta).filter((fecha) => diasSemana.includes(getDiaSemanaFromFecha(fecha)));
+      const semanas = Array.from(
+        new Set(fechas.map((fecha) => getSemanaFromDate(new Date(`${fecha}T12:00:00`))))
+      );
+      const recuperacionesPorSemanaEntries = await Promise.all(
+        semanas.map(async (semana) => {
+          try {
+            const data = await storageHybrid.recuperaciones.getBySemana(semana);
+            return [semana, data] as const;
+          } catch {
+            return [semana, []] as const;
+          }
+        })
+      );
+      const recuperacionesPorSemana = Object.fromEntries(recuperacionesPorSemanaEntries) as Record<string, Recuperacion[]>;
+
+      const dias = fechas
+        .map((fecha) => {
+          const diaSemana = getDiaSemanaFromFecha(fecha);
+          const semana = getSemanaFromDate(new Date(`${fecha}T12:00:00`));
+          const turnosDia = turnos
+            .filter((turno) => turno.diaSemana === diaSemana)
+            .sort((a, b) => a.hora.localeCompare(b.hora));
+          const turnosReporte = turnosDia.map((turno) => {
+            const alumnosTurno = getAlumnosDelTurnoEnSemana(turno, semana, recuperacionesPorSemana[semana] || []);
+            const recuperacionesTurno = alumnosTurno.filter((item) => item.isRecuperacion).length;
+            const fijasTurno = alumnosTurno.length - recuperacionesTurno;
+            const cupo = turno.cupo ?? CUPO_DEFAULT;
+            const libres = Math.max(0, cupo - alumnosTurno.length);
+            const profesor = turno.profesorId
+              ? profesores.find((item) => item.id === turno.profesorId)
+              : null;
+            return {
+              id: `${fecha}-${turno.id}`,
+              fecha,
+              diaSemana,
+              diaLabel: DIAS_SEMANA[diaSemana],
+              hora: turno.hora,
+              titulo: turno.titulo?.trim() || 'Clase',
+              profesor: profesor ? `${profesor.nombre} ${profesor.apellido}` : 'Sin profesor',
+              cupo,
+              ocupacion: alumnosTurno.length,
+              fijas: fijasTurno,
+              recuperaciones: recuperacionesTurno,
+              libres,
+              llena: alumnosTurno.length >= cupo,
+            };
+          });
+          return {
+            fecha,
+            titulo: `${DIAS_SEMANA[diaSemana]} ${formatDate(fecha)}`,
+            turnos: turnosReporte,
+          };
+        })
+        .filter((dia) => dia.turnos.length > 0);
+
+      const turnosReporte = dias.flatMap((dia) => dia.turnos);
+      setReportePreview({
+        desde: reporteDesde,
+        hasta: reporteHasta,
+        totalClases: turnosReporte.length,
+        totalFijas: turnosReporte.reduce((acc, item) => acc + item.fijas, 0),
+        totalRecuperaciones: turnosReporte.reduce((acc, item) => acc + item.recuperaciones, 0),
+        totalLlenas: turnosReporte.filter((item) => item.llena).length,
+        totalLibres: turnosReporte.reduce((acc, item) => acc + item.libres, 0),
+        dias,
+      });
+    } catch (error) {
+      console.error('Error generando vista previa del reporte:', error);
+      toast.error('No se pudo generar la vista previa.');
+    } finally {
+      setGenerandoVistaReporte(false);
+    }
+  };
+
+  const crearDocumentoReporte = async (reporte: ReporteVistaPrevia) => {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const marginX = 14;
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const maxWidth = doc.internal.pageSize.getWidth() - marginX * 2;
+    let y = 16;
+
+    const addLine = (
+      text: string,
+      opts?: { bold?: boolean; size?: number; gapBefore?: number; color?: [number, number, number] }
+    ) => {
+      if (opts?.gapBefore) y += opts.gapBefore;
+      doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal');
+      doc.setFontSize(opts?.size || 11);
+      doc.setTextColor(...(opts?.color || [31, 41, 55]));
+      const lines = doc.splitTextToSize(text, maxWidth);
+      const blockHeight = lines.length * ((opts?.size || 11) * 0.38 + 1.5);
+      if (y + blockHeight > pageHeight - 12) {
+        doc.addPage();
+        y = 16;
+      }
+      doc.text(lines, marginX, y);
+      y += blockHeight;
+      doc.setTextColor(31, 41, 55);
+    };
+
+    addLine('Reporte de clases', { bold: true, size: 18 });
+    addLine(`${formatDate(reporte.desde)} al ${formatDate(reporte.hasta)}`, { size: 11 });
+    addLine(
+      `Clases: ${reporte.totalClases} | Fijas: ${reporte.totalFijas} | Recuperaciones: ${reporte.totalRecuperaciones}`,
+      { gapBefore: 4 }
+    );
+    addLine(`Lugares libres: ${reporte.totalLibres} | Llenas: ${reporte.totalLlenas}`);
+
+    reporte.dias.forEach((dia) => {
+      addLine(dia.titulo, { bold: true, size: 13, gapBefore: 5 });
+      dia.turnos.forEach((turno) => {
+        addLine(
+          `${turno.hora} - ${turno.titulo} | ${turno.ocupacion}/${turno.cupo} | Fijas ${turno.fijas} | Rec ${turno.recuperaciones} | Libres ${turno.libres}`,
+          { size: 10, color: turno.llena ? [220, 38, 38] : [31, 41, 55] }
+        );
+        addLine(`Prof: ${turno.profesor}`, { size: 9 });
+      });
+    });
+
+    return doc;
+  };
+
+  const descargarReportePDF = async () => {
+    if (!reportePreview) {
+      toast.warning('Primero generá la vista previa del reporte.');
+      return;
+    }
     try {
       setExportandoPdf(true);
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const marginX = 14;
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const maxWidth = doc.internal.pageSize.getWidth() - marginX * 2;
-      let y = 16;
-
-      const addLine = (text: string, opts?: { bold?: boolean; size?: number; gapBefore?: number }) => {
-        if (opts?.gapBefore) y += opts.gapBefore;
-        doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal');
-        doc.setFontSize(opts?.size || 11);
-        const lines = doc.splitTextToSize(text, maxWidth);
-        const blockHeight = lines.length * ((opts?.size || 11) * 0.38 + 1.5);
-        if (y + blockHeight > pageHeight - 12) {
-          doc.addPage();
-          y = 16;
-        }
-        doc.text(lines, marginX, y);
-        y += blockHeight;
-      };
-
-      const turnosActivos = turnos
-        .filter((turno) => diasSemana.includes(turno.diaSemana))
-        .sort((a, b) => a.diaSemana - b.diaSemana || a.hora.localeCompare(b.hora));
-
-      const resumenPorDia = diasSemana.map((dia) => {
-        const turnosDelDia = turnosActivos.filter((turno) => turno.diaSemana === dia);
-        const clases = turnosDelDia.length;
-        const alumnasFijas = turnosDelDia.reduce(
-          (acc, turno) => acc + getAlumnosDelTurno(turno).filter((item) => !item.isRecuperacion).length,
-          0
-        );
-        const recuperacionesDia = recuperaciones.filter((rec) => {
-          const turno = turnos.find((t) => t.id === rec.turnoId);
-          return turno?.diaSemana === dia;
-        }).length;
-        const asistenciasDia = asistencias.filter((asi) => {
-          const turno = turnos.find((t) => t.id === asi.turnoId);
-          return turno?.diaSemana === dia && asi.estado === 'asistio';
-        }).length;
-        const faltasDia = asistencias.filter((asi) => {
-          const turno = turnos.find((t) => t.id === asi.turnoId);
-          return turno?.diaSemana === dia && asi.estado === 'no_asistio';
-        }).length;
-        const libresDia = turnosDelDia.reduce((acc, turno) => {
-          const ocupacion = getAlumnosDelTurno(turno).length;
-          return acc + Math.max(0, (turno.cupo ?? CUPO_DEFAULT) - ocupacion);
-        }, 0);
-        return {
-          dia,
-          clases,
-          alumnasFijas,
-          recuperacionesDia,
-          asistenciasDia,
-          faltasDia,
-          libresDia,
-          turnos: turnosDelDia,
-        };
-      });
-
-      const totalClases = resumenPorDia.reduce((acc, item) => acc + item.clases, 0);
-      const totalFijas = resumenPorDia.reduce((acc, item) => acc + item.alumnasFijas, 0);
-      const totalRecuperaciones = resumenPorDia.reduce((acc, item) => acc + item.recuperacionesDia, 0);
-      const totalAsistencias = resumenPorDia.reduce((acc, item) => acc + item.asistenciasDia, 0);
-      const totalFaltas = resumenPorDia.reduce((acc, item) => acc + item.faltasDia, 0);
-      const totalLibres = resumenPorDia.reduce((acc, item) => acc + item.libresDia, 0);
-      const turnosLlenos = turnosActivos.filter((turno) => getAlumnosDelTurno(turno).length >= (turno.cupo ?? CUPO_DEFAULT)).length;
-
-      addLine('Resumen semanal', { bold: true, size: 18 });
-      addLine(getRangoSemana(semanaVista), { size: 11 });
-      addLine(`Clases: ${totalClases} | Fijas: ${totalFijas} | Recuperaciones: ${totalRecuperaciones}`, { gapBefore: 4 });
-      addLine(`Asistencias: ${totalAsistencias} | Inasistencias: ${totalFaltas} | Lugares libres: ${totalLibres} | Llenas: ${turnosLlenos}`);
-
-      resumenPorDia.forEach((item) => {
-        if (item.clases === 0) return;
-        addLine(DIAS_SEMANA[item.dia], { bold: true, size: 13, gapBefore: 5 });
-        addLine(
-          `Clases ${item.clases} | Fijas ${item.alumnasFijas} | Recuperaciones ${item.recuperacionesDia} | Asistencias ${item.asistenciasDia} | Faltas ${item.faltasDia} | Libres ${item.libresDia}`,
-          { size: 10 }
-        );
-        item.turnos.forEach((turno) => {
-          const alumnosTurno = getAlumnosDelTurno(turno);
-          const recs = alumnosTurno.filter((alumno) => alumno.isRecuperacion).length;
-          const fijas = alumnosTurno.length - recs;
-          const libres = Math.max(0, (turno.cupo ?? CUPO_DEFAULT) - alumnosTurno.length);
-          const titulo = turno.titulo?.trim() || 'Clase';
-          addLine(
-            `${turno.hora} - ${titulo} | ${alumnosTurno.length}/${turno.cupo ?? CUPO_DEFAULT} | Fijas ${fijas} | Rec ${recs} | Libres ${libres}`,
-            { size: 10 }
-          );
-        });
-      });
-
-      const nombreArchivo = `resumen-semanal-${semanaVista}.pdf`;
-      doc.save(nombreArchivo);
+      const doc = await crearDocumentoReporte(reportePreview);
+      doc.save(`reporte-clases-${reportePreview.desde}-${reportePreview.hasta}.pdf`);
       toast.success('PDF generado.');
     } catch (error) {
       console.error('Error exportando PDF:', error);
       toast.error('No se pudo generar el PDF.');
+    } finally {
+      setExportandoPdf(false);
+    }
+  };
+
+  const generarTextoReporteCompartible = (reporte: ReporteVistaPrevia) => {
+    const lineas = [
+      `Reporte ${formatDate(reporte.desde)} al ${formatDate(reporte.hasta)}`,
+      `Clases: ${reporte.totalClases} | Fijas: ${reporte.totalFijas} | Rec: ${reporte.totalRecuperaciones} | Libres: ${reporte.totalLibres} | Llenas: ${reporte.totalLlenas}`,
+      ...reporte.dias.map((dia) => {
+        const detalle = dia.turnos
+          .map((turno) => `${turno.hora} ${turno.titulo}${turno.llena ? ' [LLENA]' : ` (${turno.libres} libres)`}`)
+          .join(' | ');
+        return `${dia.titulo}: ${detalle}`;
+      }),
+    ];
+    return lineas.join('\n');
+  };
+
+  const compartirReportePorWhatsApp = () => {
+    if (!reportePreview) {
+      toast.warning('Primero generá la vista previa del reporte.');
+      return;
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(generarTextoReporteCompartible(reportePreview))}`, '_blank');
+  };
+
+  const compartirReportePorGmail = () => {
+    if (!reportePreview) {
+      toast.warning('Primero generá la vista previa del reporte.');
+      return;
+    }
+    const subject = `Reporte de clases ${formatDate(reportePreview.desde)} al ${formatDate(reportePreview.hasta)}`;
+    const body = generarTextoReporteCompartible(reportePreview);
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
+
+  const compartirReportePDF = async () => {
+    if (!reportePreview) {
+      toast.warning('Primero generá la vista previa del reporte.');
+      return;
+    }
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
+      toast.warning('En este dispositivo no se puede compartir el PDF directo. Descargalo y envialo por WhatsApp o Gmail.');
+      return;
+    }
+    try {
+      setExportandoPdf(true);
+      const doc = await crearDocumentoReporte(reportePreview);
+      const blob = doc.output('blob');
+      const file = new File([blob], `reporte-clases-${reportePreview.desde}-${reportePreview.hasta}.pdf`, {
+        type: 'application/pdf',
+      });
+      if (typeof navigator.canShare === 'function' && !navigator.canShare({ files: [file] })) {
+        toast.warning('Tu navegador no permite adjuntar el PDF directo. Descargalo y compartilo manualmente.');
+        return;
+      }
+      await navigator.share({
+        title: `Reporte ${formatDate(reportePreview.desde)} al ${formatDate(reportePreview.hasta)}`,
+        text: 'Reporte de clases en PDF',
+        files: [file],
+      });
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        console.error('Error compartiendo PDF:', error);
+        toast.error('No se pudo compartir el PDF.');
+      }
     } finally {
       setExportandoPdf(false);
     }
@@ -1232,16 +1433,6 @@ const Calendario = () => {
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            type="button"
-            onClick={exportarResumenSemanalPDF}
-            disabled={exportandoPdf}
-            className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px] disabled:opacity-60"
-            title="Exportar resumen semanal en PDF"
-          >
-            <FileText className="w-4 h-4" />
-            {exportandoPdf ? 'Generando PDF...' : 'Exportar PDF'}
-          </button>
           <button
             type="button"
             onClick={abrirModalCompartirDisponibles}
@@ -1391,7 +1582,7 @@ const Calendario = () => {
                             <div className="mb-2 text-sm">
                               {turno.titulo && <p className="font-medium text-gray-800">{turno.titulo}</p>}
                               {profesor && <p className="text-gray-600">Prof: {profesor.nombre} {profesor.apellido}</p>}
-                              <p className="text-gray-500 flex items-center gap-1">
+                              <p className={`flex items-center gap-1 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-4 h-4" />
                                 {alumnosTurno.length}/{cupo} alumnos
                               </p>
@@ -1477,7 +1668,7 @@ const Calendario = () => {
                             <div className="mb-2 text-sm">
                               {turno.titulo && <p className="font-medium text-gray-800">{turno.titulo}</p>}
                               {profesor && <p className="text-gray-600">Prof: {profesor.nombre} {profesor.apellido}</p>}
-                              <p className="text-gray-500 flex items-center gap-1">
+                              <p className={`flex items-center gap-1 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-4 h-4" />
                                 {alumnosTurno.length}/{cupo} alumnos
                               </p>
@@ -1537,6 +1728,8 @@ const Calendario = () => {
                       const turno = getTurnoDelDia(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
+                      const cupo = turno?.cupo ?? CUPO_DEFAULT;
+                      const lleno = alumnosTurno.length >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
@@ -1571,9 +1764,9 @@ const Calendario = () => {
                             <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
                               {turno.titulo && <div className="text-xs font-semibold text-gray-700 mb-0.5 truncate">{turno.titulo}</div>}
                               {profesor && <div className="text-xs text-gray-600 truncate">Prof: {profesor.nombre} {profesor.apellido}</div>}
-                              <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                              <div className={`text-xs flex items-center gap-1 mt-0.5 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-3.5 h-3.5 flex-shrink-0" />
-                                {alumnosTurno.length}/{turno.cupo ?? CUPO_DEFAULT}
+                                {alumnosTurno.length}/{cupo}
                               </div>
                             </div>
                           )}
@@ -1619,6 +1812,8 @@ const Calendario = () => {
                       const turno = getTurnoDelDia(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
+                      const cupo = turno?.cupo ?? CUPO_DEFAULT;
+                      const lleno = alumnosTurno.length >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
@@ -1653,9 +1848,9 @@ const Calendario = () => {
                             <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
                               {turno.titulo && <div className="text-xs font-semibold text-gray-700 mb-0.5 truncate">{turno.titulo}</div>}
                               {profesor && <div className="text-xs text-gray-600 truncate">Prof: {profesor.nombre} {profesor.apellido}</div>}
-                              <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                              <div className={`text-xs flex items-center gap-1 mt-0.5 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-3.5 h-3.5 flex-shrink-0" />
-                                {alumnosTurno.length}/{turno.cupo ?? CUPO_DEFAULT}
+                                {alumnosTurno.length}/{cupo}
                               </div>
                             </div>
                           )}
@@ -1788,6 +1983,179 @@ const Calendario = () => {
           </div>
         )}
       </div>
+
+      <div className="mt-6 flex justify-end">
+        <button
+          type="button"
+          onClick={abrirModalReporte}
+          className="btn-secondary flex items-center justify-center gap-2 min-h-[44px] w-full sm:w-auto"
+          title="Ver y exportar reporte en PDF"
+        >
+          <FileText className="w-4 h-4" />
+          Ver reporte PDF
+        </button>
+      </div>
+
+      {showModalReporte && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Reporte PDF</h2>
+                <p className="text-sm text-gray-600 mt-1">Elegí un rango de fechas, revisá la vista previa y después descargalo o compartilo.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModalReporte(false)}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Desde</span>
+                  <input
+                    type="date"
+                    value={reporteDesde}
+                    onChange={(e) => setReporteDesde(e.target.value)}
+                    className="input-field"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-700 mb-2">Hasta</span>
+                  <input
+                    type="date"
+                    value={reporteHasta}
+                    onChange={(e) => setReporteHasta(e.target.value)}
+                    className="input-field"
+                  />
+                </label>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={generarVistaPreviaReporte}
+                    disabled={generandoVistaReporte}
+                    className="btn-primary w-full min-h-[44px] disabled:opacity-60"
+                  >
+                    {generandoVistaReporte ? 'Generando vista previa...' : 'Generar vista previa'}
+                  </button>
+                </div>
+              </div>
+
+              {reportePreview && (
+                <>
+                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                      <div className="text-xs uppercase tracking-wide text-gray-500">Clases</div>
+                      <div className="text-2xl font-bold text-gray-900">{reportePreview.totalClases}</div>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                      <div className="text-xs uppercase tracking-wide text-gray-500">Fijas</div>
+                      <div className="text-2xl font-bold text-gray-900">{reportePreview.totalFijas}</div>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                      <div className="text-xs uppercase tracking-wide text-gray-500">Recuperaciones</div>
+                      <div className="text-2xl font-bold text-gray-900">{reportePreview.totalRecuperaciones}</div>
+                    </div>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                      <div className="text-xs uppercase tracking-wide text-gray-500">Libres</div>
+                      <div className="text-2xl font-bold text-gray-900">{reportePreview.totalLibres}</div>
+                    </div>
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                      <div className="text-xs uppercase tracking-wide text-red-500">Llenas</div>
+                      <div className="text-2xl font-bold text-red-600">{reportePreview.totalLlenas}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200">
+                    <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                      <h3 className="font-semibold text-gray-900">Vista previa</h3>
+                      <p className="text-xs text-gray-500 mt-1">Las clases llenas se muestran en rojo.</p>
+                    </div>
+                    <div className="max-h-[42vh] overflow-y-auto divide-y divide-gray-200">
+                      {reportePreview.dias.length > 0 ? (
+                        reportePreview.dias.map((dia) => (
+                          <div key={dia.fecha} className="p-4">
+                            <h4 className="font-semibold text-gray-900 mb-3">{dia.titulo}</h4>
+                            <div className="space-y-2">
+                              {dia.turnos.map((turno) => (
+                                <div
+                                  key={turno.id}
+                                  className={`rounded-lg border p-3 ${turno.llena ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`}
+                                >
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                                    <div className={`font-semibold ${turno.llena ? 'text-red-600' : 'text-gray-900'}`}>
+                                      {turno.hora} - {turno.titulo}
+                                    </div>
+                                    <div className={`text-sm ${turno.llena ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>
+                                      {turno.ocupacion}/{turno.cupo} alumnos
+                                      {turno.llena ? ' · LLENA' : ` · ${turno.libres} libres`}
+                                    </div>
+                                  </div>
+                                  <div className="text-sm text-gray-600 mt-1">
+                                    Prof: {turno.profesor} | Fijas: {turno.fijas} | Recuperaciones: {turno.recuperaciones}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-6 text-center text-gray-500">No hay clases en el rango elegido.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                    WhatsApp y Gmail comparten el resumen. Si tu celular o navegador lo permite, también podés compartir el PDF directo.
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={compartirReportePDF}
+                      disabled={exportandoPdf}
+                      className="btn-secondary flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-60"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      Compartir PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={compartirReportePorWhatsApp}
+                      className="btn-secondary flex items-center justify-center gap-2 min-h-[44px]"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      WhatsApp
+                    </button>
+                    <button
+                      type="button"
+                      onClick={compartirReportePorGmail}
+                      className="btn-secondary flex items-center justify-center gap-2 min-h-[44px]"
+                    >
+                      <Mail className="w-4 h-4" />
+                      Gmail
+                    </button>
+                    <button
+                      type="button"
+                      onClick={descargarReportePDF}
+                      disabled={exportandoPdf}
+                      className="btn-primary flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-60"
+                    >
+                      <FileText className="w-4 h-4" />
+                      {exportandoPdf ? 'Generando PDF...' : 'Descargar PDF'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && turnoSeleccionado && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">

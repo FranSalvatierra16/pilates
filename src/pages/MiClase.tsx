@@ -489,7 +489,6 @@ const MiClase = () => {
   }
 
   if (!data) {
-    const sinSede = !tokenFromUrl && !sucursalIdFromUrl.trim();
     const tituloPortal = modoFromUrl === 'recuperar' ? 'Tu clase' : 'Mis clases';
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
@@ -498,70 +497,65 @@ const MiClase = () => {
             <Calendar className="w-5 h-5 text-primary-600" />
             {tituloPortal}
           </h1>
-          {sinSede ? (
-            <p className="text-sm text-gray-600">
-              Este link no indica la sede. Pedile al estudio que te comparta el link de tu sede (el mismo para todos los alumnos de esa sede).
-            </p>
-          ) : (
-            <>
-              <p className="text-sm text-gray-600 mb-2">
-                {modoFromUrl === 'recuperar'
-                  ? 'Ingresá tu DNI para entrar a Tu clase y anotarte en formato recuperación.'
-                  : 'Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Se busca solo en la sede de este link.'}
-              </p>
-              {error && (
-                <div className="mb-3">
-                  <p className="text-red-600 text-sm">{error}</p>
-                  {tokenFromUrl && <p className="text-gray-500 text-xs mt-1">Podés ingresar tu DNI acá o pedir un link nuevo al estudio.</p>}
-                </div>
-              )}
-              {sucursales.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-700">Elegí tu sede:</p>
-                  <div className="flex flex-col gap-1.5">
-                    {sucursales.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => cargarPorDni(dniInput, s.id)}
-                        disabled={enviandoDni}
-                        className="px-4 py-2 rounded-lg bg-primary-100 text-primary-800 hover:bg-primary-200 font-medium text-sm disabled:opacity-50"
-                      >
-                        {s.nombre_lugar}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (dniInput.trim()) cargarPorDni(dniInput);
-                  }}
-                  className="space-y-3"
-                >
-                  <label className="block text-sm font-medium text-gray-700">DNI</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="Ej. 12345678"
-                    value={dniInput}
-                    onChange={(e) => setDniInput(e.target.value.replace(/\D/g, ''))}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    autoFocus
-                  />
-                  <button
-                    type="submit"
-                    disabled={enviandoDni || !dniInput.trim()}
-                    className="w-full py-3 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {enviandoDni ? 'Cargando...' : 'Entrar'}
-                  </button>
-                </form>
-              )}
-              {!sinSede && <p className="text-xs text-gray-500 mt-4">Si tenés un link con token, usalo directamente desde ahí.</p>}
-            </>
+          <p className="text-sm text-gray-600 mb-2">
+            {modoFromUrl === 'recuperar'
+              ? 'Ingresá tu DNI para entrar a Tu clase y anotarte en formato recuperación.'
+              : 'Ingresá tu DNI para ver tus clases, sumarte o liberar cupo.'}
+          </p>
+          {error && (
+            <div className="mb-3">
+              <p className="text-red-600 text-sm">{error}</p>
+              {tokenFromUrl && <p className="text-gray-500 text-xs mt-1">Podés ingresar tu DNI acá o pedir un link nuevo al estudio.</p>}
+            </div>
           )}
+          {sucursales.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Elegí tu sede:</p>
+              <div className="flex flex-col gap-1.5">
+                {sucursales.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => cargarPorDni(dniInput, s.id)}
+                    disabled={enviandoDni}
+                    className="px-4 py-2 rounded-lg bg-primary-100 text-primary-800 hover:bg-primary-200 font-medium text-sm disabled:opacity-50"
+                  >
+                    {s.nombre_lugar}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (dniInput.trim()) cargarPorDni(dniInput);
+              }}
+              className="space-y-3"
+            >
+              <label className="block text-sm font-medium text-gray-700">DNI</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Ej. 12345678"
+                value={dniInput}
+                onChange={(e) => setDniInput(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                autoFocus
+              />
+              <button
+                type="submit"
+                disabled={enviandoDni || !dniInput.trim()}
+                className="w-full py-3 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {enviandoDni ? 'Cargando...' : 'Entrar'}
+              </button>
+              {!sucursalIdFromUrl.trim() && (
+                <p className="text-xs text-gray-500">Si tu DNI aparece en más de una sede, te vamos a pedir que elijas cuál corresponde.</p>
+              )}
+            </form>
+          )}
+          <p className="text-xs text-gray-500 mt-4">Si tenés un link con token, usalo directamente desde ahí.</p>
         </div>
       </div>
     );

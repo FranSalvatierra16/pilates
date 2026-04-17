@@ -2912,9 +2912,6 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
     const db = await getPool();
     const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
     const esPortalAlumno = (req.query.portal || '').toString().trim().toLowerCase() === 'alumno';
-    const modoPortal = (req.query.modo || '').toString().trim().toLowerCase() === 'recuperar' ? 'recuperar' : 'fijo';
-    const token = (req.query.token || '').toString().trim();
-    const sucursalId = (req.query.sucursalId || '').toString().trim();
     const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '');
     const fallbackName = brand === 'fitgest'
       ? 'FitGest'
@@ -2923,19 +2920,13 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
         : 'FitGest';
     const name = sucursal?.nombre_lugar || fallbackName;
     const icon = sucursal?.id ? getPublicLogoUrl(req, sucursal.id) : '/fitgest.png';
-    const startUrl = esPortalAlumno
-      ? token
-        ? `/mi-clase?token=${encodeURIComponent(token)}&modo=${modoPortal}`
-        : sucursalId
-          ? `/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=${modoPortal}`
-          : `/mi-clase?modo=${modoPortal}`
-      : '/';
+    const startUrl = '/';
     const appName = esPortalAlumno ? `${name} - Tu Clase` : `${name} - Sistema de Gestión`;
     const shortName = esPortalAlumno ? 'Tu Clase' : name;
     const description = esPortalAlumno
       ? 'Portal de alumnos para ver perfil, clases y recuperaciones'
       : 'Sistema de gestión para Pilates';
-    const scope = esPortalAlumno ? '/mi-clase' : '/';
+    const scope = '/';
 
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
@@ -2957,16 +2948,7 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
   } catch (e) {
     console.error(e);
     const esPortalAlumno = (req.query.portal || '').toString().trim().toLowerCase() === 'alumno';
-    const modoPortal = (req.query.modo || '').toString().trim().toLowerCase() === 'recuperar' ? 'recuperar' : 'fijo';
-    const token = (req.query.token || '').toString().trim();
-    const sucursalId = (req.query.sucursalId || '').toString().trim();
-    const startUrl = esPortalAlumno
-      ? token
-        ? `/mi-clase?token=${encodeURIComponent(token)}&modo=${modoPortal}`
-        : sucursalId
-          ? `/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=${modoPortal}`
-          : `/mi-clase?modo=${modoPortal}`
-      : '/';
+    const startUrl = '/';
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
     res.json({
@@ -2977,7 +2959,7 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
       background_color: '#0f172a',
       display: 'standalone',
       orientation: 'portrait',
-      scope: esPortalAlumno ? '/mi-clase' : '/',
+      scope: '/',
       start_url: startUrl,
       icons: [
         { src: '/fitgest.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

@@ -195,21 +195,21 @@ export default function Agenda() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-primary-100 text-primary-600">
-            <CalendarDays className="w-6 h-6" />
+          <div className="p-2 sm:p-2.5 rounded-xl bg-primary-100 text-primary-600">
+            <CalendarDays className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div>
-            <h1 className="page-title text-xl sm:text-2xl font-semibold text-gray-800">Agenda</h1>
-            <p className="text-sm text-gray-500">Notas importantes, recordatorios y pendientes del estudio</p>
+          <div className="min-w-0">
+            <h1 className="page-title text-xl sm:text-2xl font-semibold text-gray-800 leading-tight">Agenda</h1>
+            <p className="text-sm text-gray-500 leading-snug">Notas importantes, recordatorios y pendientes del estudio</p>
           </div>
         </div>
         <button
           type="button"
           onClick={resetForm}
-          className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto"
+          className="btn-secondary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
         >
           <Plus className="w-4 h-4" />
           Nueva nota
@@ -217,36 +217,38 @@ export default function Agenda() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1.15fr_0.95fr]">
-        <div className="card">
-          <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="card p-3 sm:p-5">
+          <div className="flex items-center justify-between gap-2 sm:gap-3 mb-4">
             <button
               type="button"
               onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 flex-shrink-0"
               aria-label="Mes anterior"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
-            <h2 className="text-lg font-bold text-gray-900 capitalize">{formatMesAnio(monthCursor)}</h2>
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 capitalize text-center leading-tight">
+              {formatMesAnio(monthCursor)}
+            </h2>
             <button
               type="button"
               onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+              className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 flex-shrink-0"
               aria-label="Mes siguiente"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           </div>
 
-          <div className="grid grid-cols-7 gap-2 mb-2">
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-1.5 sm:mb-2">
             {DIAS_CORTOS.map((dia) => (
-              <div key={dia} className="text-center text-xs font-semibold text-gray-500 py-2">
+              <div key={dia} className="text-center text-[11px] sm:text-xs font-semibold text-gray-500 py-1.5 sm:py-2">
                 {dia}
               </div>
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
             {calendarDays.map((day) => {
               const count = notasPorFecha.get(day.iso)?.length || 0;
               const hasImportant = (notasPorFecha.get(day.iso) || []).some((nota) => nota.importante === true);
@@ -257,7 +259,7 @@ export default function Agenda() {
                   key={day.iso}
                   type="button"
                   onClick={() => setSelectedDate(day.iso)}
-                  className={`min-h-[78px] rounded-xl border p-2 text-left transition-colors ${
+                  className={`min-h-[58px] sm:min-h-[78px] rounded-xl border p-1.5 sm:p-2 text-left transition-colors ${
                     isSelected
                       ? 'border-primary-500 bg-primary-50'
                       : day.isCurrentMonth
@@ -266,26 +268,37 @@ export default function Agenda() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className={`text-sm font-semibold ${isToday ? 'text-primary-600' : ''}`}>
+                    <span className={`text-xs sm:text-sm font-semibold ${isToday ? 'text-primary-600' : ''}`}>
                       {day.date.getDate()}
                     </span>
-                    {hasImportant && <Star className="w-3.5 h-3.5 text-amber-500 fill-current" />}
+                    {hasImportant && <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 fill-current flex-shrink-0" />}
                   </div>
                   {count > 0 && (
-                    <div className="mt-3 inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
-                      {count} nota{count === 1 ? '' : 's'}
+                    <div className="mt-1.5 sm:mt-3 inline-flex items-center rounded-full bg-primary-100 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium text-primary-700">
+                      {count}
+                      <span className="hidden sm:inline ml-1">nota{count === 1 ? '' : 's'}</span>
                     </div>
                   )}
                 </button>
               );
             })}
           </div>
+
+          <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2.5">
+            <p className="text-xs font-medium text-primary-700">Fecha elegida</p>
+            <div className="mt-1 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold text-primary-900 capitalize">{formatFechaLarga(selectedDate)}</p>
+              <span className="text-xs sm:text-sm text-primary-700">
+                {notasDelDia.length} nota{notasDelDia.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="space-y-4">
-          <div className="card">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div>
+          <div className="card p-4 sm:p-5">
+            <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <h2 className="text-lg font-bold text-gray-900 capitalize">{formatFechaLarga(selectedDate)}</h2>
                 <p className="text-sm text-gray-500">{notasDelDia.length} nota{notasDelDia.length === 1 ? '' : 's'} en esta fecha</p>
               </div>
@@ -297,7 +310,7 @@ export default function Agenda() {
                   const [y, m] = e.target.value.split('-').map(Number);
                   setMonthCursor(new Date(y, (m || 1) - 1, 1));
                 }}
-                className="input-field w-auto"
+                className="input-field w-full sm:w-auto"
               />
             </div>
 
@@ -322,7 +335,7 @@ export default function Agenda() {
                     className="input-field"
                   />
                 </div>
-                <label className="flex items-center gap-2 mt-7 cursor-pointer">
+                <label className="flex items-start gap-2 mt-1 sm:mt-7 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={form.importante}
@@ -332,7 +345,7 @@ export default function Agenda() {
                   <span className="text-sm font-medium text-gray-700">Marcar como importante</span>
                 </label>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-start gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={form.sinFecha}
@@ -364,18 +377,18 @@ export default function Agenda() {
                   placeholder="Recordatorio, tarea, aviso interno..."
                 />
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
                   onClick={handleSave}
                   disabled={guardando}
-                  className="btn-primary flex items-center gap-2"
+                  className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
                 >
                   <Save className="w-4 h-4" />
                   {guardando ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Agregar nota'}
                 </button>
                 {editingId && (
-                  <button type="button" onClick={resetForm} className="btn-secondary">
+                  <button type="button" onClick={resetForm} className="btn-secondary w-full sm:w-auto min-h-[44px]">
                     Cancelar edición
                   </button>
                 )}
@@ -383,7 +396,7 @@ export default function Agenda() {
             </div>
           </div>
 
-          <div className="card">
+          <div className="card p-4 sm:p-5">
             <h3 className="text-base font-bold text-gray-900 mb-4">Notas del día</h3>
             {loading ? (
               <p className="text-sm text-gray-500">Cargando notas...</p>
@@ -394,9 +407,9 @@ export default function Agenda() {
                 {notasDelDia.map((nota) => (
                   <div
                     key={nota.id}
-                    className={`rounded-xl border p-4 ${nota.importante ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
+                    className={`rounded-xl border p-3 sm:p-4 ${nota.importante ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="font-semibold text-gray-900">{nota.titulo}</h4>
@@ -415,11 +428,11 @@ export default function Agenda() {
                           <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{nota.contenido}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-end gap-2 sm:flex-shrink-0">
                         <button
                           type="button"
                           onClick={() => handleEdit(nota)}
-                          className="text-sm text-primary-600 hover:underline"
+                          className="text-sm text-primary-600 hover:underline min-h-[36px] px-2"
                         >
                           Editar
                         </button>
@@ -441,8 +454,8 @@ export default function Agenda() {
         </div>
       </div>
 
-      <div className="card">
-        <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="card p-4 sm:p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div>
             <h3 className="text-base font-bold text-gray-900">Notas sin fecha</h3>
             <p className="text-sm text-gray-500">Pendientes o recordatorios generales del estudio</p>
@@ -460,9 +473,9 @@ export default function Agenda() {
             {notasSinFecha.map((nota) => (
               <div
                 key={nota.id}
-                className={`rounded-xl border p-4 ${nota.importante ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
+                className={`rounded-xl border p-3 sm:p-4 ${nota.importante ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h4 className="font-semibold text-gray-900">{nota.titulo}</h4>
@@ -481,11 +494,11 @@ export default function Agenda() {
                       <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{nota.contenido}</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-end gap-2 sm:flex-shrink-0">
                     <button
                       type="button"
                       onClick={() => handleEdit(nota)}
-                      className="text-sm text-primary-600 hover:underline"
+                      className="text-sm text-primary-600 hover:underline min-h-[36px] px-2"
                     >
                       Editar
                     </button>

@@ -1774,6 +1774,9 @@ app.post('/api/alumno-portal/push-subscribe', async (req, res) => {
       );
     } catch (err) {
       console.error('[Push test alumno] Error', err?.statusCode || err?.message, 'endpoint:', subscription.endpoint?.slice(0, 60));
+      if (err?.statusCode === 404 || err?.statusCode === 410) {
+        await db.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [subscription.endpoint]).catch(() => {});
+      }
       return res.status(500).json({ error: 'Se registró el dispositivo, pero falló la notificación de prueba.' });
     }
     res.json({ ok: true, testSent: true });
@@ -2352,6 +2355,9 @@ app.post('/api/push-subscribe', async (req, res) => {
       );
     } catch (err) {
       console.error('[Push test sucursal] Error', err?.statusCode || err?.message, 'endpoint:', subscription.endpoint?.slice(0, 60));
+      if (err?.statusCode === 404 || err?.statusCode === 410) {
+        await db.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [subscription.endpoint]).catch(() => {});
+      }
       return res.status(500).json({ error: 'Se registró el dispositivo, pero falló la notificación de prueba.' });
     }
     res.json({ ok: true, testSent: true });

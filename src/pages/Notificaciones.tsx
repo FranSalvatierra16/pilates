@@ -177,7 +177,15 @@ export default function Notificaciones() {
         setTimeout(() => reject(new Error('timeout')), 20000)
       );
       const reg = await Promise.race([readyPromise, timeoutPromise]);
-      const sub = await reg.pushManager.getSubscription() ?? await reg.pushManager.subscribe({
+      const existingSub = await reg.pushManager.getSubscription();
+      if (existingSub) {
+        try {
+          await existingSub.unsubscribe();
+        } catch {
+          // ignore and request a fresh subscription anyway
+        }
+      }
+      const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
       });

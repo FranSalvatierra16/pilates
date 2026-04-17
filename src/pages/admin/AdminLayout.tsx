@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { LogOut, Building2 } from 'lucide-react';
@@ -6,18 +5,6 @@ import { LogOut, Building2 } from 'lucide-react';
 export default function AdminLayout() {
   const { logout } = useAuth();
   const navigate = useNavigate();
-
-  // En /admin evitamos el caché de la PWA: si hay Service Worker, lo quitamos y recargamos
-  // para que siempre cargues la versión recién desplegada en Railway.
-  useEffect(() => {
-    if (typeof navigator === 'undefined' || !navigator.serviceWorker?.controller) return;
-    navigator.serviceWorker.getRegistrations().then((regs) => {
-      if (regs.length > 0) {
-        regs.forEach((r) => r.unregister());
-        window.location.reload();
-      }
-    });
-  }, []);
 
   const handleLogout = () => {
     logout();

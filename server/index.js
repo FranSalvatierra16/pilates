@@ -1948,10 +1948,13 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
           title: 'Recuperación: cupo liberado',
           body: `${nombre} liberó recuperación en ${turno}`,
         });
-        queuePushToAlumnos(db, alumno.sucursal_id, {
+        queuePushToAlumnos(db, alumno.sucursal_id, (sub) => ({
           title: 'Recuperación: cupo liberado',
           body: `${nombre} liberó recuperación en ${turno}`,
-        }, { excludeAlumnoId: alumno.id });
+          url: sub.link_token
+            ? `/mi-clase?token=${encodeURIComponent(sub.link_token)}&modo=recuperar&notifTurnoId=${encodeURIComponent(turnoIdParaPush)}&notifSemana=${encodeURIComponent(semanaObjetivo)}&promptTomar=1`
+            : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoIdParaPush)}&notifSemana=${encodeURIComponent(semanaObjetivo)}&promptTomar=1`,
+        }), { excludeAlumnoId: alumno.id });
       }
     }
     res.json({ ok: true });
@@ -2016,10 +2019,13 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
       title: 'Cupo liberado',
       body: `${nombre} liberó cupo en ${turno}`,
     });
-    queuePushToAlumnos(db, alumno.sucursal_id, {
+    queuePushToAlumnos(db, alumno.sucursal_id, (sub) => ({
       title: 'Cupo liberado',
       body: `${nombre} liberó cupo en ${turno}`,
-    }, { excludeAlumnoId: alumno.id });
+      url: sub.link_token
+        ? `/mi-clase?token=${encodeURIComponent(sub.link_token)}&modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(semanaVista)}&promptTomar=1`
+        : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(semanaVista)}&promptTomar=1`,
+    }), { excludeAlumnoId: alumno.id });
     res.json({ ok: true, liberacionId: id });
   } catch (e) {
     console.error(e);
@@ -2211,10 +2217,13 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
         title: 'Cupo liberado',
         body: `${nombre} liberó cupo en ${turno}`,
       });
-      queuePushToAlumnos(db, alumno.sucursal_id, {
+      queuePushToAlumnos(db, alumno.sucursal_id, (sub) => ({
         title: 'Cupo liberado',
         body: `${nombre} liberó cupo en ${turno}`,
-      }, { excludeAlumnoId: alumno.id });
+        url: sub.link_token
+          ? `/mi-clase?token=${encodeURIComponent(sub.link_token)}&modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(getSemanaActual())}&promptTomar=1`
+          : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(getSemanaActual())}&promptTomar=1`,
+      }), { excludeAlumnoId: alumno.id });
     }
     res.json({ ok: true });
   } catch (e) {
@@ -2286,20 +2295,26 @@ async function sendPushToAudience(db, sucursalId, audience, payload, options = {
   }
   const excludeAlumnoId = options.excludeAlumnoId || null;
   const { rows } = await db.query(
-    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE sucursal_id = $1 AND audiencia = $2 AND ($3::text IS NULL OR alumno_id IS DISTINCT FROM $3)',
+    `SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth, ps.alumno_id, a.link_token
+       FROM push_subscriptions ps
+       LEFT JOIN alumnos a ON a.id = ps.alumno_id
+      WHERE ps.sucursal_id = $1
+        AND ps.audiencia = $2
+        AND ($3::text IS NULL OR ps.alumno_id IS DISTINCT FROM $3)`,
     [sucursalId, audience, excludeAlumnoId]
   );
   if (rows.length === 0) {
     console.warn('[Push] No enviado: ningún dispositivo registrado para', audience, 'en la sucursal', sucursalId);
     return;
   }
-  const body = JSON.stringify(payload);
   let sent = 0;
   for (const sub of rows) {
     try {
+      const payloadForSub = typeof payload === 'function' ? payload(sub) : payload;
+      if (!payloadForSub) continue;
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        body,
+        JSON.stringify(payloadForSub),
         { TTL: 120 }
       );
       sent++;
@@ -2312,7 +2327,10 @@ async function sendPushToAudience(db, sucursalId, audience, payload, options = {
       }
     }
   }
-  if (sent > 0) console.log('[Push] Enviado a', sent, 'dispositivo(s):', payload.title);
+  if (sent > 0) {
+    const logTitle = typeof payload === 'function' ? 'push personalizado' : payload.title;
+    console.log('[Push] Enviado a', sent, 'dispositivo(s):', logTitle);
+  }
 }
 
 function queuePushToAudience(db, sucursalId, audience, payload, options = {}) {

@@ -141,8 +141,13 @@ const MiClase = () => {
   const [searchParams] = useSearchParams();
   const tokenFromUrl = searchParams.get('token') || '';
   const sucursalIdFromUrl = searchParams.get('sucursalId') || '';
+  const notifTurnoId = searchParams.get('notifTurnoId') || '';
+  const notifSemana = searchParams.get('notifSemana') || '';
+  const promptTomarDesdeNotif = searchParams.get('promptTomar') === '1';
   const modoQuery = (searchParams.get('modo') || '').toLowerCase();
   const modoFromUrl = modoQuery === 'fijo' ? 'fijo' : 'recuperar';
+  const semanaActualBase = getSemanaActual();
+  const semanaSiguienteBase = getSemanaSiguiente(semanaActualBase);
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -156,9 +161,10 @@ const MiClase = () => {
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
   const [pushMessage, setPushMessage] = useState('');
   /** Solo en modo recuperar: 'actual' | 'siguiente' para elegir semana */
-  const [semanaElegida, setSemanaElegida] = useState<'actual' | 'siguiente'>('actual');
+  const [semanaElegida, setSemanaElegida] = useState<'actual' | 'siguiente'>(notifSemana === semanaSiguienteBase ? 'siguiente' : 'actual');
   const [cargandoSemana, setCargandoSemana] = useState(false);
   const prevSemanaElegida = useRef<'actual' | 'siguiente' | null>(null);
+  const notifPromptHandledRef = useRef(false);
 
   useEffect(() => {
     if (tokenFromUrl.trim()) {
@@ -280,6 +286,31 @@ const MiClase = () => {
     recargarRecuperar();
   }, [semanaElegida, data, portalAuth]);
 
+  useEffect(() => {
+    if (notifPromptHandledRef.current || !promptTomarDesdeNotif || !notifTurnoId || !data || !portalAuth) return;
+    if (data.modo !== 'recuperar') return;
+    if (notifSemana && data.semanaVista && notifSemana !== data.semanaVista) return;
+    notifPromptHandledRef.current = true;
+    const target = data.turnos.find((t) => t.id === notifTurnoId);
+    if (!target || target.inscriptos >= target.cupo) {
+      toast.error('Clase no disponible, ya fue ocupada.');
+      return;
+    }
+    if (target.yaInscripto) {
+      toast.info('Ya estás anotado en esta clase.');
+      return;
+    }
+    setFiltroDia(target.diaSemana);
+    void (async () => {
+      const confirmo = await toast.confirm(
+        `¿Deseás tomar ${target.titulo || 'esta clase'} del ${NOMBRE_DIA[target.diaSemana] ?? 'día'} a las ${target.hora}?`,
+        { title: 'Clase liberada', confirmText: 'Sí, tomar clase', cancelText: 'No ahora', tone: 'primary' }
+      );
+      if (!confirmo) return;
+      await inscribir(target.id);
+    })();
+  }, [data, notifSemana, notifTurnoId, portalAuth, promptTomarDesdeNotif, toast]);
+
   const inscribir = async (turnoId: string) => {
     if (!portalAuth || !data) return;
     setActioning(turnoId);
@@ -298,7 +329,10 @@ const MiClase = () => {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(json.error || 'No se pudo inscribir.');
+        const msg = typeof json.error === 'string' && json.error.toLowerCase().includes('cupo')
+          ? 'Clase no disponible, ya fue ocupada.'
+          : (json.error || 'No se pudo inscribir.');
+        toast.error(msg);
         return;
       }
       if (esRecuperar && json.recuperacionId) {

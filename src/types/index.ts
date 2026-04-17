@@ -219,7 +219,7 @@ export interface AgendaNota {
   id: string;
   titulo: string;
   contenido: string;
-  fecha: string; // YYYY-MM-DD
+  fecha?: string; // YYYY-MM-DD; vacío si no tiene fecha
   hora?: string;
   importante?: boolean;
   createdAt: string;

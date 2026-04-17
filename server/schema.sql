@@ -165,11 +165,12 @@ CREATE TABLE IF NOT EXISTS agenda_notas (
   sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
   titulo TEXT NOT NULL,
   contenido TEXT,
-  fecha DATE NOT NULL,
+  fecha DATE,
   hora TEXT,
   importante BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE agenda_notas ALTER COLUMN fecha DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_agenda_notas_sucursal_fecha ON agenda_notas(sucursal_id, fecha, hora, created_at DESC);
 
 -- Suscripciones para notificaciones push al celular (Web Push)

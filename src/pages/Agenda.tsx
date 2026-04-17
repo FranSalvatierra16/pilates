@@ -44,6 +44,17 @@ function buildCalendarDays(baseMonth: Date) {
   });
 }
 
+function compareAgendaNotas(a: AgendaNota, b: AgendaNota) {
+  const fechaA = a.fecha || '9999-12-31';
+  const fechaB = b.fecha || '9999-12-31';
+  return (
+    fechaA.localeCompare(fechaB) ||
+    Number(b.importante === true) - Number(a.importante === true) ||
+    (a.hora || '').localeCompare(b.hora || '') ||
+    b.createdAt.localeCompare(a.createdAt)
+  );
+}
+
 export default function Agenda() {
   const toast = useToast();
   const [notas, setNotas] = useState<AgendaNota[]>([]);
@@ -57,19 +68,14 @@ export default function Agenda() {
     contenido: '',
     hora: '',
     importante: false,
+    sinFecha: false,
   });
 
   const loadNotas = async () => {
     try {
       setLoading(true);
       const data = await storageHybrid.agendaNotas.getAll();
-      setNotas(
-        [...data].sort((a, b) =>
-          a.fecha.localeCompare(b.fecha) ||
-          (a.hora || '').localeCompare(b.hora || '') ||
-          Number(b.importante === true) - Number(a.importante === true)
-        )
-      );
+      setNotas([...data].sort(compareAgendaNotas));
     } catch (error) {
       console.error('Error loading agenda notas:', error);
       toast.error('No se pudieron cargar las notas.');
@@ -87,6 +93,7 @@ export default function Agenda() {
   const notasPorFecha = useMemo(() => {
     const map = new Map<string, AgendaNota[]>();
     notas.forEach((nota) => {
+      if (!nota.fecha) return;
       const list = map.get(nota.fecha) || [];
       list.push(nota);
       map.set(nota.fecha, list);
@@ -95,12 +102,12 @@ export default function Agenda() {
   }, [notas]);
 
   const notasDelDia = useMemo(() => {
-    return [...(notasPorFecha.get(selectedDate) || [])].sort((a, b) =>
-      Number(b.importante === true) - Number(a.importante === true) ||
-      (a.hora || '').localeCompare(b.hora || '') ||
-      b.createdAt.localeCompare(a.createdAt)
-    );
+    return [...(notasPorFecha.get(selectedDate) || [])].sort(compareAgendaNotas);
   }, [notasPorFecha, selectedDate]);
+
+  const notasSinFecha = useMemo(() => {
+    return notas.filter((nota) => !nota.fecha).sort(compareAgendaNotas);
+  }, [notas]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -109,6 +116,7 @@ export default function Agenda() {
       contenido: '',
       hora: '',
       importante: false,
+      sinFecha: false,
     });
   };
 
@@ -118,13 +126,15 @@ export default function Agenda() {
       return;
     }
 
+    const fechaNota = form.sinFecha ? '' : selectedDate;
+
     try {
       setGuardando(true);
       if (editingId) {
         await storageHybrid.agendaNotas.update(editingId, {
           titulo: form.titulo.trim(),
           contenido: form.contenido.trim(),
-          fecha: selectedDate,
+          fecha: fechaNota,
           hora: form.hora || '',
           importante: form.importante,
         });
@@ -134,7 +144,7 @@ export default function Agenda() {
           id: Date.now().toString(),
           titulo: form.titulo.trim(),
           contenido: form.contenido.trim(),
-          fecha: selectedDate,
+          fecha: fechaNota,
           hora: form.hora || '',
           importante: form.importante,
           createdAt: new Date().toISOString(),
@@ -152,15 +162,18 @@ export default function Agenda() {
   };
 
   const handleEdit = (nota: AgendaNota) => {
-    setSelectedDate(nota.fecha);
-    const [y, m] = nota.fecha.split('-').map(Number);
-    setMonthCursor(new Date(y, (m || 1) - 1, 1));
+    if (nota.fecha) {
+      setSelectedDate(nota.fecha);
+      const [y, m] = nota.fecha.split('-').map(Number);
+      setMonthCursor(new Date(y, (m || 1) - 1, 1));
+    }
     setEditingId(nota.id);
     setForm({
       titulo: nota.titulo,
       contenido: nota.contenido || '',
       hora: nota.hora || '',
       importante: nota.importante === true,
+      sinFecha: !nota.fecha,
     });
   };
 
@@ -319,6 +332,29 @@ export default function Agenda() {
                   <span className="text-sm font-medium text-gray-700">Marcar como importante</span>
                 </label>
               </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.sinFecha}
+                  onChange={(e) => setForm((prev) => ({ ...prev, sinFecha: e.target.checked }))}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Nota sin fecha (aparece abajo del calendario)</span>
+              </label>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    const [y, m] = e.target.value.split('-').map(Number);
+                    setMonthCursor(new Date(y, (m || 1) - 1, 1));
+                  }}
+                  disabled={form.sinFecha}
+                  className="input-field disabled:bg-gray-100 disabled:text-gray-400"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nota</label>
                 <textarea
@@ -403,6 +439,70 @@ export default function Agenda() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">Notas sin fecha</h3>
+            <p className="text-sm text-gray-500">Pendientes o recordatorios generales del estudio</p>
+          </div>
+          <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+            {notasSinFecha.length} nota{notasSinFecha.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        {loading ? (
+          <p className="text-sm text-gray-500">Cargando notas...</p>
+        ) : notasSinFecha.length === 0 ? (
+          <p className="text-sm text-gray-500">No hay notas sin fecha.</p>
+        ) : (
+          <div className="space-y-3">
+            {notasSinFecha.map((nota) => (
+              <div
+                key={nota.id}
+                className={`rounded-xl border p-4 ${nota.importante ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-semibold text-gray-900">{nota.titulo}</h4>
+                      {nota.importante && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          Importante
+                        </span>
+                      )}
+                      {nota.hora && (
+                        <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-700">
+                          {nota.hora}
+                        </span>
+                      )}
+                    </div>
+                    {nota.contenido && (
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{nota.contenido}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleEdit(nota)}
+                      className="text-sm text-primary-600 hover:underline"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(nota)}
+                      className="p-2 rounded-lg text-red-600 hover:bg-red-50"
+                      aria-label="Eliminar nota"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1194,14 +1194,14 @@ app.get('/api/agenda-notas', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query(
-      'SELECT * FROM agenda_notas WHERE sucursal_id = $1 ORDER BY fecha ASC, hora ASC NULLS LAST, created_at DESC',
+      'SELECT * FROM agenda_notas WHERE sucursal_id = $1 ORDER BY fecha ASC NULLS LAST, hora ASC NULLS LAST, created_at DESC',
       [req.user.sucursalId]
     );
     res.json(rows.map((r) => ({
       id: r.id,
       titulo: r.titulo || '',
       contenido: r.contenido || '',
-      fecha: typeof r.fecha === 'string' ? r.fecha.slice(0, 10) : r.fecha?.toISOString?.().slice(0, 10),
+      fecha: typeof r.fecha === 'string' ? r.fecha.slice(0, 10) : r.fecha?.toISOString?.().slice(0, 10) || '',
       hora: r.hora || '',
       importante: r.importante === true,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
@@ -1218,7 +1218,6 @@ app.post('/api/agenda-notas', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body || {};
     if (!String(b.titulo || '').trim()) return res.status(400).json({ error: 'Falta el título' });
-    if (!String(b.fecha || '').trim()) return res.status(400).json({ error: 'Falta la fecha' });
     await db.query(
       'INSERT INTO agenda_notas (id, sucursal_id, titulo, contenido, fecha, hora, importante, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [
@@ -1226,7 +1225,7 @@ app.post('/api/agenda-notas', async (req, res) => {
         req.user.sucursalId,
         String(b.titulo || '').trim(),
         String(b.contenido || ''),
-        String(b.fecha).slice(0, 10),
+        String(b.fecha || '').trim() ? String(b.fecha).slice(0, 10) : null,
         String(b.hora || '').trim() || null,
         b.importante === true,
         b.createdAt || new Date().toISOString(),
@@ -1249,7 +1248,7 @@ app.patch('/api/agenda-notas/:id', async (req, res) => {
     let i = 1;
     if (b.titulo !== undefined) { updates.push(`titulo = $${i++}`); values.push(String(b.titulo || '').trim()); }
     if (b.contenido !== undefined) { updates.push(`contenido = $${i++}`); values.push(String(b.contenido || '')); }
-    if (b.fecha !== undefined) { updates.push(`fecha = $${i++}`); values.push(String(b.fecha || '').slice(0, 10)); }
+    if (b.fecha !== undefined) { updates.push(`fecha = $${i++}`); values.push(String(b.fecha || '').trim() ? String(b.fecha).slice(0, 10) : null); }
     if (b.hora !== undefined) { updates.push(`hora = $${i++}`); values.push(String(b.hora || '').trim() || null); }
     if (b.importante !== undefined) { updates.push(`importante = $${i++}`); values.push(b.importante === true); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });

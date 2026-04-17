@@ -139,7 +139,7 @@ const dbToAgendaNota = (row: any): AgendaNota => ({
   id: row.id,
   titulo: row.titulo,
   contenido: row.contenido || '',
-  fecha: typeof row.fecha === 'string' ? row.fecha.slice(0, 10) : row.fecha,
+  fecha: typeof row.fecha === 'string' ? row.fecha.slice(0, 10) : row.fecha || '',
   hora: row.hora ? String(row.hora).slice(0, 5) : '',
   importante: row.importante === true,
   createdAt: row.created_at,
@@ -149,7 +149,7 @@ const agendaNotaToDb = (nota: AgendaNota) => ({
   id: nota.id,
   titulo: nota.titulo,
   contenido: nota.contenido || '',
-  fecha: nota.fecha,
+  fecha: nota.fecha || null,
   hora: nota.hora || null,
   importante: nota.importante === true,
   created_at: nota.createdAt,
@@ -416,7 +416,7 @@ export const storageSupabase = {
   agendaNotas: {
     getAll: async (): Promise<AgendaNota[]> => {
       if (!useSupabase()) return [];
-      const { data, error } = await supabase.from('agenda_notas').select('*').order('fecha', { ascending: true }).order('hora', { ascending: true }).order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('agenda_notas').select('*').order('fecha', { ascending: true, nullsFirst: false }).order('hora', { ascending: true }).order('created_at', { ascending: false });
       if (error) {
         console.error('Error fetching agenda notas:', error);
         return [];
@@ -436,7 +436,7 @@ export const storageSupabase = {
       const dbUpdates: any = {};
       if (updates.titulo !== undefined) dbUpdates.titulo = updates.titulo;
       if (updates.contenido !== undefined) dbUpdates.contenido = updates.contenido;
-      if (updates.fecha !== undefined) dbUpdates.fecha = updates.fecha;
+      if (updates.fecha !== undefined) dbUpdates.fecha = updates.fecha || null;
       if (updates.hora !== undefined) dbUpdates.hora = updates.hora || null;
       if (updates.importante !== undefined) dbUpdates.importante = updates.importante === true;
       const { error } = await supabase.from('agenda_notas').update(dbUpdates).eq('id', id);

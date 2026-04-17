@@ -16,8 +16,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'savia-pilates-secret-cambiar-en-pr
 // y configurar VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY en Railway (o .env).
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = (() => {
+  const explicit = (process.env.VAPID_SUBJECT || '').toString().trim();
+  if (explicit) return explicit;
+  const host = (process.env.RAILWAY_PUBLIC_DOMAIN || process.env.RAILWAY_STATIC_URL || '').toString().trim();
+  if (host) return `https://${host.replace(/^https?:\/\//, '')}`;
+  return 'https://fitgest.app';
+})();
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
-  webpush.setVapidDetails('mailto:app@savia.local', VAPID_PUBLIC, VAPID_PRIVATE);
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1777,7 +1784,7 @@ app.post('/api/alumno-portal/push-subscribe', async (req, res) => {
       if (err?.statusCode === 404 || err?.statusCode === 410) {
         await db.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [subscription.endpoint]).catch(() => {});
       }
-      return res.status(500).json({ error: 'Se registró el dispositivo, pero falló la notificación de prueba.' });
+      return res.status(500).json({ error: `Se registró el dispositivo, pero falló la notificación de prueba: ${getPushErrorMessage(err)}` });
     }
     res.json({ ok: true, testSent: true });
   } catch (e) {
@@ -2301,6 +2308,12 @@ function queuePushToSucursal(db, sucursalId, payload) {
     });
 }
 
+function getPushErrorMessage(err) {
+  const status = err?.statusCode ? ` (${err.statusCode})` : '';
+  const detail = err?.body || err?.message || 'Error desconocido';
+  return `${detail}${status}`;
+}
+
 app.get('/api/push-vapid-public', (req, res) => {
   if (!VAPID_PUBLIC) return res.status(503).json({ error: 'Notificaciones push no configuradas' });
   res.json({ vapidPublicKey: VAPID_PUBLIC });
@@ -2358,7 +2371,7 @@ app.post('/api/push-subscribe', async (req, res) => {
       if (err?.statusCode === 404 || err?.statusCode === 410) {
         await db.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [subscription.endpoint]).catch(() => {});
       }
-      return res.status(500).json({ error: 'Se registró el dispositivo, pero falló la notificación de prueba.' });
+      return res.status(500).json({ error: `Se registró el dispositivo, pero falló la notificación de prueba: ${getPushErrorMessage(err)}` });
     }
     res.json({ ok: true, testSent: true });
   } catch (e) {

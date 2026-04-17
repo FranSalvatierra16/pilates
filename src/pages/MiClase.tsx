@@ -141,7 +141,8 @@ const MiClase = () => {
   const [searchParams] = useSearchParams();
   const tokenFromUrl = searchParams.get('token') || '';
   const sucursalIdFromUrl = searchParams.get('sucursalId') || '';
-  const modoFromUrl = (searchParams.get('modo') || 'fijo').toLowerCase() === 'recuperar' ? 'recuperar' : 'fijo';
+  const modoQuery = (searchParams.get('modo') || '').toLowerCase();
+  const modoFromUrl = modoQuery === 'fijo' ? 'fijo' : 'recuperar';
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -596,75 +597,73 @@ const MiClase = () => {
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
           <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-primary-600" />
-            {esRecuperar ? 'Recuperar clase' : 'Mi perfil'}
+            Mi perfil
           </h1>
           <p className="text-sm text-gray-600 mt-1">
             {esRecuperar
-              ? `Hola, ${nombreCompleto}. Elegí la semana y sumate a una clase para recuperar o liberá tu recuperación.`
+              ? `Hola, ${nombreCompleto}. Acá podés ver tu perfil, tus clases y manejar tus recuperaciones.`
               : `Hola, ${nombreCompleto}. Acá podés ver tu perfil, tus clases y sumarte o liberar cupo.`}
           </p>
-          {!esRecuperar && (
-            <>
-              {proximaClase && (
-                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-xs font-medium text-emerald-700">Próxima clase</p>
-                  <p className="text-base font-semibold text-emerald-900 mt-1">
-                    {NOMBRE_DIA[proximaClase.diaSemana] ?? `Día ${proximaClase.diaSemana}`} {proximaClase.hora}
+          <>
+            {proximaClase && (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-xs font-medium text-emerald-700">Próxima clase</p>
+                <p className="text-base font-semibold text-emerald-900 mt-1">
+                  {NOMBRE_DIA[proximaClase.diaSemana] ?? `Día ${proximaClase.diaSemana}`} {proximaClase.hora}
+                </p>
+                <p className="text-sm text-emerald-800 mt-1">{proximaClase.titulo || 'Clase'}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                <p className="text-xs font-medium text-gray-500">Cuota</p>
+                <p className={`text-sm font-semibold mt-1 ${cuotaVencida ? 'text-red-600' : cuotaPorVencer ? 'text-amber-600' : 'text-gray-900'}`}>
+                  {tieneFechaVencimiento ? formatDate(fechaVencimiento) : 'Sin fecha'}
+                </p>
+                <p className="text-xs mt-1 text-gray-500">
+                  {cuotaVencida ? 'Vencida' : cuotaVenceHoy ? 'Vence hoy' : cuotaPorVencer ? 'Próxima a vencer' : 'Al día'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                <p className="text-xs font-medium text-gray-500">Clases fijas</p>
+                <p className="text-sm font-semibold mt-1 text-gray-900">{clasesFijasOrdenadas.length}</p>
+                <p className="text-xs mt-1 text-gray-500">{data.alumno.actividadNombre || 'Tu actividad actual'}</p>
+              </div>
+              <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+                <p className="text-xs font-medium text-violet-700">Para recuperar</p>
+                <p className="text-sm font-semibold mt-1 text-violet-900">{data.alumno.clasesParaRecuperar || 0}</p>
+                <p className="text-xs mt-1 text-violet-700">Créditos disponibles</p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
+                    <Bell className="w-4 h-4" />
+                    Avisos de cupos liberados
                   </p>
-                  <p className="text-sm text-emerald-800 mt-1">{proximaClase.titulo || 'Clase'}</p>
+                  <p className="text-xs text-primary-700 mt-1">
+                    Activá las notificaciones en este dispositivo para enterarte cuando alguien libera un lugar.
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={activarPushPortal}
+                  disabled={pushStatus === 'loading'}
+                  className="px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {pushStatus === 'loading' ? 'Activando...' : pushStatus === 'ok' ? 'Activadas' : 'Activar'}
+                </button>
+              </div>
+              {pushMessage && (
+                <p className={`text-xs mt-2 ${pushStatus === 'ok' ? 'text-green-700' : pushStatus === 'error' || pushStatus === 'denied' ? 'text-amber-700' : 'text-primary-700'}`}>
+                  {pushMessage}
+                </p>
               )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-                <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                  <p className="text-xs font-medium text-gray-500">Cuota</p>
-                  <p className={`text-sm font-semibold mt-1 ${cuotaVencida ? 'text-red-600' : cuotaPorVencer ? 'text-amber-600' : 'text-gray-900'}`}>
-                    {tieneFechaVencimiento ? formatDate(fechaVencimiento) : 'Sin fecha'}
-                  </p>
-                  <p className="text-xs mt-1 text-gray-500">
-                    {cuotaVencida ? 'Vencida' : cuotaVenceHoy ? 'Vence hoy' : cuotaPorVencer ? 'Próxima a vencer' : 'Al día'}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                  <p className="text-xs font-medium text-gray-500">Clases fijas</p>
-                  <p className="text-sm font-semibold mt-1 text-gray-900">{clasesFijasOrdenadas.length}</p>
-                  <p className="text-xs mt-1 text-gray-500">{data.alumno.actividadNombre || 'Tu actividad actual'}</p>
-                </div>
-                <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
-                  <p className="text-xs font-medium text-violet-700">Para recuperar</p>
-                  <p className="text-sm font-semibold mt-1 text-violet-900">{data.alumno.clasesParaRecuperar || 0}</p>
-                  <p className="text-xs mt-1 text-violet-700">Créditos disponibles</p>
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
-                      <Bell className="w-4 h-4" />
-                      Avisos de cupos liberados
-                    </p>
-                    <p className="text-xs text-primary-700 mt-1">
-                      Activá las notificaciones en este dispositivo para enterarte cuando alguien libera un lugar.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={activarPushPortal}
-                    disabled={pushStatus === 'loading'}
-                    className="px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-                  >
-                    {pushStatus === 'loading' ? 'Activando...' : pushStatus === 'ok' ? 'Activadas' : 'Activar'}
-                  </button>
-                </div>
-                {pushMessage && (
-                  <p className={`text-xs mt-2 ${pushStatus === 'ok' ? 'text-green-700' : pushStatus === 'error' || pushStatus === 'denied' ? 'text-amber-700' : 'text-primary-700'}`}>
-                    {pushMessage}
-                  </p>
-                )}
-              </div>
-            </>
-          )}
+            </div>
+          </>
           {esRecuperar && data.recuperacionStats && (
             <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
               <p>
@@ -708,72 +707,68 @@ const MiClase = () => {
           </div>
         )}
 
-        {!esRecuperar && (
-          <>
-            <div className="bg-white rounded-xl shadow p-4 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-4 h-4 text-primary-600" />
-                <h2 className="text-sm font-semibold text-gray-900">Tus días de clase</h2>
-              </div>
-              {clasesFijasOrdenadas.length === 0 ? (
-                <p className="text-sm text-gray-500">Todavía no tenés clases fijas cargadas.</p>
-              ) : (
-                <div className="space-y-2">
-                  {clasesFijasOrdenadas.map((turno) => (
-                    <div key={turno.id} className="rounded-lg border border-gray-200 px-3 py-2">
-                      <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
-                    </div>
-                  ))}
+        <div className="bg-white rounded-xl shadow p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="w-4 h-4 text-primary-600" />
+            <h2 className="text-sm font-semibold text-gray-900">Tus días de clase</h2>
+          </div>
+          {clasesFijasOrdenadas.length === 0 ? (
+            <p className="text-sm text-gray-500">Todavía no tenés clases fijas cargadas.</p>
+          ) : (
+            <div className="space-y-2">
+              {clasesFijasOrdenadas.map((turno) => (
+                <div key={turno.id} className="rounded-lg border border-gray-200 px-3 py-2">
+                  <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
+                  <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
                 </div>
-              )}
-            </div>
-
-            <div className="bg-white rounded-xl shadow p-4 mb-4">
-              <div className="flex items-center gap-2 mb-3">
-                <History className="w-4 h-4 text-primary-600" />
-                <h2 className="text-sm font-semibold text-gray-900">Historial de clases</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
-                  <p className="text-xs text-green-700">Asistidas</p>
-                  <p className="text-sm font-semibold text-green-900">{totalAsistidas}</p>
-                </div>
-                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
-                  <p className="text-xs text-red-700">Inasistencias</p>
-                  <p className="text-sm font-semibold text-red-900">{totalInasistencias}</p>
-                </div>
-              </div>
-              {historial.length === 0 ? (
-                <p className="text-sm text-gray-500">Todavía no hay asistencias marcadas.</p>
-              ) : (
-                <div className="space-y-2">
-                  {historial.slice(0, 8).map((item) => (
-                    <div key={item.id} className="rounded-lg border border-gray-200 px-3 py-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900">{formatDate(item.fecha)} · {item.hora}</p>
-                          <p className="text-xs text-gray-600 mt-0.5">{item.titulo}</p>
-                        </div>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${item.estado === 'asistio' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {item.estado === 'asistio' ? 'Asistió' : 'No asistió'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        <div className="bg-white rounded-xl shadow p-3 mb-4">
-          {!esRecuperar && (
-            <div className="mb-3">
-              <h2 className="text-sm font-semibold text-gray-900">Anotarte o liberar una clase</h2>
-              <p className="text-xs text-gray-500 mt-1">Filtrá por día u horario para encontrar rápido tu clase.</p>
+              ))}
             </div>
           )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-4 mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <History className="w-4 h-4 text-primary-600" />
+            <h2 className="text-sm font-semibold text-gray-900">Historial de clases</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+              <p className="text-xs text-green-700">Asistidas</p>
+              <p className="text-sm font-semibold text-green-900">{totalAsistidas}</p>
+            </div>
+            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+              <p className="text-xs text-red-700">Inasistencias</p>
+              <p className="text-sm font-semibold text-red-900">{totalInasistencias}</p>
+            </div>
+          </div>
+          {historial.length === 0 ? (
+            <p className="text-sm text-gray-500">Todavía no hay asistencias marcadas.</p>
+          ) : (
+            <div className="space-y-2">
+              {historial.slice(0, 8).map((item) => (
+                <div key={item.id} className="rounded-lg border border-gray-200 px-3 py-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900">{formatDate(item.fecha)} · {item.hora}</p>
+                      <p className="text-xs text-gray-600 mt-0.5">{item.titulo}</p>
+                    </div>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${item.estado === 'asistio' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {item.estado === 'asistio' ? 'Asistió' : 'No asistió'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl shadow p-3 mb-4">
+          <div className="mb-3">
+            <h2 className="text-sm font-semibold text-gray-900">{esRecuperar ? 'Recuperar o liberar' : 'Anotarte o liberar una clase'}</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              {esRecuperar ? 'Usá este formato para liberar una fija de la semana o sumarte a otra para recuperar.' : 'Filtrá por día u horario para encontrar rápido tu clase.'}
+            </p>
+          </div>
           <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
           <div className="flex flex-wrap gap-1.5 mb-3">
             <button

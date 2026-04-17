@@ -1577,6 +1577,21 @@ async function getClasesFijasActivasSemana(db, alumno, semanaVista) {
   }).length;
 }
 
+function alumnoActivoEnTurnoSemana(turno, alumnoId, semanaVista, insByTurnoAlumno) {
+  const alumnoIds = turno.alumno_ids || [];
+  if (!alumnoIds.includes(alumnoId)) return false;
+  const ins = insByTurnoAlumno.get(`${turno.id}:${alumnoId}`);
+  return !ins || ins.semana_desde <= semanaVista;
+}
+
+function getAlumnosActivosTurnoSemana(turno, semanaVista, insByTurnoAlumno) {
+  const alumnoIds = turno.alumno_ids || [];
+  return alumnoIds.filter((alumnoId) => {
+    const ins = insByTurnoAlumno.get(`${turno.id}:${alumnoId}`);
+    return !ins || ins.semana_desde <= semanaVista;
+  });
+}
+
 app.get('/api/alumno-portal', async (req, res) => {
   try {
     const db = await getPool();
@@ -1596,14 +1611,14 @@ app.get('/api/alumno-portal', async (req, res) => {
     const { alumno, sucursalId: sid } = resolved;
     const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora, titulo, alumno_ids, cupo FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora', [sid]);
     const { rows: insRows } = await db.query(
-      'SELECT turno_id, semana_desde FROM inscripciones_turno WHERE alumno_id = $1',
-      [alumno.id]
+      'SELECT turno_id, alumno_id, semana_desde FROM inscripciones_turno WHERE turno_id = ANY($1)',
+      [turnoRows.map((r) => r.id)]
     );
     const { rows: horRows } = await db.query(
       'SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde FROM sucursales WHERE id = $1',
       [sid]
     );
-    const insByTurno = new Map(insRows.map((r) => [r.turno_id, r]));
+    const insByTurno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r]));
     const hor = horRows[0] || {};
     const actividadNombre = alumno.actividad_id
       ? (await db.query('SELECT nombre FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1', [alumno.actividad_id, sid])).rows[0]?.nombre || ''
@@ -1611,10 +1626,7 @@ app.get('/api/alumno-portal', async (req, res) => {
     const historialAsistencias = await getPortalHistorialAsistencias(db, alumno.id, sid);
     const clasesFijas = turnoRows
       .filter((r) => {
-        const alumnoIds = r.alumno_ids || [];
-        if (!alumnoIds.includes(alumno.id)) return false;
-        const ins = insByTurno.get(r.id);
-        return !ins || ins.semana_desde <= getSemanaActual();
+        return alumnoActivoEnTurnoSemana(r, alumno.id, getSemanaActual(), insByTurno);
       })
       .map((r) => ({
         id: r.id,
@@ -1647,9 +1659,9 @@ app.get('/api/alumno-portal', async (req, res) => {
         const liberacion = libByTurno.get(r.id);
         const recCount = recCountByTurno.get(r.id) || 0;
         const libCount = libCountByTurno.get(r.id) || 0;
-        const ins = ctx.inscripcionesByTurno.get(r.id);
-        const esClaseFija = alumnoIds.includes(alumno.id) && (!ins || ins.semana_desde <= semanaVista);
-        const inscriptos = Math.max(0, alumnoIds.length - libCount + recCount);
+        const esClaseFija = alumnoActivoEnTurnoSemana(r, alumno.id, semanaVista, insByTurno);
+        const fijosActivos = getAlumnosActivosTurnoSemana(r, semanaVista, insByTurno);
+        const inscriptos = Math.max(0, fijosActivos.length - libCount + recCount);
         return {
           id: r.id,
           diaSemana: r.dia_semana,
@@ -1677,17 +1689,18 @@ app.get('/api/alumno-portal', async (req, res) => {
             : Math.max(0, ctx.clasesPorSemana + ctx.clasesParaRecuperar - clasesUsadasSemana),
       };
     } else {
+      const semanaActual = getSemanaActual();
       turnos = turnoRows.map((r) => {
-        const alumnoIds = r.alumno_ids || [];
         const cupo = r.cupo != null ? Number(r.cupo) : 6;
+        const fijosActivos = getAlumnosActivosTurnoSemana(r, semanaActual, insByTurno);
         return {
           id: r.id,
           diaSemana: r.dia_semana,
           hora: r.hora,
           titulo: r.titulo || '',
           cupo,
-          inscriptos: alumnoIds.length,
-          yaInscripto: alumnoIds.includes(alumno.id),
+          inscriptos: fijosActivos.length,
+          yaInscripto: alumnoActivoEnTurnoSemana(r, alumno.id, semanaActual, insByTurno),
         };
       });
     }

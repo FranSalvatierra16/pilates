@@ -2872,10 +2872,10 @@ function buildShareMeta(req, sucursal) {
   const esRegistro = req.path === '/registro';
   const title = esRegistro
     ? `${nombre} - Inscripción`
-    : `${nombre} - Mi Clase`;
+    : `${nombre} - Tu Clase`;
   const description = esRegistro
     ? `Inscripción online de ${nombre}. Completá tus datos y te contactamos.`
-    : `Portal de alumnos de ${nombre}. Gestioná tus clases y recuperaciones.`;
+    : `Portal de alumnos de ${nombre}. Entrá a Tu Clase y gestioná tus clases y recuperaciones.`;
   const image = getPublicLogoUrl(req, sucursal?.id);
   return {
     title,
@@ -2930,8 +2930,8 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
           ? `/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=${modoPortal}`
           : `/mi-clase?modo=${modoPortal}`
       : '/';
-    const appName = esPortalAlumno ? `${name} - Mi Clase` : `${name} - Sistema de Gestión`;
-    const shortName = esPortalAlumno ? 'Mi Clase' : name;
+    const appName = esPortalAlumno ? `${name} - Tu Clase` : `${name} - Sistema de Gestión`;
+    const shortName = esPortalAlumno ? 'Tu Clase' : name;
     const description = esPortalAlumno
       ? 'Portal de alumnos para ver perfil, clases y recuperaciones'
       : 'Sistema de gestión para Pilates';
@@ -2970,8 +2970,8 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
     res.json({
-      name: esPortalAlumno ? 'Mi Clase' : 'FitGest - Sistema de Gestión',
-      short_name: esPortalAlumno ? 'Mi Clase' : 'FitGest',
+      name: esPortalAlumno ? 'Tu Clase' : 'FitGest - Sistema de Gestión',
+      short_name: esPortalAlumno ? 'Tu Clase' : 'FitGest',
       description: esPortalAlumno ? 'Portal de alumnos para ver perfil, clases y recuperaciones' : 'Sistema de gestión para Pilates',
       theme_color: '#0f172a',
       background_color: '#0f172a',

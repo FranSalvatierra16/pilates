@@ -530,7 +530,7 @@ const Alumnos = () => {
     try {
       navigator.clipboard.writeText(url);
       toast.success(modo === 'recuperar'
-        ? 'Link general de recuperar copiado. Cada persona ingresa su DNI y puede ver semana actual u otra para elegir día.'
+        ? 'Link de Tu clase copiado. Cada persona ingresa su DNI y entra al formato de recuperación para anotarse.'
         : 'Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.');
     } catch {
       prompt('Copiá este link:', url);
@@ -619,10 +619,10 @@ const Alumnos = () => {
             type="button"
             onClick={() => handleCopiarLinkGeneralClases('recuperar')}
             className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
-            title="Link para recuperar: ver semana actual u otra y elegir día"
+            title="Link para que el alumno entre a Tu clase y se anote en formato recuperación"
           >
             <Link2 className="w-5 h-5" />
-            Link general (recuperar)
+            Tu clase
           </button>
           <button
             onClick={() => handleOpenModal()}

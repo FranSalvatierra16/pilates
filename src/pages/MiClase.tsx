@@ -212,8 +212,8 @@ const MiClase = () => {
     if (manifestLink) manifestLink.href = manifestHref;
     if (appleTouch) appleTouch.href = iconHref;
     if (favicon) favicon.href = iconHref;
-    if (appleTitle) appleTitle.content = 'Mi Clase';
-    document.title = 'Mi Clase';
+    if (appleTitle) appleTitle.content = 'Tu clase';
+    document.title = 'Tu clase';
   }, [data?.sucursalId, modoFromUrl, sucursalIdFromUrl, tokenFromUrl]);
 
   const cargarPorDni = async (dni: string, sucursalIdElegida?: string) => {
@@ -490,7 +490,7 @@ const MiClase = () => {
 
   if (!data) {
     const sinSede = !tokenFromUrl && !sucursalIdFromUrl.trim();
-    const tituloPortal = modoFromUrl === 'recuperar' ? 'Recuperar clase' : 'Mis clases';
+    const tituloPortal = modoFromUrl === 'recuperar' ? 'Tu clase' : 'Mis clases';
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
         <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
@@ -506,7 +506,7 @@ const MiClase = () => {
             <>
               <p className="text-sm text-gray-600 mb-2">
                 {modoFromUrl === 'recuperar'
-                  ? 'Ingresá tu DNI para ver la semana actual u otra y elegir día para recuperar.'
+                  ? 'Ingresá tu DNI para entrar a Tu clase y anotarte en formato recuperación.'
                   : 'Ingresá tu DNI para ver tus clases, sumarte o liberar cupo. Se busca solo en la sede de este link.'}
               </p>
               {error && (

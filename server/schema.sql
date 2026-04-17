@@ -177,11 +177,15 @@ CREATE INDEX IF NOT EXISTS idx_agenda_notas_sucursal_fecha ON agenda_notas(sucur
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id TEXT PRIMARY KEY,
   sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  audiencia TEXT NOT NULL DEFAULT 'estudio',
+  alumno_id TEXT REFERENCES alumnos(id) ON DELETE CASCADE,
   endpoint TEXT NOT NULL,
   p256dh TEXT NOT NULL,
   auth TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS audiencia TEXT NOT NULL DEFAULT 'estudio';
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS alumno_id TEXT REFERENCES alumnos(id) ON DELETE CASCADE;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_push_subscriptions_endpoint ON push_subscriptions(endpoint);
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_sucursal ON push_subscriptions(sucursal_id);
 

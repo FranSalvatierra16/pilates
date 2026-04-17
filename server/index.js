@@ -23,6 +23,8 @@ const VAPID_SUBJECT = (() => {
   if (host) return `https://${host.replace(/^https?:\/\//, '')}`;
   return 'https://fitgest.app';
 })();
+const PUSH_AUDIENCE_ESTUDIO = 'estudio';
+const PUSH_AUDIENCE_ALUMNO = 'alumno';
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 }
@@ -1765,10 +1767,10 @@ app.post('/api/alumno-portal/push-subscribe', async (req, res) => {
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const id = crypto.randomUUID();
     await db.query(
-      `INSERT INTO push_subscriptions (id, sucursal_id, endpoint, p256dh, auth)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, p256dh = $4, auth = $5`,
-      [id, resolved.sucursalId, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
+      `INSERT INTO push_subscriptions (id, sucursal_id, audiencia, alumno_id, endpoint, p256dh, auth)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, audiencia = $3, alumno_id = $4, p256dh = $6, auth = $7`,
+      [id, resolved.sucursalId, PUSH_AUDIENCE_ALUMNO, resolved.alumno.id, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
     );
     try {
       await webpush.sendNotification(
@@ -1946,6 +1948,10 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
           title: 'Recuperación: cupo liberado',
           body: `${nombre} liberó recuperación en ${turno}`,
         });
+        queuePushToAlumnos(db, alumno.sucursal_id, {
+          title: 'Recuperación: cupo liberado',
+          body: `${nombre} liberó recuperación en ${turno}`,
+        }, { excludeAlumnoId: alumno.id });
       }
     }
     res.json({ ok: true });
@@ -2010,6 +2016,10 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
       title: 'Cupo liberado',
       body: `${nombre} liberó cupo en ${turno}`,
     });
+    queuePushToAlumnos(db, alumno.sucursal_id, {
+      title: 'Cupo liberado',
+      body: `${nombre} liberó cupo en ${turno}`,
+    }, { excludeAlumnoId: alumno.id });
     res.json({ ok: true, liberacionId: id });
   } catch (e) {
     console.error(e);
@@ -2201,6 +2211,10 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
         title: 'Cupo liberado',
         body: `${nombre} liberó cupo en ${turno}`,
       });
+      queuePushToAlumnos(db, alumno.sucursal_id, {
+        title: 'Cupo liberado',
+        body: `${nombre} liberó cupo en ${turno}`,
+      }, { excludeAlumnoId: alumno.id });
     }
     res.json({ ok: true });
   } catch (e) {
@@ -2265,17 +2279,18 @@ app.patch('/api/notificaciones/marcar-leidas', async (req, res) => {
 });
 
 // --- Push al celular (Web Push) ---
-async function sendPushToSucursal(db, sucursalId, payload) {
+async function sendPushToAudience(db, sucursalId, audience, payload, options = {}) {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
     console.warn('[Push] No enviado: faltan VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY en el servidor. Configuralas en Railway (o .env).');
     return;
   }
+  const excludeAlumnoId = options.excludeAlumnoId || null;
   const { rows } = await db.query(
-    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE sucursal_id = $1',
-    [sucursalId]
+    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE sucursal_id = $1 AND audiencia = $2 AND ($3::text IS NULL OR alumno_id IS DISTINCT FROM $3)',
+    [sucursalId, audience, excludeAlumnoId]
   );
   if (rows.length === 0) {
-    console.warn('[Push] No enviado: ningún dispositivo registrado para la sucursal', sucursalId, '- Entrá a Notificaciones y tocá "Activar notificaciones en este dispositivo".');
+    console.warn('[Push] No enviado: ningún dispositivo registrado para', audience, 'en la sucursal', sucursalId);
     return;
   }
   const body = JSON.stringify(payload);
@@ -2300,12 +2315,20 @@ async function sendPushToSucursal(db, sucursalId, payload) {
   if (sent > 0) console.log('[Push] Enviado a', sent, 'dispositivo(s):', payload.title);
 }
 
-function queuePushToSucursal(db, sucursalId, payload) {
+function queuePushToAudience(db, sucursalId, audience, payload, options = {}) {
   Promise.resolve()
-    .then(() => sendPushToSucursal(db, sucursalId, payload))
+    .then(() => sendPushToAudience(db, sucursalId, audience, payload, options))
     .catch((err) => {
       console.error('[Push] Error async', err?.statusCode || err?.message || err);
     });
+}
+
+function queuePushToSucursal(db, sucursalId, payload) {
+  queuePushToAudience(db, sucursalId, PUSH_AUDIENCE_ESTUDIO, payload);
+}
+
+function queuePushToAlumnos(db, sucursalId, payload, options = {}) {
+  queuePushToAudience(db, sucursalId, PUSH_AUDIENCE_ALUMNO, payload, options);
 }
 
 function getPushErrorMessage(err) {
@@ -2326,8 +2349,8 @@ app.get('/api/push-status', async (req, res) => {
     const db = await getPool();
     if (!db) return res.json({ configured: !!VAPID_PUBLIC, subscriptionsCount: 0 });
     const { rows } = await db.query(
-      'SELECT COUNT(*) AS n FROM push_subscriptions WHERE sucursal_id = $1',
-      [sid]
+      'SELECT COUNT(*) AS n FROM push_subscriptions WHERE sucursal_id = $1 AND audiencia = $2',
+      [sid, PUSH_AUDIENCE_ESTUDIO]
     );
     res.json({
       configured: !!(VAPID_PUBLIC && VAPID_PRIVATE),
@@ -2352,10 +2375,10 @@ app.post('/api/push-subscribe', async (req, res) => {
     }
     const id = crypto.randomUUID();
     await db.query(
-      `INSERT INTO push_subscriptions (id, sucursal_id, endpoint, p256dh, auth)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, p256dh = $4, auth = $5`,
-      [id, sid, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
+      `INSERT INTO push_subscriptions (id, sucursal_id, audiencia, alumno_id, endpoint, p256dh, auth)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, audiencia = $3, alumno_id = $4, p256dh = $6, auth = $7`,
+      [id, sid, PUSH_AUDIENCE_ESTUDIO, null, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
     );
     try {
       await webpush.sendNotification(

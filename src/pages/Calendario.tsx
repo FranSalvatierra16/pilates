@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2 } from 'lucide-react';
-import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion } from '../types';
+import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
@@ -174,6 +174,7 @@ const Calendario = () => {
     diaSemana: number;
     hora: string;
     isRecuperacion?: boolean;
+    liberadaSemana?: boolean;
     recuperacionId?: string;
     position: { x: number; y: number };
   } | null>(null);
@@ -183,6 +184,7 @@ const Calendario = () => {
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
   const [esRecuperacion, setEsRecuperacion] = useState(false);
   const [recuperaciones, setRecuperaciones] = useState<Recuperacion[]>([]);
+  const [liberacionesSemana, setLiberacionesSemana] = useState<LiberacionSemana[]>([]);
   const [inscripciones, setInscripciones] = useState<{ id: string; turnoId: string; alumnoId: string; semanaDesde: string }[]>([]);
   const CUPO_DEFAULT = 6;
   const parseCupo = (value: string, fallback = CUPO_DEFAULT) => {
@@ -273,6 +275,7 @@ const Calendario = () => {
       await loadProfesores();
       await loadAsistencias();
       await loadRecuperaciones();
+      await loadLiberacionesSemana();
       await loadInscripciones();
     })();
   }, [semanaVista]);
@@ -343,6 +346,15 @@ const Calendario = () => {
     }
   };
 
+  const loadLiberacionesSemana = async () => {
+    try {
+      const data = await storageHybrid.liberacionesSemana.getBySemana(semanaVista);
+      setLiberacionesSemana(data);
+    } catch {
+      setLiberacionesSemana([]);
+    }
+  };
+
   const loadInscripciones = async () => {
     try {
       const data = await storageHybrid.inscripcionesTurno.getAll();
@@ -390,7 +402,19 @@ const Calendario = () => {
     return turnos.find(t => t.diaSemana === diaSemana && t.hora === hora);
   };
 
-  type AlumnoEnTurno = { alumno: Alumno; isRecuperacion: boolean; recuperacionId?: string; usaCredito?: boolean };
+  type AlumnoEnTurno = {
+    alumno: Alumno;
+    isRecuperacion: boolean;
+    liberadaSemana?: boolean;
+    recuperacionId?: string;
+    usaCredito?: boolean;
+  };
+  const buscarLiberacionSemana = (turnoId: string, alumnoId: string, semana = semanaVista) =>
+    liberacionesSemana.find((item) => item.turnoId === turnoId && item.alumnoId === alumnoId && item.semana === semana);
+
+  const contarOcupacionTurno = (items: AlumnoEnTurno[]) =>
+    items.filter((item) => item.isRecuperacion || !item.liberadaSemana).length;
+
   const getAlumnosDelTurno = (turno: Turno | undefined): AlumnoEnTurno[] => {
     if (!turno) return [];
     // Solo mostrar alumnos cuya inscripción tiene semanaDesde <= semanaVista (semanas anteriores no los muestran)
@@ -401,7 +425,11 @@ const Calendario = () => {
       })
       .map(id => alumnos.find(a => a.id === id))
       .filter((a): a is Alumno => a !== undefined)
-      .map(a => ({ alumno: a, isRecuperacion: false }));
+      .map((a) => ({
+        alumno: a,
+        isRecuperacion: false,
+        liberadaSemana: !!buscarLiberacionSemana(turno.id, a.id),
+      }));
     const recs: AlumnoEnTurno[] = recuperaciones
       .filter(r => r.turnoId === turno.id)
       .map(r => {
@@ -422,7 +450,8 @@ const Calendario = () => {
     const clasesFijas = turnos.filter((t) => {
       if (!t.alumnoIds.includes(alumnoId)) return false;
       const ins = inscripciones.find((i) => i.turnoId === t.id && i.alumnoId === alumnoId);
-      return !ins || ins.semanaDesde <= semanaVista;
+      if (ins && ins.semanaDesde > semanaVista) return false;
+      return !buscarLiberacionSemana(t.id, alumnoId);
     }).length;
     const clasesRecuperacion = recuperaciones.filter((r) => r.alumnoId === alumnoId && r.semana === semanaVista).length;
     return clasesFijas + clasesRecuperacion;
@@ -472,7 +501,7 @@ const Calendario = () => {
           .map((hora) => getTurnoDelDia(diaSemana, hora))
           .filter((turno): turno is Turno => turno !== undefined)
           .map((turno) => {
-            const alumnasFijasVisibles = getAlumnosDelTurno(turno).filter((item) => !item.isRecuperacion).length;
+            const alumnasFijasVisibles = getAlumnosDelTurno(turno).filter((item) => !item.isRecuperacion && !item.liberadaSemana).length;
             const cupo = turno.cupo ?? CUPO_DEFAULT;
             const disponibles = Math.max(0, cupo - alumnasFijasVisibles);
             return {
@@ -620,7 +649,7 @@ const Calendario = () => {
       const cupo = turnoExistente?.cupo ?? CUPO_DEFAULT;
       const alumnosVisiblesEnTurno = getAlumnosDelTurno(turnoExistente);
       const recsEnTurno = alumnosVisiblesEnTurno.filter((a) => a.isRecuperacion);
-      const totalEnTurno = alumnosVisiblesEnTurno.length;
+      const totalEnTurno = contarOcupacionTurno(alumnosVisiblesEnTurno);
 
       if (esRecuperacion) {
         const yaRecuperacion = recsEnTurno.some((r) => r.alumno.id === alumnoSeleccionado);
@@ -874,6 +903,7 @@ const Calendario = () => {
       diaSemana,
       hora,
       isRecuperacion: item.isRecuperacion,
+      liberadaSemana: item.liberadaSemana,
       recuperacionId: item.recuperacionId,
       position: { x: e.clientX, y: e.clientY },
     });
@@ -1071,7 +1101,8 @@ const Calendario = () => {
   const getAlumnosDelTurnoEnSemana = (
     turno: Turno | undefined,
     semana: string,
-    recuperacionesSemana: Recuperacion[]
+    recuperacionesSemana: Recuperacion[],
+    liberacionesDeSemana: LiberacionSemana[] = liberacionesSemana
   ): AlumnoEnTurno[] => {
     if (!turno) return [];
     const regulares: AlumnoEnTurno[] = turno.alumnoIds
@@ -1081,7 +1112,13 @@ const Calendario = () => {
       })
       .map((id) => alumnos.find((a) => a.id === id))
       .filter((a): a is Alumno => a !== undefined)
-      .map((alumno) => ({ alumno, isRecuperacion: false }));
+      .map((alumno) => ({
+        alumno,
+        isRecuperacion: false,
+        liberadaSemana: liberacionesDeSemana.some(
+          (item) => item.turnoId === turno.id && item.alumnoId === alumno.id && item.semana === semana
+        ),
+      }));
     const recs: AlumnoEnTurno[] = recuperacionesSemana
       .filter((r) => r.turnoId === turno.id)
       .map((r) => {
@@ -1126,6 +1163,17 @@ const Calendario = () => {
         })
       );
       const recuperacionesPorSemana = Object.fromEntries(recuperacionesPorSemanaEntries) as Record<string, Recuperacion[]>;
+      const liberacionesPorSemanaEntries = await Promise.all(
+        semanas.map(async (semana) => {
+          try {
+            const data = await storageHybrid.liberacionesSemana.getBySemana(semana);
+            return [semana, data] as const;
+          } catch {
+            return [semana, []] as const;
+          }
+        })
+      );
+      const liberacionesPorSemana = Object.fromEntries(liberacionesPorSemanaEntries) as Record<string, LiberacionSemana[]>;
 
       const dias = fechas
         .map((fecha) => {
@@ -1135,11 +1183,17 @@ const Calendario = () => {
             .filter((turno) => turno.diaSemana === diaSemana)
             .sort((a, b) => a.hora.localeCompare(b.hora));
           const turnosReporte = turnosDia.map((turno) => {
-            const alumnosTurno = getAlumnosDelTurnoEnSemana(turno, semana, recuperacionesPorSemana[semana] || []);
+            const alumnosTurno = getAlumnosDelTurnoEnSemana(
+              turno,
+              semana,
+              recuperacionesPorSemana[semana] || [],
+              liberacionesPorSemana[semana] || []
+            );
             const recuperacionesTurno = alumnosTurno.filter((item) => item.isRecuperacion).length;
-            const fijasTurno = alumnosTurno.length - recuperacionesTurno;
+            const fijasTurno = alumnosTurno.filter((item) => !item.isRecuperacion && !item.liberadaSemana).length;
             const cupo = turno.cupo ?? CUPO_DEFAULT;
-            const libres = Math.max(0, cupo - alumnosTurno.length);
+            const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+            const libres = Math.max(0, cupo - ocupacionTurno);
             const profesor = turno.profesorId
               ? profesores.find((item) => item.id === turno.profesorId)
               : null;
@@ -1152,11 +1206,11 @@ const Calendario = () => {
               titulo: turno.titulo?.trim() || 'Clase',
               profesor: profesor ? `${profesor.nombre} ${profesor.apellido}` : 'Sin profesor',
               cupo,
-              ocupacion: alumnosTurno.length,
+              ocupacion: ocupacionTurno,
               fijas: fijasTurno,
               recuperaciones: recuperacionesTurno,
               libres,
-              llena: alumnosTurno.length >= cupo,
+              llena: ocupacionTurno >= cupo,
             };
           });
           return {
@@ -1322,7 +1376,7 @@ const Calendario = () => {
 
   const renderAlumnoEnTurno = (item: AlumnoEnTurno, turno: Turno | undefined, diaSemana: number, hora: string) => {
     if (!turno) return null;
-    const { alumno, isRecuperacion } = item;
+    const { alumno, isRecuperacion, liberadaSemana } = item;
     
     const estadoAsistencia = getEstadoAsistencia(turno.id, alumno.id);
     const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
@@ -1331,6 +1385,7 @@ const Calendario = () => {
     // Recuperación: amarillo + ícono; sino rojo/ámbar si vencido o por vencer; al día: primary
     let bgColor = 'bg-primary-100 text-primary-900';
     if (isRecuperacion) bgColor = 'bg-amber-200 text-amber-900 border-l-4 border-amber-500';
+    else if (liberadaSemana) bgColor = 'bg-slate-200 text-slate-800 border-l-4 border-slate-500';
     else if (vencido) bgColor = 'bg-red-200 text-red-900 border-l-4 border-red-600';
     else if (porVencer) bgColor = 'bg-amber-100 text-amber-900 border-l-4 border-amber-500';
     
@@ -1341,9 +1396,12 @@ const Calendario = () => {
         onClick={(e) => handleAbrirPopupAlumno(e, item, turno, diaSemana, hora)}
       >
         {isRecuperacion && <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 text-amber-700" aria-label="Recuperación" />}
-        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}${isRecuperacion ? ' (recuperación)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}>
+        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}${isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}>
           {alumno.nombre} {alumno.apellido}
         </span>
+        {liberadaSemana && !isRecuperacion && (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-700">Lib.</span>
+        )}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={(e) => {
@@ -1529,7 +1587,8 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = turno?.cupo ?? CUPO_DEFAULT;
-                      const lleno = alumnosTurno.length >= cupo;
+                      const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+                      const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
@@ -1584,14 +1643,14 @@ const Calendario = () => {
                               {profesor && <p className="text-gray-600">Prof: {profesor.nombre} {profesor.apellido}</p>}
                               <p className={`flex items-center gap-1 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-4 h-4" />
-                                {alumnosTurno.length}/{cupo} alumnos
+                                {ocupacionTurno}/{cupo} alumnos
                               </p>
                             </div>
                           )}
                           <div className="space-y-1.5">
                             {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                           </div>
-                          {horarioDisponible && !lleno && alumnosTurno.length === 0 && (
+                          {horarioDisponible && !lleno && ocupacionTurno === 0 && (
                             <button
                               type="button"
                               onClick={() => handleAgregarAlumno(diaIndex, hora)}
@@ -1615,7 +1674,8 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = turno?.cupo ?? CUPO_DEFAULT;
-                      const lleno = alumnosTurno.length >= cupo;
+                      const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+                      const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
@@ -1670,14 +1730,14 @@ const Calendario = () => {
                               {profesor && <p className="text-gray-600">Prof: {profesor.nombre} {profesor.apellido}</p>}
                               <p className={`flex items-center gap-1 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-4 h-4" />
-                                {alumnosTurno.length}/{cupo} alumnos
+                                {ocupacionTurno}/{cupo} alumnos
                               </p>
                             </div>
                           )}
                           <div className="space-y-1.5">
                             {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                           </div>
-                          {horarioDisponible && !lleno && alumnosTurno.length === 0 && (
+                          {horarioDisponible && !lleno && ocupacionTurno === 0 && (
                             <button
                               type="button"
                               onClick={() => handleAgregarAlumno(diaIndex, hora)}
@@ -1729,7 +1789,8 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = turno?.cupo ?? CUPO_DEFAULT;
-                      const lleno = alumnosTurno.length >= cupo;
+                      const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+                      const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
@@ -1766,7 +1827,7 @@ const Calendario = () => {
                               {profesor && <div className="text-xs text-gray-600 truncate">Prof: {profesor.nombre} {profesor.apellido}</div>}
                               <div className={`text-xs flex items-center gap-1 mt-0.5 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-3.5 h-3.5 flex-shrink-0" />
-                                {alumnosTurno.length}/{cupo}
+                                {ocupacionTurno}/{cupo}
                               </div>
                             </div>
                           )}
@@ -1781,7 +1842,7 @@ const Calendario = () => {
                           )}
                           {(() => {
                             const cupo = turno?.cupo ?? CUPO_DEFAULT;
-                            const lleno = alumnosTurno.length >= cupo;
+                            const lleno = ocupacionTurno >= cupo;
                             return (
                               <button
                                 onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
@@ -1813,7 +1874,8 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = turno?.cupo ?? CUPO_DEFAULT;
-                      const lleno = alumnosTurno.length >= cupo;
+                      const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+                      const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
                       return (
@@ -1850,7 +1912,7 @@ const Calendario = () => {
                               {profesor && <div className="text-xs text-gray-600 truncate">Prof: {profesor.nombre} {profesor.apellido}</div>}
                               <div className={`text-xs flex items-center gap-1 mt-0.5 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-3.5 h-3.5 flex-shrink-0" />
-                                {alumnosTurno.length}/{cupo}
+                                {ocupacionTurno}/{cupo}
                               </div>
                             </div>
                           )}
@@ -1865,7 +1927,7 @@ const Calendario = () => {
                           )}
                           {(() => {
                             const cupo = turno?.cupo ?? CUPO_DEFAULT;
-                            const lleno = alumnosTurno.length >= cupo;
+                            const lleno = ocupacionTurno >= cupo;
                             return (
                               <button
                                 onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
@@ -2711,11 +2773,21 @@ const Calendario = () => {
                   Recuperación
                 </span>
               )}
+              {showPopupAlumno.liberadaSemana && !showPopupAlumno.isRecuperacion && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800">
+                  Liberó esta semana
+                </span>
+              )}
             </div>
             <p className="text-sm text-gray-600">DNI: {showPopupAlumno.alumno.dni}</p>
             <p className="text-xs text-gray-500 mt-1">
               Turno actual: {DIAS_SEMANA[showPopupAlumno.diaSemana]} {showPopupAlumno.hora}
             </p>
+            {showPopupAlumno.liberadaSemana && !showPopupAlumno.isRecuperacion && (
+              <p className="text-xs text-slate-600 mt-1">
+                La liberación impacta solo esta semana; su clase fija sigue activa para las próximas.
+              </p>
+            )}
             <p className="text-xs font-medium mt-1">
               Fecha de vencimiento:{' '}
               {(showPopupAlumno.alumno.fechaVencimientoCuota ?? '').trim() ? (

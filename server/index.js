@@ -2548,6 +2548,25 @@ app.get('/api/recuperaciones/by-semana/:semana', async (req, res) => {
   }
 });
 
+app.get('/api/liberaciones-semana/by-semana/:semana', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { rows } = await db.query(
+      `SELECT l.id, l.turno_id AS "turnoId", l.alumno_id AS "alumnoId", l.semana, l.created_at AS "createdAt"
+       FROM liberaciones_semana l
+       JOIN turnos t ON l.turno_id = t.id AND t.sucursal_id = $1
+       WHERE l.semana = $2`,
+      [sid, req.params.semana]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/recuperaciones', async (req, res) => {
   try {
     const db = await getPool();

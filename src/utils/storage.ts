@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja, AgendaNota } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja, AgendaNota, LiberacionSemana } from '../types';
 import { getFechaFromSemanaYDia } from './date';
 
 const STORAGE_KEYS = {
@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   asistencias: 'savia_asistencias',
   profesores: 'savia_profesores',
   recuperaciones: 'savia_recuperaciones',
+  liberacionesSemana: 'savia_liberaciones_semana',
   inscripcionesTurno: 'savia_inscripciones_turno',
   cierresCaja: 'savia_cierres_caja',
   agendaNotas: 'savia_agenda_notas',
@@ -265,6 +266,28 @@ export const storage = {
     deleteBySemana: (semana: string): void => {
       const list = storage.recuperaciones.getAll().filter(r => r.semana !== semana);
       storage.recuperaciones.save(list);
+    },
+  },
+
+  liberacionesSemana: {
+    getAll: (): LiberacionSemana[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.liberacionesSemana);
+      return data ? JSON.parse(data) : [];
+    },
+    save: (list: LiberacionSemana[]): void => {
+      localStorage.setItem(STORAGE_KEYS.liberacionesSemana, JSON.stringify(list));
+    },
+    getBySemana: (semana: string): LiberacionSemana[] => {
+      return storage.liberacionesSemana.getAll().filter((item) => item.semana === semana);
+    },
+    add: (item: LiberacionSemana): void => {
+      const list = storage.liberacionesSemana.getAll();
+      list.push(item);
+      storage.liberacionesSemana.save(list);
+    },
+    delete: (id: string): void => {
+      const list = storage.liberacionesSemana.getAll().filter((item) => item.id !== id);
+      storage.liberacionesSemana.save(list);
     },
   },
 

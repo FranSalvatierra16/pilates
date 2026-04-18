@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal, HorariosSucursal, Recuperacion, InscripcionTurno, CierreCaja, AgendaNota } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal, HorariosSucursal, Recuperacion, InscripcionTurno, CierreCaja, AgendaNota, LiberacionSemana } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -175,6 +175,10 @@ export const storageApi = {
     delete: (id: string): Promise<void> => request(`/api/recuperaciones/${id}`, { method: 'DELETE' }),
     deleteBySemana: (semana: string): Promise<void> =>
       request(`/api/recuperaciones/by-semana/${encodeURIComponent(semana)}`, { method: 'DELETE' }),
+  },
+  liberacionesSemana: {
+    getBySemana: (semana: string): Promise<LiberacionSemana[]> =>
+      request<LiberacionSemana[]>(`/api/liberaciones-semana/by-semana/${encodeURIComponent(semana)}`),
   },
   inscripcionesTurno: {
     getAll: (): Promise<InscripcionTurno[]> => request<InscripcionTurno[]>('/api/inscripciones-turno'),

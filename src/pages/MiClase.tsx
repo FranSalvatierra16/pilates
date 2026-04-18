@@ -112,6 +112,27 @@ function getProximaClase(
   return candidatos[0] || null;
 }
 
+function elegirTurnoRepresentativo(actual: TurnoPortal, candidate: TurnoPortal): TurnoPortal {
+  const prioridad = (turno: TurnoPortal) => {
+    if (turno.yaInscripto) return 5;
+    if (turno.esClaseFija && !turno.claseLiberada) return 4;
+    if (turno.esClaseFija && turno.claseLiberada) return 3;
+    return 1;
+  };
+  const prioridadActual = prioridad(actual);
+  const prioridadCandidate = prioridad(candidate);
+  if (prioridadCandidate !== prioridadActual) {
+    return prioridadCandidate > prioridadActual ? candidate : actual;
+  }
+  if (candidate.inscriptos !== actual.inscriptos) {
+    return candidate.inscriptos < actual.inscriptos ? candidate : actual;
+  }
+  if (candidate.cupo !== actual.cupo) {
+    return candidate.cupo > actual.cupo ? candidate : actual;
+  }
+  return actual;
+}
+
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -627,7 +648,16 @@ const MiClase = () => {
     return true;
   });
 
-  const turnosOrdenados = [...turnosFiltrados].sort(
+  const turnosUnicos = Array.from(
+    turnosFiltrados.reduce<Map<string, TurnoPortal>>((acc, turno) => {
+      const key = `${turno.diaSemana}|${turno.hora}|${(turno.titulo || 'Clase').trim().toLowerCase()}`;
+      const existente = acc.get(key);
+      acc.set(key, existente ? elegirTurnoRepresentativo(existente, turno) : turno);
+      return acc;
+    }, new Map()).values()
+  );
+
+  const turnosOrdenados = [...turnosUnicos].sort(
     (a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora)
   );
 

@@ -1624,11 +1624,17 @@ app.get('/api/alumno-portal', async (req, res) => {
       [turnoRows.map((r) => r.id)]
     );
     const { rows: horRows } = await db.query(
-      'SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde FROM sucursales WHERE id = $1',
+      `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
+              horarios_no_disponibles_por_dia
+         FROM sucursales
+        WHERE id = $1`,
       [sid]
     );
     const insByTurno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r]));
     const hor = horRows[0] || {};
+    const manana = generarHorasDesdeHasta(hor.hora_inicio_manana || '07:00', hor.hora_fin_manana || '12:00');
+    const tarde = generarHorasDesdeHasta(hor.hora_inicio_tarde || '16:00', hor.hora_fin_tarde || '21:00');
+    const horasValidas = [...manana, ...tarde];
     const actividadNombre = alumno.actividad_id
       ? (await db.query('SELECT nombre FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1', [alumno.actividad_id, sid])).rows[0]?.nombre || ''
       : '';
@@ -1734,6 +1740,7 @@ app.get('/api/alumno-portal', async (req, res) => {
         horaFinManana: hor.hora_fin_manana || '12:00',
         horaInicioTarde: hor.hora_inicio_tarde || '16:00',
         horaFinTarde: hor.hora_fin_tarde || '21:00',
+        horariosNoDisponiblesPorDia: normalizarHorariosNoDisponiblesPorDia(hor.horarios_no_disponibles_por_dia, horasValidas),
       },
     };
     res.json(payload);

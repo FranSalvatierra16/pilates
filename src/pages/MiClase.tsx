@@ -32,6 +32,7 @@ type HorariosPortal = {
   horaFinManana: string;
   horaInicioTarde: string;
   horaFinTarde: string;
+  horariosNoDisponiblesPorDia?: Record<number, string[]>;
 };
 
 type PortalData = {
@@ -155,6 +156,7 @@ const DEFAULT_HORARIOS: HorariosPortal = {
   horaFinManana: '12:00',
   horaInicioTarde: '16:00',
   horaFinTarde: '21:00',
+  horariosNoDisponiblesPorDia: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
 };
 
 const MiClase = () => {
@@ -639,9 +641,11 @@ const MiClase = () => {
   const finManana = horaToNum(horarios.horaFinManana);
   const iniTarde = horaToNum(horarios.horaInicioTarde);
   const finTarde = horaToNum(horarios.horaFinTarde);
+  const horariosNoDisponibles = horarios.horariosNoDisponiblesPorDia || DEFAULT_HORARIOS.horariosNoDisponiblesPorDia;
 
   const turnosFiltrados = data.turnos.filter((t) => {
     if (filtroDia !== null && t.diaSemana !== filtroDia) return false;
+    if ((horariosNoDisponibles?.[t.diaSemana] || []).includes(t.hora)) return false;
     const h = horaToNum(t.hora);
     if (filtroHorario === 'manana') return h >= iniManana && h <= finManana;
     if (filtroHorario === 'tarde') return h >= iniTarde && h <= finTarde;

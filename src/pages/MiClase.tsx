@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut } from 'lucide-react';
+import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut, ArrowLeft } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getSemanaSiguiente, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -571,6 +571,14 @@ const MiClase = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
         <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Volver
+          </button>
           <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
             <Calendar className="w-5 h-5 text-primary-600" />
             {tituloPortal}
@@ -678,8 +686,14 @@ const MiClase = () => {
   const nombreCompleto = [data.alumno.apellido, data.alumno.nombre].filter(Boolean).join(', ') || 'Alumno';
   const labelManana = formatRangoHorario(horarios.horaInicioManana, horarios.horaFinManana);
   const labelTarde = formatRangoHorario(horarios.horaInicioTarde, horarios.horaFinTarde);
+  const esRecuperar = data.modo === 'recuperar';
   const clasesFijasOrdenadas = [...(data.clasesFijas || [])].sort((a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora));
   const turnosById = new Map(data.turnos.map((turno) => [turno.id, turno] as const));
+  const recuperacionesOrdenadas = esRecuperar
+    ? [...data.turnos]
+        .filter((turno) => !!turno.recuperacionId && turno.yaInscripto)
+        .sort((a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora))
+    : [];
   const proximaClase = getProximaClase(clasesFijasOrdenadas);
   const historial = data.historialAsistencias || [];
   const totalAsistidas = historial.filter((item) => item.estado === 'asistio').length;
@@ -690,7 +704,6 @@ const MiClase = () => {
   const cuotaVenceHoy = tieneFechaVencimiento && isCuotaVenceHoy(fechaVencimiento);
   const cuotaPorVencer = tieneFechaVencimiento && !cuotaVencida && (cuotaVenceHoy || isCuotaPorVencer(fechaVencimiento, 3));
 
-  const esRecuperar = data.modo === 'recuperar';
   const semanaActualLabel = getRangoSemana(getSemanaActual());
   const semanaSiguienteLabel = getRangoSemana(getSemanaSiguiente(getSemanaActual()));
   const sucursalPortal =
@@ -721,7 +734,7 @@ const MiClase = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 pb-safe">
-      <div className="max-w-lg mx-auto p-4 pt-6">
+      <div className="max-w-lg mx-auto p-4 pt-8 sm:pt-6">
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -780,8 +793,8 @@ const MiClase = () => {
                 <Sparkles className="w-4 h-4 text-primary-600" />
                 <h2 className="text-sm font-semibold text-gray-900">Mis clases</h2>
               </div>
-              {clasesFijasOrdenadas.length === 0 ? (
-                <p className="text-sm text-gray-500">Todavía no tenés clases fijas cargadas.</p>
+              {clasesFijasOrdenadas.length === 0 && recuperacionesOrdenadas.length === 0 ? (
+                <p className="text-sm text-gray-500">Todavía no tenés clases cargadas.</p>
               ) : (
                 <div className="space-y-2">
                   {clasesFijasOrdenadas.map((turno) => {
@@ -833,6 +846,29 @@ const MiClase = () => {
                             ) : null}
                           </div>
                         )}
+                      </div>
+                    );
+                  })}
+                  {recuperacionesOrdenadas.map((turno) => {
+                    const fechaRecuperacion = formatDate(getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), turno.diaSemana));
+                    return (
+                      <div key={`rec-${turno.id}-${turno.recuperacionId}`} className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
+                          <p className="text-xs text-violet-700 mt-1">Recuperación · {fechaRecuperacion}</p>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => liberar(turno.id, turno.recuperacionId)}
+                            disabled={!!actioning}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                          >
+                            {actioning === turno.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                            Liberar recuperación
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

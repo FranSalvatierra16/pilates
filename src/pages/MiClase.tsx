@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getSemanaSiguiente, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -161,6 +161,7 @@ const DEFAULT_HORARIOS: HorariosPortal = {
 
 const MiClase = () => {
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tokenFromUrl = searchParams.get('token') || '';
   const sucursalIdFromUrl = searchParams.get('sucursalId') || '';
@@ -689,19 +690,67 @@ const MiClase = () => {
   const esRecuperar = data.modo === 'recuperar';
   const semanaActualLabel = getRangoSemana(getSemanaActual());
   const semanaSiguienteLabel = getRangoSemana(getSemanaSiguiente(getSemanaActual()));
+  const sucursalPortal =
+    data.sucursalId ||
+    (portalAuth?.type === 'dni' ? portalAuth.sucursalId : '') ||
+    sucursalIdFromUrl;
+
+  const cerrarSesionPortal = () => {
+    setData(null);
+    setPortalAuth(null);
+    setError('');
+    setSucursales([]);
+    setActioning(null);
+    setPushStatus('idle');
+    setPushMessage('');
+    setDniInput('');
+    setFiltroDia(null);
+    setFiltroHorario('todos');
+    setSemanaElegida('actual');
+    setLoading(false);
+    notifPromptHandledRef.current = false;
+
+    const params = new URLSearchParams();
+    params.set('modo', modoFromUrl);
+    if (sucursalPortal.trim()) params.set('sucursalId', sucursalPortal.trim());
+    navigate(`/mi-clase?${params.toString()}`, { replace: true });
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 pb-safe">
       <div className="max-w-lg mx-auto p-4 pt-6">
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-          <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary-600" />
-            Mi perfil
-          </h1>
-          <p className="text-sm text-gray-600 mt-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-primary-600" />
+                Tu perfil
+              </h1>
+              <p className="text-sm font-semibold text-gray-900 mt-2 truncate">{nombreCompleto}</p>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${esRecuperar ? 'bg-violet-100 text-violet-800' : 'bg-primary-100 text-primary-800'}`}>
+                  {esRecuperar ? 'Modo recuperar' : 'Modo clases'}
+                </span>
+                {data.alumno.actividadNombre && (
+                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700">
+                    {data.alumno.actividadNombre}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={cerrarSesionPortal}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <LogOut className="w-4 h-4" />
+              Cerrar sesión
+            </button>
+          </div>
+          <p className="text-sm text-gray-600 mt-3">
             {esRecuperar
-              ? `Hola, ${nombreCompleto}. Acá podés ver tu perfil, tus clases y manejar tus recuperaciones.`
-              : `Hola, ${nombreCompleto}. Acá podés ver tu perfil, tus clases y sumarte o liberar cupo.`}
+              ? 'Acá podés ver tu perfil, liberar tu clase fija de la semana y tomar otra para recuperar.'
+              : 'Acá podés ver tus clases, tu estado de cuota y gestionar tus reservas.'}
           </p>
           <>
             {proximaClase && (
@@ -714,7 +763,12 @@ const MiClase = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                <p className="text-xs font-medium text-gray-500">Actividad</p>
+                <p className="text-sm font-semibold mt-1 text-gray-900">{data.alumno.actividadNombre || 'Sin actividad'}</p>
+                <p className="text-xs mt-1 text-gray-500">Tu plan actual</p>
+              </div>
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
                 <p className="text-xs font-medium text-gray-500">Cuota</p>
                 <p className={`text-sm font-semibold mt-1 ${cuotaVencida ? 'text-red-600' : cuotaPorVencer ? 'text-amber-600' : 'text-gray-900'}`}>
@@ -727,7 +781,7 @@ const MiClase = () => {
               <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
                 <p className="text-xs font-medium text-gray-500">Clases fijas</p>
                 <p className="text-sm font-semibold mt-1 text-gray-900">{clasesFijasOrdenadas.length}</p>
-                <p className="text-xs mt-1 text-gray-500">{data.alumno.actividadNombre || 'Tu actividad actual'}</p>
+                <p className="text-xs mt-1 text-gray-500">Por semana</p>
               </div>
               <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
                 <p className="text-xs font-medium text-violet-700">Para recuperar</p>

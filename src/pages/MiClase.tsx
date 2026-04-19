@@ -679,6 +679,7 @@ const MiClase = () => {
   const labelManana = formatRangoHorario(horarios.horaInicioManana, horarios.horaFinManana);
   const labelTarde = formatRangoHorario(horarios.horaInicioTarde, horarios.horaFinTarde);
   const clasesFijasOrdenadas = [...(data.clasesFijas || [])].sort((a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora));
+  const turnosById = new Map(data.turnos.map((turno) => [turno.id, turno] as const));
   const proximaClase = getProximaClase(clasesFijasOrdenadas);
   const historial = data.historialAsistencias || [];
   const totalAsistidas = historial.filter((item) => item.estado === 'asistio').length;
@@ -783,12 +784,58 @@ const MiClase = () => {
                 <p className="text-sm text-gray-500">Todavía no tenés clases fijas cargadas.</p>
               ) : (
                 <div className="space-y-2">
-                  {clasesFijasOrdenadas.map((turno) => (
-                    <div key={turno.id} className="rounded-lg border border-gray-200 px-3 py-2">
-                      <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
-                    </div>
-                  ))}
+                  {clasesFijasOrdenadas.map((turno) => {
+                    const turnoActual = turnosById.get(turno.id);
+                    return (
+                      <div key={turno.id} className="rounded-lg border border-gray-200 px-3 py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
+                          {esRecuperar && turnoActual?.claseLiberada && (
+                            <p className="text-xs text-emerald-700 mt-1">La liberaste para esta semana</p>
+                          )}
+                          {esRecuperar && turnoActual?.esClaseFija && !turnoActual?.claseLiberada && (
+                            <p className="text-xs text-amber-700 mt-1">Tu clase fija de esta semana</p>
+                          )}
+                        </div>
+                        {turnoActual && (
+                          <div className="flex-shrink-0">
+                            {esRecuperar && turnoActual.esClaseFija && turnoActual.claseLiberada ? (
+                              <button
+                                type="button"
+                                onClick={() => restaurarClaseSemana(turnoActual.id, turnoActual.liberacionId)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                                Volver a tomarla
+                              </button>
+                            ) : esRecuperar && turnoActual.esClaseFija ? (
+                              <button
+                                type="button"
+                                onClick={() => liberarClaseSemana(turnoActual.id)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                                Liberar esta clase
+                              </button>
+                            ) : turnoActual.yaInscripto ? (
+                              <button
+                                type="button"
+                                onClick={() => liberar(turnoActual.id, turnoActual.recuperacionId)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                                Liberar cupo
+                              </button>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -3118,12 +3118,17 @@ function buildShareMeta(req, sucursal) {
   const currentUrl = `${origin}${req.originalUrl}`;
   const nombre = sucursal?.nombre_lugar || 'FitGest';
   const esRegistro = req.path === '/registro';
+  const esPortalAlumno = req.path === '/mi-clase';
   const title = esRegistro
     ? `${nombre} - Inscripción`
-    : `${nombre} - Tu Clase`;
+    : esPortalAlumno
+      ? `${nombre} - Tu Clase`
+      : `${nombre} - Sistema de Gestión`;
   const description = esRegistro
     ? `Inscripción online de ${nombre}. Completá tus datos y te contactamos.`
-    : `Portal de alumnos de ${nombre}. Entrá a Tu Clase y gestioná tus clases y recuperaciones.`;
+    : esPortalAlumno
+      ? `Portal de alumnos de ${nombre}. Entrá a Tu Clase y gestioná tus clases y recuperaciones.`
+      : `Sistema de gestión de ${nombre}.`;
   const image = getPublicLogoUrl(req, sucursal?.id);
   return {
     title,
@@ -3273,7 +3278,8 @@ app.get('/api/public/sucursal-logo/:id', async (req, res) => {
 // Servir frontend estático (después de build)
 const distPath = join(__dirname, '..', 'dist');
 if (existsSync(distPath)) {
-  app.get(['/mi-clase', '/registro'], async (req, res) => {
+  app.use(express.static(distPath));
+  app.get('*', async (req, res) => {
     try {
       const db = await getPool();
       const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
@@ -3283,14 +3289,10 @@ if (existsSync(distPath)) {
       res.send(html);
     } catch (e) {
       console.error(e);
-      res.sendFile(join(distPath, 'index.html'));
+      res.sendFile(join(distPath, 'index.html'), (err) => {
+        if (err) res.status(500).send('Error cargando la aplicación.');
+      });
     }
-  });
-  app.use(express.static(distPath));
-  app.get('*', (req, res) => {
-    res.sendFile(join(distPath, 'index.html'), (err) => {
-      if (err) res.status(500).send('Error cargando la aplicación.');
-    });
   });
 } else {
   app.get('*', (req, res) => res.send('Frontend no generado. Ejecutá "npm run build" antes de iniciar.'));

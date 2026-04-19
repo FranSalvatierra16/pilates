@@ -3278,7 +3278,7 @@ app.get('/api/public/sucursal-logo/:id', async (req, res) => {
 // Servir frontend estático (después de build)
 const distPath = join(__dirname, '..', 'dist');
 if (existsSync(distPath)) {
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, { index: false }));
   app.get('*', async (req, res) => {
     try {
       const db = await getPool();

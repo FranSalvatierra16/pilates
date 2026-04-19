@@ -2574,6 +2574,117 @@ app.get('/api/liberaciones-semana/by-semana/:semana', async (req, res) => {
   }
 });
 
+app.post('/api/liberaciones-semana', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { turnoId, alumnoId, semana } = req.body || {};
+    if (!turnoId || !alumnoId || !semana) {
+      return res.status(400).json({ error: 'Faltan turnoId, alumnoId o semana' });
+    }
+    const { rows: turnoRows } = await db.query(
+      'SELECT id, alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2',
+      [turnoId, sid]
+    );
+    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const turno = turnoRows[0];
+    const ids = turno.alumno_ids || [];
+    if (!ids.includes(alumnoId)) {
+      return res.status(400).json({ error: 'Ese alumno no tiene esta clase fija.' });
+    }
+    const { rows: alumnoRows } = await db.query(
+      'SELECT id FROM alumnos WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
+      [alumnoId, sid]
+    );
+    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Alumno no encontrado' });
+    const { rows: insRows } = await db.query(
+      'SELECT semana_desde FROM inscripciones_turno WHERE turno_id = $1 AND alumno_id = $2 LIMIT 1',
+      [turnoId, alumnoId]
+    );
+    if (insRows.length > 0 && insRows[0].semana_desde > semana) {
+      return res.status(400).json({ error: 'El alumno todavía no tiene esa clase asignada en esa semana.' });
+    }
+    const { rows: libRows } = await db.query(
+      'SELECT id, turno_id AS "turnoId", alumno_id AS "alumnoId", semana, created_at AS "createdAt" FROM liberaciones_semana WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3',
+      [turnoId, alumnoId, semana]
+    );
+    if (libRows.length > 0) return res.json(libRows[0]);
+    const id = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO liberaciones_semana (id, turno_id, alumno_id, semana, created_at) VALUES ($1, $2, $3, $4, NOW())',
+      [id, turnoId, alumnoId, semana]
+    );
+    await db.query(
+      'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
+      [alumnoId, sid]
+    );
+    res.status(201).json({ id, turnoId, alumnoId, semana, createdAt: new Date().toISOString() });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/liberaciones-semana/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { rows: libRows } = await db.query(
+      `SELECT l.id, l.turno_id, l.alumno_id, l.semana,
+              a.id AS alumno_id_full, a.sucursal_id, a.actividad_id, a.clases_para_recuperar
+         FROM liberaciones_semana l
+         JOIN turnos t ON l.turno_id = t.id AND t.sucursal_id = $1
+         JOIN alumnos a ON l.alumno_id = a.id AND a.sucursal_id = $1
+        WHERE l.id = $2`,
+      [sid, req.params.id]
+    );
+    if (libRows.length === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
+    const lib = libRows[0];
+    const alumno = {
+      id: lib.alumno_id_full,
+      sucursal_id: lib.sucursal_id,
+      actividad_id: lib.actividad_id,
+      clases_para_recuperar: lib.clases_para_recuperar,
+    };
+    const semanaVista = lib.semana;
+    const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [sid]);
+    const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
+    const recuperacionesConCreditoPorLiberacion = ctx.recuperacionesSemana.filter((r) => r.origen_credito === 'liberacion').length;
+    const hayCreditoDeLiberacionSinUsar = ctx.liberacionesSemana.length > recuperacionesConCreditoPorLiberacion;
+    if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
+      return res.status(400).json({ error: 'Ya usó esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
+    }
+    const { rows: turnoRows } = await db.query(
+      `SELECT t.id, t.alumno_ids, t.cupo,
+              COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,
+              COALESCE((SELECT COUNT(*)::int FROM liberaciones_semana l WHERE l.turno_id = t.id AND l.semana = $2), 0) AS libs
+         FROM turnos t
+        WHERE t.id = $1 AND t.sucursal_id = $3`,
+      [lib.turno_id, semanaVista, sid]
+    );
+    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const turno = turnoRows[0];
+    const ocupacionActual = Math.max(0, (turno.alumno_ids || []).length - Number(turno.libs || 0) + Number(turno.recs || 0));
+    if (ocupacionActual >= Number(turno.cupo ?? 6)) {
+      return res.status(400).json({ error: 'No se puede cancelar la liberación porque ya no hay cupo en la clase.' });
+    }
+    const { rowCount } = await db.query('DELETE FROM liberaciones_semana WHERE id = $1', [req.params.id]);
+    if (rowCount === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
+    if (hayCreditoDeLiberacionSinUsar) {
+      await db.query(
+        'UPDATE alumnos SET clases_para_recuperar = GREATEST(0, COALESCE(clases_para_recuperar, 0) - 1) WHERE id = $1 AND sucursal_id = $2',
+        [alumno.id, sid]
+      );
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 app.post('/api/recuperaciones', async (req, res) => {
   try {
     const db = await getPool();

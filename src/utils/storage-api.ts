@@ -179,6 +179,10 @@ export const storageApi = {
   liberacionesSemana: {
     getBySemana: (semana: string): Promise<LiberacionSemana[]> =>
       request<LiberacionSemana[]>(`/api/liberaciones-semana/by-semana/${encodeURIComponent(semana)}`),
+    add: (body: { turnoId: string; alumnoId: string; semana: string }): Promise<LiberacionSemana> =>
+      request<LiberacionSemana>('/api/liberaciones-semana', { method: 'POST', body: JSON.stringify(body) }),
+    delete: (id: string): Promise<void> =>
+      request(`/api/liberaciones-semana/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
   inscripcionesTurno: {
     getAll: (): Promise<InscripcionTurno[]> => request<InscripcionTurno[]>('/api/inscripciones-turno'),

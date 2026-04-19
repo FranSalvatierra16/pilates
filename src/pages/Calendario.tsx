@@ -175,10 +175,12 @@ const Calendario = () => {
     hora: string;
     isRecuperacion?: boolean;
     liberadaSemana?: boolean;
+    liberacionId?: string;
     recuperacionId?: string;
     position: { x: number; y: number };
   } | null>(null);
   const [showMoverAlumno, setShowMoverAlumno] = useState(false);
+  const [savingLiberacionSemana, setSavingLiberacionSemana] = useState(false);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [turnoParaEditar, setTurnoParaEditar] = useState<Turno | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
@@ -406,6 +408,7 @@ const Calendario = () => {
     alumno: Alumno;
     isRecuperacion: boolean;
     liberadaSemana?: boolean;
+    liberacionId?: string;
     recuperacionId?: string;
     usaCredito?: boolean;
   };
@@ -425,11 +428,15 @@ const Calendario = () => {
       })
       .map(id => alumnos.find(a => a.id === id))
       .filter((a): a is Alumno => a !== undefined)
-      .map((a) => ({
-        alumno: a,
-        isRecuperacion: false,
-        liberadaSemana: !!buscarLiberacionSemana(turno.id, a.id),
-      }));
+      .map((a) => {
+        const liberacion = buscarLiberacionSemana(turno.id, a.id);
+        return {
+          alumno: a,
+          isRecuperacion: false,
+          liberadaSemana: !!liberacion,
+          liberacionId: liberacion?.id,
+        };
+      });
     const recs: AlumnoEnTurno[] = recuperaciones
       .filter(r => r.turnoId === turno.id)
       .map(r => {
@@ -869,6 +876,67 @@ const Calendario = () => {
     }
   };
 
+  const handleLiberarClaseSemana = async () => {
+    if (!showPopupAlumno || showPopupAlumno.isRecuperacion || showPopupAlumno.liberadaSemana) return;
+    const ok = await toast.confirm(
+      `¿Querés liberar el cupo semanal de ${showPopupAlumno.alumno.nombre} ${showPopupAlumno.alumno.apellido} en ${DIAS_SEMANA[showPopupAlumno.diaSemana]} ${showPopupAlumno.hora}?`,
+      { title: 'Liberar cupo semanal', confirmText: 'Liberar', cancelText: 'Cancelar' }
+    );
+    if (!ok) return;
+    try {
+      setSavingLiberacionSemana(true);
+      const liberacionIdLocal = `${Date.now()}`;
+      await storageHybrid.liberacionesSemana.add({
+        id: liberacionIdLocal,
+        turnoId: showPopupAlumno.turnoId,
+        alumnoId: showPopupAlumno.alumno.id,
+        semana: semanaVista,
+        createdAt: new Date().toISOString(),
+      });
+      if (!useApi()) {
+        await storageHybrid.alumnos.update(showPopupAlumno.alumno.id, {
+          clasesParaRecuperar: (showPopupAlumno.alumno.clasesParaRecuperar || 0) + 1,
+        });
+      }
+      await loadLiberacionesSemana();
+      await loadAlumnos();
+      setShowPopupAlumno(null);
+      toast.success('Se liberó el cupo de esa clase para esta semana.');
+    } catch (error) {
+      console.error('Error liberando clase semanal:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo liberar el cupo de esta semana.');
+    } finally {
+      setSavingLiberacionSemana(false);
+    }
+  };
+
+  const handleCancelarLiberacionSemana = async () => {
+    if (!showPopupAlumno || showPopupAlumno.isRecuperacion || !showPopupAlumno.liberadaSemana || !showPopupAlumno.liberacionId) return;
+    const ok = await toast.confirm(
+      `¿Querés cancelar la liberación semanal de ${showPopupAlumno.alumno.nombre} ${showPopupAlumno.alumno.apellido} para ${DIAS_SEMANA[showPopupAlumno.diaSemana]} ${showPopupAlumno.hora}?`,
+      { title: 'Cancelar liberación', confirmText: 'Cancelar liberación', cancelText: 'Volver' }
+    );
+    if (!ok) return;
+    try {
+      setSavingLiberacionSemana(true);
+      await storageHybrid.liberacionesSemana.delete(showPopupAlumno.liberacionId);
+      if (!useApi()) {
+        await storageHybrid.alumnos.update(showPopupAlumno.alumno.id, {
+          clasesParaRecuperar: Math.max(0, (showPopupAlumno.alumno.clasesParaRecuperar || 0) - 1),
+        });
+      }
+      await loadLiberacionesSemana();
+      await loadAlumnos();
+      setShowPopupAlumno(null);
+      toast.success('La liberación de esa semana se canceló.');
+    } catch (error) {
+      console.error('Error cancelando liberación semanal:', error);
+      toast.error(error instanceof Error ? error.message : 'No se pudo cancelar la liberación semanal.');
+    } finally {
+      setSavingLiberacionSemana(false);
+    }
+  };
+
   const handleToggleDestacado = async (diaSemana: number, hora: string) => {
     const turno = getTurnoDelDia(diaSemana, hora);
     try {
@@ -904,6 +972,7 @@ const Calendario = () => {
       hora,
       isRecuperacion: item.isRecuperacion,
       liberadaSemana: item.liberadaSemana,
+      liberacionId: item.liberacionId,
       recuperacionId: item.recuperacionId,
       position: { x: e.clientX, y: e.clientY },
     });
@@ -2866,6 +2935,26 @@ const Calendario = () => {
                   </>
                 );
               })()}
+              {!showPopupAlumno.isRecuperacion && !showPopupAlumno.liberadaSemana && (
+                <button
+                  onClick={handleLiberarClaseSemana}
+                  disabled={savingLiberacionSemana}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors bg-amber-100 text-amber-900 hover:bg-amber-200 disabled:opacity-50"
+                >
+                  <X className="w-4 h-4" />
+                  {savingLiberacionSemana ? 'Liberando...' : 'Liberar cupo esta semana'}
+                </button>
+              )}
+              {!showPopupAlumno.isRecuperacion && showPopupAlumno.liberadaSemana && (
+                <button
+                  onClick={handleCancelarLiberacionSemana}
+                  disabled={savingLiberacionSemana}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-medium text-sm transition-colors bg-emerald-100 text-emerald-900 hover:bg-emerald-200 disabled:opacity-50"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  {savingLiberacionSemana ? 'Restaurando...' : 'Cancelar liberación semanal'}
+                </button>
+              )}
               {!showPopupAlumno.isRecuperacion && (
                 <button
                   onClick={() => {

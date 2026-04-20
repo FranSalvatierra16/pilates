@@ -196,7 +196,7 @@ const Layout = ({ children }: LayoutProps) => {
               </div>
               <div className="hidden sm:ml-2 sm:flex sm:min-w-0 sm:flex-1 sm:overflow-x-auto">
                 <div className="flex items-center flex-nowrap gap-x-1 sm:gap-x-2">
-                  {navItems.map((item) => {
+                  {navItems.filter((item) => item.path !== '/notificaciones').map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.path;
                     return (

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut, ArrowLeft } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
-import { formatDate, getSemanaActual, getSemanaSiguiente, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
+import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getSemanaSiguiente, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -32,6 +32,7 @@ type HorariosPortal = {
   horaFinManana: string;
   horaInicioTarde: string;
   horaFinTarde: string;
+  horariosNoDisponiblesPorDia?: Record<number, string[]>;
 };
 
 type PortalData = {
@@ -112,6 +113,27 @@ function getProximaClase(
   return candidatos[0] || null;
 }
 
+function elegirTurnoRepresentativo(actual: TurnoPortal, candidate: TurnoPortal): TurnoPortal {
+  const prioridad = (turno: TurnoPortal) => {
+    if (turno.yaInscripto) return 5;
+    if (turno.esClaseFija && !turno.claseLiberada) return 4;
+    if (turno.esClaseFija && turno.claseLiberada) return 3;
+    return 1;
+  };
+  const prioridadActual = prioridad(actual);
+  const prioridadCandidate = prioridad(candidate);
+  if (prioridadCandidate !== prioridadActual) {
+    return prioridadCandidate > prioridadActual ? candidate : actual;
+  }
+  if (candidate.inscriptos !== actual.inscriptos) {
+    return candidate.inscriptos < actual.inscriptos ? candidate : actual;
+  }
+  if (candidate.cupo !== actual.cupo) {
+    return candidate.cupo > actual.cupo ? candidate : actual;
+  }
+  return actual;
+}
+
 function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -134,15 +156,22 @@ const DEFAULT_HORARIOS: HorariosPortal = {
   horaFinManana: '12:00',
   horaInicioTarde: '16:00',
   horaFinTarde: '21:00',
+  horariosNoDisponiblesPorDia: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
 };
 
 const MiClase = () => {
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tokenFromUrl = searchParams.get('token') || '';
   const sucursalIdFromUrl = searchParams.get('sucursalId') || '';
+  const notifTurnoId = searchParams.get('notifTurnoId') || '';
+  const notifSemana = searchParams.get('notifSemana') || '';
+  const promptTomarDesdeNotif = searchParams.get('promptTomar') === '1';
   const modoQuery = (searchParams.get('modo') || '').toLowerCase();
   const modoFromUrl = modoQuery === 'fijo' ? 'fijo' : 'recuperar';
+  const semanaActualBase = getSemanaActual();
+  const semanaSiguienteBase = getSemanaSiguiente(semanaActualBase);
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -150,15 +179,17 @@ const MiClase = () => {
   const [actioning, setActioning] = useState<string | null>(null);
   const [filtroDia, setFiltroDia] = useState<number | null>(null);
   const [filtroHorario, setFiltroHorario] = useState<'todos' | 'manana' | 'tarde'>('todos');
+  const [seccionActiva, setSeccionActiva] = useState<'clases' | 'perfil'>('clases');
   const [dniInput, setDniInput] = useState('');
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
   const [enviandoDni, setEnviandoDni] = useState(false);
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
   const [pushMessage, setPushMessage] = useState('');
   /** Solo en modo recuperar: 'actual' | 'siguiente' para elegir semana */
-  const [semanaElegida, setSemanaElegida] = useState<'actual' | 'siguiente'>('actual');
+  const [semanaElegida, setSemanaElegida] = useState<'actual' | 'siguiente'>(notifSemana === semanaSiguienteBase ? 'siguiente' : 'actual');
   const [cargandoSemana, setCargandoSemana] = useState(false);
   const prevSemanaElegida = useRef<'actual' | 'siguiente' | null>(null);
+  const notifPromptHandledRef = useRef(false);
 
   useEffect(() => {
     if (tokenFromUrl.trim()) {
@@ -280,6 +311,41 @@ const MiClase = () => {
     recargarRecuperar();
   }, [semanaElegida, data, portalAuth]);
 
+  useEffect(() => {
+    if (notifPromptHandledRef.current || !promptTomarDesdeNotif || !notifTurnoId || !data || !portalAuth) return;
+    if (data.modo !== 'recuperar') return;
+    if (notifSemana && data.semanaVista && notifSemana !== data.semanaVista) {
+      if (notifSemana === semanaActualBase && semanaElegida !== 'actual') {
+        setSemanaElegida('actual');
+      } else if (notifSemana === semanaSiguienteBase && semanaElegida !== 'siguiente') {
+        setSemanaElegida('siguiente');
+      }
+      return;
+    }
+    const target = data.turnos.find((t) => t.id === notifTurnoId);
+    if (!target) return;
+    notifPromptHandledRef.current = true;
+    if (target.inscriptos >= target.cupo) {
+      toast.error('Clase no disponible, ya fue ocupada.');
+      return;
+    }
+    if (target.yaInscripto) {
+      toast.info('Ya estás anotado en esta clase.');
+      return;
+    }
+    setSeccionActiva('clases');
+    setFiltroDia(target.diaSemana);
+    void (async () => {
+      const fechaClase = formatDate(getFechaFromSemanaYDia(data.semanaVista || notifSemana || semanaActualBase, target.diaSemana));
+      const confirmo = await toast.confirm(
+        `¿Deseás tomar la clase ${target.hora} del ${NOMBRE_DIA[target.diaSemana] ?? 'día'} ${fechaClase}?`,
+        { title: 'Clase liberada', confirmText: 'Sí, tomar clase', cancelText: 'No ahora', tone: 'primary' }
+      );
+      if (!confirmo) return;
+      await inscribir(target.id);
+    })();
+  }, [data, notifSemana, notifTurnoId, portalAuth, promptTomarDesdeNotif, semanaActualBase, semanaElegida, semanaSiguienteBase, toast]);
+
   const inscribir = async (turnoId: string) => {
     if (!portalAuth || !data) return;
     setActioning(turnoId);
@@ -298,7 +364,10 @@ const MiClase = () => {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(json.error || 'No se pudo inscribir.');
+        const msg = typeof json.error === 'string' && json.error.toLowerCase().includes('cupo')
+          ? 'Clase no disponible, ya fue ocupada.'
+          : (json.error || 'No se pudo inscribir.');
+        toast.error(msg);
         return;
       }
       if (esRecuperar && json.recuperacionId) {
@@ -502,6 +571,14 @@ const MiClase = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
         <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Volver
+          </button>
           <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
             <Calendar className="w-5 h-5 text-primary-600" />
             {tituloPortal}
@@ -575,16 +652,27 @@ const MiClase = () => {
   const finManana = horaToNum(horarios.horaFinManana);
   const iniTarde = horaToNum(horarios.horaInicioTarde);
   const finTarde = horaToNum(horarios.horaFinTarde);
+  const horariosNoDisponibles = horarios.horariosNoDisponiblesPorDia || DEFAULT_HORARIOS.horariosNoDisponiblesPorDia;
 
   const turnosFiltrados = data.turnos.filter((t) => {
     if (filtroDia !== null && t.diaSemana !== filtroDia) return false;
+    if ((horariosNoDisponibles?.[t.diaSemana] || []).includes(t.hora)) return false;
     const h = horaToNum(t.hora);
     if (filtroHorario === 'manana') return h >= iniManana && h <= finManana;
     if (filtroHorario === 'tarde') return h >= iniTarde && h <= finTarde;
     return true;
   });
 
-  const turnosOrdenados = [...turnosFiltrados].sort(
+  const turnosUnicos = Array.from(
+    turnosFiltrados.reduce<Map<string, TurnoPortal>>((acc, turno) => {
+      const key = `${turno.diaSemana}|${turno.hora}|${(turno.titulo || 'Clase').trim().toLowerCase()}`;
+      const existente = acc.get(key);
+      acc.set(key, existente ? elegirTurnoRepresentativo(existente, turno) : turno);
+      return acc;
+    }, new Map()).values()
+  );
+
+  const turnosOrdenados = [...turnosUnicos].sort(
     (a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora)
   );
 
@@ -598,7 +686,14 @@ const MiClase = () => {
   const nombreCompleto = [data.alumno.apellido, data.alumno.nombre].filter(Boolean).join(', ') || 'Alumno';
   const labelManana = formatRangoHorario(horarios.horaInicioManana, horarios.horaFinManana);
   const labelTarde = formatRangoHorario(horarios.horaInicioTarde, horarios.horaFinTarde);
+  const esRecuperar = data.modo === 'recuperar';
   const clasesFijasOrdenadas = [...(data.clasesFijas || [])].sort((a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora));
+  const turnosById = new Map(data.turnos.map((turno) => [turno.id, turno] as const));
+  const recuperacionesOrdenadas = esRecuperar
+    ? [...data.turnos]
+        .filter((turno) => !!turno.recuperacionId && turno.yaInscripto)
+        .sort((a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora))
+    : [];
   const proximaClase = getProximaClase(clasesFijasOrdenadas);
   const historial = data.historialAsistencias || [];
   const totalAsistidas = historial.filter((item) => item.estado === 'asistio').length;
@@ -609,316 +704,462 @@ const MiClase = () => {
   const cuotaVenceHoy = tieneFechaVencimiento && isCuotaVenceHoy(fechaVencimiento);
   const cuotaPorVencer = tieneFechaVencimiento && !cuotaVencida && (cuotaVenceHoy || isCuotaPorVencer(fechaVencimiento, 3));
 
-  const esRecuperar = data.modo === 'recuperar';
   const semanaActualLabel = getRangoSemana(getSemanaActual());
   const semanaSiguienteLabel = getRangoSemana(getSemanaSiguiente(getSemanaActual()));
+  const sucursalPortal =
+    data.sucursalId ||
+    (portalAuth?.type === 'dni' ? portalAuth.sucursalId : '') ||
+    sucursalIdFromUrl;
+
+  const cerrarSesionPortal = () => {
+    setData(null);
+    setPortalAuth(null);
+    setError('');
+    setSucursales([]);
+    setActioning(null);
+    setPushStatus('idle');
+    setPushMessage('');
+    setDniInput('');
+    setFiltroDia(null);
+    setFiltroHorario('todos');
+    setSemanaElegida('actual');
+    setLoading(false);
+    notifPromptHandledRef.current = false;
+
+    const params = new URLSearchParams();
+    params.set('modo', modoFromUrl);
+    if (sucursalPortal.trim()) params.set('sucursalId', sucursalPortal.trim());
+    navigate(`/mi-clase?${params.toString()}`, { replace: true });
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 pb-safe">
-      <div className="max-w-lg mx-auto p-4 pt-6">
+      <div className="max-w-lg mx-auto p-4 pt-8 sm:pt-6">
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-          <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-primary-600" />
-            Mi perfil
-          </h1>
-          <p className="text-sm text-gray-600 mt-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-primary-600" />
+                Tu perfil
+              </h1>
+              <p className="text-sm font-semibold text-gray-900 mt-2 truncate">{nombreCompleto}</p>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${esRecuperar ? 'bg-violet-100 text-violet-800' : 'bg-primary-100 text-primary-800'}`}>
+                  {esRecuperar ? 'Modo recuperar' : 'Modo clases'}
+                </span>
+                {data.alumno.actividadNombre && (
+                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700">
+                    {data.alumno.actividadNombre}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={cerrarSesionPortal}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <LogOut className="w-4 h-4" />
+              Cerrar sesión
+            </button>
+          </div>
+          <p className="text-sm text-gray-600 mt-3">
             {esRecuperar
-              ? `Hola, ${nombreCompleto}. Acá podés ver tu perfil, tus clases y manejar tus recuperaciones.`
-              : `Hola, ${nombreCompleto}. Acá podés ver tu perfil, tus clases y sumarte o liberar cupo.`}
+              ? 'Acá podés ver tu perfil, liberar tu clase fija de la semana y tomar otra para recuperar.'
+              : 'Acá podés ver tus clases, tu estado de cuota y gestionar tus reservas.'}
           </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setSeccionActiva('clases')}
+              className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${seccionActiva === 'clases' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Mis clases
+            </button>
+            <button
+              type="button"
+              onClick={() => setSeccionActiva('perfil')}
+              className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${seccionActiva === 'perfil' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              Mi perfil
+            </button>
+          </div>
+        </div>
+
+        {seccionActiva === 'clases' ? (
           <>
-            {proximaClase && (
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <p className="text-xs font-medium text-emerald-700">Próxima clase</p>
-                <p className="text-base font-semibold text-emerald-900 mt-1">
-                  {NOMBRE_DIA[proximaClase.diaSemana] ?? `Día ${proximaClase.diaSemana}`} {proximaClase.hora}
-                </p>
-                <p className="text-sm text-emerald-800 mt-1">{proximaClase.titulo || 'Clase'}</p>
+            <div className="bg-white rounded-xl shadow p-4 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-4 h-4 text-primary-600" />
+                <h2 className="text-sm font-semibold text-gray-900">Mis clases</h2>
+              </div>
+              {clasesFijasOrdenadas.length === 0 && recuperacionesOrdenadas.length === 0 ? (
+                <p className="text-sm text-gray-500">Todavía no tenés clases cargadas.</p>
+              ) : (
+                <div className="space-y-2">
+                  {clasesFijasOrdenadas.map((turno) => {
+                    const turnoActual = turnosById.get(turno.id);
+                    return (
+                      <div key={turno.id} className="rounded-lg border border-gray-200 px-3 py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
+                          {esRecuperar && turnoActual?.claseLiberada && (
+                            <p className="text-xs text-emerald-700 mt-1">La liberaste para esta semana</p>
+                          )}
+                          {esRecuperar && turnoActual?.esClaseFija && !turnoActual?.claseLiberada && (
+                            <p className="text-xs text-amber-700 mt-1">Tu clase fija de esta semana</p>
+                          )}
+                        </div>
+                        {turnoActual && (
+                          <div className="flex-shrink-0">
+                            {esRecuperar && turnoActual.esClaseFija && turnoActual.claseLiberada ? (
+                              <button
+                                type="button"
+                                onClick={() => restaurarClaseSemana(turnoActual.id, turnoActual.liberacionId)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                                Volver a tomarla
+                              </button>
+                            ) : esRecuperar && turnoActual.esClaseFija ? (
+                              <button
+                                type="button"
+                                onClick={() => liberarClaseSemana(turnoActual.id)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                                Liberar esta clase
+                              </button>
+                            ) : turnoActual.yaInscripto ? (
+                              <button
+                                type="button"
+                                onClick={() => liberar(turnoActual.id, turnoActual.recuperacionId)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                                Liberar cupo
+                              </button>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {recuperacionesOrdenadas.map((turno) => {
+                    const fechaRecuperacion = formatDate(getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), turno.diaSemana));
+                    return (
+                      <div key={`rec-${turno.id}-${turno.recuperacionId}`} className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
+                          <p className="text-xs text-violet-700 mt-1">Recuperación · {fechaRecuperacion}</p>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => liberar(turno.id, turno.recuperacionId)}
+                            disabled={!!actioning}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                          >
+                            {actioning === turno.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                            Liberar recuperación
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {esRecuperar && (
+              <div className="bg-white rounded-xl shadow p-3 mb-4">
+                <p className="text-xs font-medium text-gray-500 mb-2">Ver semana</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSemanaElegida('actual')}
+                    disabled={cargandoSemana}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${semanaElegida === 'actual' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
+                  >
+                    Semana actual ({semanaActualLabel})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSemanaElegida('siguiente')}
+                    disabled={cargandoSemana}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${semanaElegida === 'siguiente' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
+                  >
+                    Otra semana ({semanaSiguienteLabel})
+                  </button>
+                </div>
+                {cargandoSemana && <p className="text-xs text-gray-500 mt-2">Cargando...</p>}
+                {data.recuperacionStats && (
+                  <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
+                    <p>
+                      Clases para recuperar: <strong>{data.recuperacionStats.clasesParaRecuperar}</strong>
+                    </p>
+                    <p>
+                      Usadas esta semana: <strong>{data.recuperacionStats.clasesUsadasSemana}</strong>
+                      {data.recuperacionStats.clasesPorSemana != null && (
+                        <> / <strong>{data.recuperacionStats.clasesPorSemana}</strong> base</>
+                      )}
+                      {data.recuperacionStats.clasesDisponiblesSemana != null && (
+                        <> · disponibles esta semana: <strong>{data.recuperacionStats.clasesDisponiblesSemana}</strong></>
+                      )}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                <p className="text-xs font-medium text-gray-500">Cuota</p>
-                <p className={`text-sm font-semibold mt-1 ${cuotaVencida ? 'text-red-600' : cuotaPorVencer ? 'text-amber-600' : 'text-gray-900'}`}>
-                  {tieneFechaVencimiento ? formatDate(fechaVencimiento) : 'Sin fecha'}
-                </p>
-                <p className="text-xs mt-1 text-gray-500">
-                  {cuotaVencida ? 'Vencida' : cuotaVenceHoy ? 'Vence hoy' : cuotaPorVencer ? 'Próxima a vencer' : 'Al día'}
+            <div className="bg-white rounded-xl shadow p-3 mb-4">
+              <div className="mb-3">
+                <h2 className="text-sm font-semibold text-gray-900">{esRecuperar ? 'Recuperar o liberar' : 'Anotarte o liberar una clase'}</h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  {esRecuperar ? 'Usá este formato para liberar una fija de la semana o sumarte a otra para recuperar.' : 'Filtrá por día u horario para encontrar rápido tu clase.'}
                 </p>
               </div>
-              <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                <p className="text-xs font-medium text-gray-500">Clases fijas</p>
-                <p className="text-sm font-semibold mt-1 text-gray-900">{clasesFijasOrdenadas.length}</p>
-                <p className="text-xs mt-1 text-gray-500">{data.alumno.actividadNombre || 'Tu actividad actual'}</p>
-              </div>
-              <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
-                <p className="text-xs font-medium text-violet-700">Para recuperar</p>
-                <p className="text-sm font-semibold mt-1 text-violet-900">{data.alumno.clasesParaRecuperar || 0}</p>
-                <p className="text-xs mt-1 text-violet-700">Créditos disponibles</p>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
-                    <Bell className="w-4 h-4" />
-                    Avisos de cupos liberados
-                  </p>
-                  <p className="text-xs text-primary-700 mt-1">
-                    Activá las notificaciones en este dispositivo para enterarte cuando alguien libera un lugar.
-                  </p>
-                </div>
+              <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
+              <div className="flex flex-wrap gap-1.5 mb-3">
                 <button
                   type="button"
-                  onClick={activarPushPortal}
-                  disabled={pushStatus === 'loading'}
-                  className="px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                  onClick={() => setFiltroDia(null)}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroDia === null ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                 >
-                  {pushStatus === 'loading' ? 'Activando...' : pushStatus === 'ok' ? 'Activadas' : 'Activar'}
+                  Todos
+                </button>
+                {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setFiltroDia(d)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroDia === d ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  >
+                    {DIAS_CORTOS[d]}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs font-medium text-gray-500 mb-2">Ver horario (según tu sede)</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setFiltroHorario('todos')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'todos' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroHorario('manana')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
+                >
+                  Mañana ({labelManana})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroHorario('tarde')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
+                >
+                  Tarde ({labelTarde})
                 </button>
               </div>
-              {pushMessage && (
-                <p className={`text-xs mt-2 ${pushStatus === 'ok' ? 'text-green-700' : pushStatus === 'error' || pushStatus === 'denied' ? 'text-amber-700' : 'text-primary-700'}`}>
-                  {pushMessage}
-                </p>
+              <p className="text-xs text-gray-500 mt-2">Si no ves una clase, probá con «Todos».</p>
+            </div>
+
+            <div className="space-y-4">
+              {data.turnos.length === 0 ? (
+                <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500">
+                  Todavía no hay clases cargadas. Cuando el estudio agregue turnos, van a aparecer acá.
+                </div>
+              ) : turnosOrdenados.length === 0 ? (
+                <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500">
+                  No hay clases con el filtro elegido. Probá con otro día u horario.
+                </div>
+              ) : (
+                diasConTurnos.map((dia) => (
+                  <div key={dia}>
+                    <h2 className="text-sm font-semibold text-primary-700 mb-2 px-1">
+                      {NOMBRE_DIA[dia] ?? `Día ${dia}`}
+                    </h2>
+                    <div className="space-y-2">
+                      {porDia[dia].map((t) => (
+                        <div key={t.id} className="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-gray-900 truncate">{t.titulo || 'Clase'}</p>
+                            <p className="text-sm text-gray-600">{t.hora}</p>
+                            <p className="text-xs text-gray-500">
+                              {t.inscriptos}/{t.cupo} inscriptos
+                            </p>
+                            {esRecuperar && t.esClaseFija && !t.claseLiberada && (
+                              <p className="text-xs text-amber-700 mt-1">Tu clase fija de esta semana</p>
+                            )}
+                            {esRecuperar && t.esClaseFija && t.claseLiberada && (
+                              <p className="text-xs text-emerald-700 mt-1">La liberaste para esta semana</p>
+                            )}
+                          </div>
+                          <div className="flex-shrink-0">
+                            {t.yaInscripto ? (
+                              <button
+                                type="button"
+                                onClick={() => liberar(t.id, t.recuperacionId)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                                {esRecuperar ? 'Liberar recuperación' : 'Liberar cupo'}
+                              </button>
+                            ) : esRecuperar && t.esClaseFija && !t.claseLiberada ? (
+                              <button
+                                type="button"
+                                onClick={() => liberarClaseSemana(t.id)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                                Liberar esta clase
+                              </button>
+                            ) : esRecuperar && t.esClaseFija && t.claseLiberada ? (
+                              <button
+                                type="button"
+                                onClick={() => restaurarClaseSemana(t.id, t.liberacionId)}
+                                disabled={!!actioning}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                              >
+                                {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                                Volver a tomarla
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => inscribir(t.id)}
+                                disabled={!!actioning || t.inscriptos >= t.cupo}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                              >
+                                {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                                {esRecuperar ? 'Sumarme para recuperar' : 'Sumarme'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </>
-          {esRecuperar && data.recuperacionStats && (
-            <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
-              <p>
-                Clases para recuperar: <strong>{data.recuperacionStats.clasesParaRecuperar}</strong>
-              </p>
-              <p>
-                Usadas esta semana: <strong>{data.recuperacionStats.clasesUsadasSemana}</strong>
-                {data.recuperacionStats.clasesPorSemana != null && (
-                  <> / <strong>{data.recuperacionStats.clasesPorSemana}</strong> base</>
-                )}
-                {data.recuperacionStats.clasesDisponiblesSemana != null && (
-                  <> · disponibles esta semana: <strong>{data.recuperacionStats.clasesDisponiblesSemana}</strong></>
-                )}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {esRecuperar && (
-          <div className="bg-white rounded-xl shadow p-3 mb-4">
-            <p className="text-xs font-medium text-gray-500 mb-2">Ver semana</p>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setSemanaElegida('actual')}
-                disabled={cargandoSemana}
-                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${semanaElegida === 'actual' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
-              >
-                Semana actual ({semanaActualLabel})
-              </button>
-              <button
-                type="button"
-                onClick={() => setSemanaElegida('siguiente')}
-                disabled={cargandoSemana}
-                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${semanaElegida === 'siguiente' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
-              >
-                Otra semana ({semanaSiguienteLabel})
-              </button>
-            </div>
-            {cargandoSemana && <p className="text-xs text-gray-500 mt-2">Cargando...</p>}
-          </div>
-        )}
-
-        <div className="bg-white rounded-xl shadow p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-4 h-4 text-primary-600" />
-            <h2 className="text-sm font-semibold text-gray-900">Tus días de clase</h2>
-          </div>
-          {clasesFijasOrdenadas.length === 0 ? (
-            <p className="text-sm text-gray-500">Todavía no tenés clases fijas cargadas.</p>
-          ) : (
-            <div className="space-y-2">
-              {clasesFijasOrdenadas.map((turno) => (
-                <div key={turno.id} className="rounded-lg border border-gray-200 px-3 py-2">
-                  <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
-                  <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
+        ) : (
+          <>
+            {proximaClase && (
+              <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <p className="text-xs font-medium text-emerald-700">Próxima clase</p>
+                  <p className="text-base font-semibold text-emerald-900 mt-1">
+                    {NOMBRE_DIA[proximaClase.diaSemana] ?? `Día ${proximaClase.diaSemana}`} {proximaClase.hora}
+                  </p>
+                  <p className="text-sm text-emerald-800 mt-1">{proximaClase.titulo || 'Clase'}</p>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
 
-        <div className="bg-white rounded-xl shadow p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <History className="w-4 h-4 text-primary-600" />
-            <h2 className="text-sm font-semibold text-gray-900">Historial de clases</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
-              <p className="text-xs text-green-700">Asistidas</p>
-              <p className="text-sm font-semibold text-green-900">{totalAsistidas}</p>
-            </div>
-            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
-              <p className="text-xs text-red-700">Inasistencias</p>
-              <p className="text-sm font-semibold text-red-900">{totalInasistencias}</p>
-            </div>
-          </div>
-          {historial.length === 0 ? (
-            <p className="text-sm text-gray-500">Todavía no hay asistencias marcadas.</p>
-          ) : (
-            <div className="space-y-2">
-              {historial.slice(0, 8).map((item) => (
-                <div key={item.id} className="rounded-lg border border-gray-200 px-3 py-2">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900">{formatDate(item.fecha)} · {item.hora}</p>
-                      <p className="text-xs text-gray-600 mt-0.5">{item.titulo}</p>
-                    </div>
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${item.estado === 'asistio' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {item.estado === 'asistio' ? 'Asistió' : 'No asistió'}
-                    </span>
+            <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                  <p className="text-xs font-medium text-gray-500">Actividad</p>
+                  <p className="text-sm font-semibold mt-1 text-gray-900">{data.alumno.actividadNombre || 'Sin actividad'}</p>
+                  <p className="text-xs mt-1 text-gray-500">Tu plan actual</p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                  <p className="text-xs font-medium text-gray-500">Cuota</p>
+                  <p className={`text-sm font-semibold mt-1 ${cuotaVencida ? 'text-red-600' : cuotaPorVencer ? 'text-amber-600' : 'text-gray-900'}`}>
+                    {tieneFechaVencimiento ? formatDate(fechaVencimiento) : 'Sin fecha'}
+                  </p>
+                  <p className="text-xs mt-1 text-gray-500">
+                    {cuotaVencida ? 'Vencida' : cuotaVenceHoy ? 'Vence hoy' : cuotaPorVencer ? 'Próxima a vencer' : 'Al día'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+                  <p className="text-xs font-medium text-gray-500">Clases fijas</p>
+                  <p className="text-sm font-semibold mt-1 text-gray-900">{clasesFijasOrdenadas.length}</p>
+                  <p className="text-xs mt-1 text-gray-500">Por semana</p>
+                </div>
+                <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+                  <p className="text-xs font-medium text-violet-700">Para recuperar</p>
+                  <p className="text-sm font-semibold mt-1 text-violet-900">{data.alumno.clasesParaRecuperar || 0}</p>
+                  <p className="text-xs mt-1 text-violet-700">Créditos disponibles</p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
+                      <Bell className="w-4 h-4" />
+                      Avisos de cupos liberados
+                    </p>
+                    <p className="text-xs text-primary-700 mt-1">
+                      Activá las notificaciones en este dispositivo para enterarte cuando alguien libera un lugar.
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={activarPushPortal}
+                    disabled={pushStatus === 'loading'}
+                    className="px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {pushStatus === 'loading' ? 'Activando...' : pushStatus === 'ok' ? 'Activadas' : 'Activar'}
+                  </button>
                 </div>
-              ))}
+                {pushMessage && (
+                  <p className={`text-xs mt-2 ${pushStatus === 'ok' ? 'text-green-700' : pushStatus === 'error' || pushStatus === 'denied' ? 'text-amber-700' : 'text-primary-700'}`}>
+                    {pushMessage}
+                  </p>
+                )}
+              </div>
             </div>
-          )}
-        </div>
 
-        <div className="bg-white rounded-xl shadow p-3 mb-4">
-          <div className="mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">{esRecuperar ? 'Recuperar o liberar' : 'Anotarte o liberar una clase'}</h2>
-            <p className="text-xs text-gray-500 mt-1">
-              {esRecuperar ? 'Usá este formato para liberar una fija de la semana o sumarte a otra para recuperar.' : 'Filtrá por día u horario para encontrar rápido tu clase.'}
-            </p>
-          </div>
-          <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            <button
-              type="button"
-              onClick={() => setFiltroDia(null)}
-              className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroDia === null ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-            >
-              Todos
-            </button>
-            {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setFiltroDia(d)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroDia === d ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-              >
-                {DIAS_CORTOS[d]}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs font-medium text-gray-500 mb-2">Ver horario (según tu sede)</p>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => setFiltroHorario('todos')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'todos' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroHorario('manana')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
-            >
-              Mañana ({labelManana})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroHorario('tarde')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
-            >
-              Tarde ({labelTarde})
-            </button>
-          </div>
-          <p className="text-xs text-gray-500 mt-2">Si no ves una clase, probá con «Todos».</p>
-        </div>
-
-        <div className="space-y-4">
-          {data.turnos.length === 0 ? (
-            <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500">
-              Todavía no hay clases cargadas. Cuando el estudio agregue turnos, van a aparecer acá.
-            </div>
-          ) : turnosOrdenados.length === 0 ? (
-            <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500">
-              No hay clases con el filtro elegido. Probá con otro día u horario.
-            </div>
-          ) : (
-            diasConTurnos.map((dia) => (
-              <div key={dia}>
-                <h2 className="text-sm font-semibold text-primary-700 mb-2 px-1">
-                  {NOMBRE_DIA[dia] ?? `Día ${dia}`}
-                </h2>
+            <div className="bg-white rounded-xl shadow p-4 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <History className="w-4 h-4 text-primary-600" />
+                <h2 className="text-sm font-semibold text-gray-900">Historial de clases</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+                  <p className="text-xs text-green-700">Asistidas</p>
+                  <p className="text-sm font-semibold text-green-900">{totalAsistidas}</p>
+                </div>
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+                  <p className="text-xs text-red-700">Inasistencias</p>
+                  <p className="text-sm font-semibold text-red-900">{totalInasistencias}</p>
+                </div>
+              </div>
+              {historial.length === 0 ? (
+                <p className="text-sm text-gray-500">Todavía no hay asistencias marcadas.</p>
+              ) : (
                 <div className="space-y-2">
-                  {porDia[dia].map((t) => (
-                    <div key={t.id} className="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-gray-900 truncate">{t.titulo || 'Clase'}</p>
-                        <p className="text-sm text-gray-600">{t.hora}</p>
-                        <p className="text-xs text-gray-500">
-                          {t.inscriptos}/{t.cupo} inscriptos
-                        </p>
-                        {esRecuperar && t.esClaseFija && !t.claseLiberada && (
-                          <p className="text-xs text-amber-700 mt-1">Tu clase fija de esta semana</p>
-                        )}
-                        {esRecuperar && t.esClaseFija && t.claseLiberada && (
-                          <p className="text-xs text-emerald-700 mt-1">La liberaste para esta semana</p>
-                        )}
-                      </div>
-                      <div className="flex-shrink-0">
-                        {t.yaInscripto ? (
-                          <button
-                            type="button"
-                            onClick={() => liberar(t.id, t.recuperacionId)}
-                            disabled={!!actioning}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
-                          >
-                            {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                            {esRecuperar ? 'Liberar recuperación' : 'Liberar cupo'}
-                          </button>
-                        ) : esRecuperar && t.esClaseFija && !t.claseLiberada ? (
-                          <button
-                            type="button"
-                            onClick={() => liberarClaseSemana(t.id)}
-                            disabled={!!actioning}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
-                          >
-                            {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                            Liberar esta clase
-                          </button>
-                        ) : esRecuperar && t.esClaseFija && t.claseLiberada ? (
-                          <button
-                            type="button"
-                            onClick={() => restaurarClaseSemana(t.id, t.liberacionId)}
-                            disabled={!!actioning}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
-                          >
-                            {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                            Volver a tomarla
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => inscribir(t.id)}
-                            disabled={!!actioning || t.inscriptos >= t.cupo}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
-                          >
-                            {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                            {esRecuperar ? 'Sumarme para recuperar' : 'Sumarme'}
-                          </button>
-                        )}
+                  {historial.slice(0, 8).map((item) => (
+                    <div key={item.id} className="rounded-lg border border-gray-200 px-3 py-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">{formatDate(item.fecha)} · {item.hora}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">{item.titulo}</p>
+                        </div>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${item.estado === 'asistio' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {item.estado === 'asistio' ? 'Asistió' : 'No asistió'}
+                        </span>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            ))
-          )}
-        </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

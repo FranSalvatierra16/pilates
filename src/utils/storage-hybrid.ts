@@ -1,4 +1,4 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja, AgendaNota } from '../types';
+import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja, AgendaNota, LiberacionSemana } from '../types';
 import { buildCierreRetiro } from './cierre-caja';
 import { horaActualInput } from './date';
 import { storage } from './storage';
@@ -325,6 +325,21 @@ export const storageHybrid = {
     deleteBySemana: async (semana: string): Promise<void> => {
       if (useApi()) await storageApi.recuperaciones.deleteBySemana(semana);
       else storage.recuperaciones.deleteBySemana(semana);
+    },
+  },
+
+  liberacionesSemana: {
+    getBySemana: async (semana: string): Promise<LiberacionSemana[]> => {
+      if (useApi()) return await storageApi.liberacionesSemana.getBySemana(semana);
+      return storage.liberacionesSemana.getBySemana(semana);
+    },
+    add: async (item: LiberacionSemana): Promise<void> => {
+      if (useApi()) await storageApi.liberacionesSemana.add({ turnoId: item.turnoId, alumnoId: item.alumnoId, semana: item.semana });
+      else storage.liberacionesSemana.add(item);
+    },
+    delete: async (id: string): Promise<void> => {
+      if (useApi()) await storageApi.liberacionesSemana.delete(id);
+      else storage.liberacionesSemana.delete(id);
     },
   },
 

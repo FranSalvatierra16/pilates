@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import { ToastProvider } from './components/ToastProvider';
@@ -33,6 +33,21 @@ function DocumentTitle() {
       if (appleTitle) appleTitle.content = APP_NAME_FALLBACK;
     }
   }, [isAuthenticated, sucursalId, sucursalNombre]);
+  return null;
+}
+
+function ShareBrandQuerySync() {
+  const { isAuthenticated, isAdmin, sucursalId } = useAuth();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!isAuthenticated || isAdmin || !sucursalId || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('sucursalId') === sucursalId) return;
+    url.searchParams.set('sucursalId', sucursalId);
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [isAuthenticated, isAdmin, sucursalId, location.pathname, location.search, location.hash]);
+
   return null;
 }
 import Login from './pages/Login';
@@ -135,6 +150,7 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <DocumentTitle />
+      <ShareBrandQuerySync />
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroLink />} />

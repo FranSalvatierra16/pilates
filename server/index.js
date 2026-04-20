@@ -23,6 +23,8 @@ const VAPID_SUBJECT = (() => {
   if (host) return `https://${host.replace(/^https?:\/\//, '')}`;
   return 'https://fitgest.app';
 })();
+const PUSH_AUDIENCE_ESTUDIO = 'estudio';
+const PUSH_AUDIENCE_ALUMNO = 'alumno';
 if (VAPID_PUBLIC && VAPID_PRIVATE) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 }
@@ -1622,11 +1624,17 @@ app.get('/api/alumno-portal', async (req, res) => {
       [turnoRows.map((r) => r.id)]
     );
     const { rows: horRows } = await db.query(
-      'SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde FROM sucursales WHERE id = $1',
+      `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
+              horarios_no_disponibles_por_dia
+         FROM sucursales
+        WHERE id = $1`,
       [sid]
     );
     const insByTurno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r]));
     const hor = horRows[0] || {};
+    const manana = generarHorasDesdeHasta(hor.hora_inicio_manana || '07:00', hor.hora_fin_manana || '12:00');
+    const tarde = generarHorasDesdeHasta(hor.hora_inicio_tarde || '16:00', hor.hora_fin_tarde || '21:00');
+    const horasValidas = [...manana, ...tarde];
     const actividadNombre = alumno.actividad_id
       ? (await db.query('SELECT nombre FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1', [alumno.actividad_id, sid])).rows[0]?.nombre || ''
       : '';
@@ -1732,6 +1740,7 @@ app.get('/api/alumno-portal', async (req, res) => {
         horaFinManana: hor.hora_fin_manana || '12:00',
         horaInicioTarde: hor.hora_inicio_tarde || '16:00',
         horaFinTarde: hor.hora_fin_tarde || '21:00',
+        horariosNoDisponiblesPorDia: normalizarHorariosNoDisponiblesPorDia(hor.horarios_no_disponibles_por_dia, horasValidas),
       },
     };
     res.json(payload);
@@ -1765,10 +1774,10 @@ app.post('/api/alumno-portal/push-subscribe', async (req, res) => {
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const id = crypto.randomUUID();
     await db.query(
-      `INSERT INTO push_subscriptions (id, sucursal_id, endpoint, p256dh, auth)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, p256dh = $4, auth = $5`,
-      [id, resolved.sucursalId, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
+      `INSERT INTO push_subscriptions (id, sucursal_id, audiencia, alumno_id, endpoint, p256dh, auth)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, audiencia = $3, alumno_id = $4, p256dh = $6, auth = $7`,
+      [id, resolved.sucursalId, PUSH_AUDIENCE_ALUMNO, resolved.alumno.id, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
     );
     try {
       await webpush.sendNotification(
@@ -1946,6 +1955,13 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
           title: 'Recuperación: cupo liberado',
           body: `${nombre} liberó recuperación en ${turno}`,
         });
+        queuePushToAlumnos(db, alumno.sucursal_id, (sub) => ({
+          title: 'Recuperación: cupo liberado',
+          body: `${nombre} liberó recuperación en ${turno}`,
+          url: sub.link_token
+            ? `/mi-clase?token=${encodeURIComponent(sub.link_token)}&modo=recuperar&notifTurnoId=${encodeURIComponent(turnoIdParaPush)}&notifSemana=${encodeURIComponent(semanaObjetivo)}&promptTomar=1`
+            : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoIdParaPush)}&notifSemana=${encodeURIComponent(semanaObjetivo)}&promptTomar=1`,
+        }), { excludeAlumnoId: alumno.id });
       }
     }
     res.json({ ok: true });
@@ -2010,6 +2026,13 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
       title: 'Cupo liberado',
       body: `${nombre} liberó cupo en ${turno}`,
     });
+    queuePushToAlumnos(db, alumno.sucursal_id, (sub) => ({
+      title: 'Cupo liberado',
+      body: `${nombre} liberó cupo en ${turno}`,
+      url: sub.link_token
+        ? `/mi-clase?token=${encodeURIComponent(sub.link_token)}&modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(semanaVista)}&promptTomar=1`
+        : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(semanaVista)}&promptTomar=1`,
+    }), { excludeAlumnoId: alumno.id });
     res.json({ ok: true, liberacionId: id });
   } catch (e) {
     console.error(e);
@@ -2201,6 +2224,13 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
         title: 'Cupo liberado',
         body: `${nombre} liberó cupo en ${turno}`,
       });
+      queuePushToAlumnos(db, alumno.sucursal_id, (sub) => ({
+        title: 'Cupo liberado',
+        body: `${nombre} liberó cupo en ${turno}`,
+        url: sub.link_token
+          ? `/mi-clase?token=${encodeURIComponent(sub.link_token)}&modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(getSemanaActual())}&promptTomar=1`
+          : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(getSemanaActual())}&promptTomar=1`,
+      }), { excludeAlumnoId: alumno.id });
     }
     res.json({ ok: true });
   } catch (e) {
@@ -2265,26 +2295,33 @@ app.patch('/api/notificaciones/marcar-leidas', async (req, res) => {
 });
 
 // --- Push al celular (Web Push) ---
-async function sendPushToSucursal(db, sucursalId, payload) {
+async function sendPushToAudience(db, sucursalId, audience, payload, options = {}) {
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
     console.warn('[Push] No enviado: faltan VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY en el servidor. Configuralas en Railway (o .env).');
     return;
   }
+  const excludeAlumnoId = options.excludeAlumnoId || null;
   const { rows } = await db.query(
-    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE sucursal_id = $1',
-    [sucursalId]
+    `SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth, ps.alumno_id, a.link_token
+       FROM push_subscriptions ps
+       LEFT JOIN alumnos a ON a.id = ps.alumno_id
+      WHERE ps.sucursal_id = $1
+        AND ps.audiencia = $2
+        AND ($3::text IS NULL OR ps.alumno_id IS DISTINCT FROM $3)`,
+    [sucursalId, audience, excludeAlumnoId]
   );
   if (rows.length === 0) {
-    console.warn('[Push] No enviado: ningún dispositivo registrado para la sucursal', sucursalId, '- Entrá a Notificaciones y tocá "Activar notificaciones en este dispositivo".');
+    console.warn('[Push] No enviado: ningún dispositivo registrado para', audience, 'en la sucursal', sucursalId);
     return;
   }
-  const body = JSON.stringify(payload);
   let sent = 0;
   for (const sub of rows) {
     try {
+      const payloadForSub = typeof payload === 'function' ? payload(sub) : payload;
+      if (!payloadForSub) continue;
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        body,
+        JSON.stringify(payloadForSub),
         { TTL: 120 }
       );
       sent++;
@@ -2297,15 +2334,26 @@ async function sendPushToSucursal(db, sucursalId, payload) {
       }
     }
   }
-  if (sent > 0) console.log('[Push] Enviado a', sent, 'dispositivo(s):', payload.title);
+  if (sent > 0) {
+    const logTitle = typeof payload === 'function' ? 'push personalizado' : payload.title;
+    console.log('[Push] Enviado a', sent, 'dispositivo(s):', logTitle);
+  }
 }
 
-function queuePushToSucursal(db, sucursalId, payload) {
+function queuePushToAudience(db, sucursalId, audience, payload, options = {}) {
   Promise.resolve()
-    .then(() => sendPushToSucursal(db, sucursalId, payload))
+    .then(() => sendPushToAudience(db, sucursalId, audience, payload, options))
     .catch((err) => {
       console.error('[Push] Error async', err?.statusCode || err?.message || err);
     });
+}
+
+function queuePushToSucursal(db, sucursalId, payload) {
+  queuePushToAudience(db, sucursalId, PUSH_AUDIENCE_ESTUDIO, payload);
+}
+
+function queuePushToAlumnos(db, sucursalId, payload, options = {}) {
+  queuePushToAudience(db, sucursalId, PUSH_AUDIENCE_ALUMNO, payload, options);
 }
 
 function getPushErrorMessage(err) {
@@ -2326,8 +2374,8 @@ app.get('/api/push-status', async (req, res) => {
     const db = await getPool();
     if (!db) return res.json({ configured: !!VAPID_PUBLIC, subscriptionsCount: 0 });
     const { rows } = await db.query(
-      'SELECT COUNT(*) AS n FROM push_subscriptions WHERE sucursal_id = $1',
-      [sid]
+      'SELECT COUNT(*) AS n FROM push_subscriptions WHERE sucursal_id = $1 AND audiencia = $2',
+      [sid, PUSH_AUDIENCE_ESTUDIO]
     );
     res.json({
       configured: !!(VAPID_PUBLIC && VAPID_PRIVATE),
@@ -2352,10 +2400,10 @@ app.post('/api/push-subscribe', async (req, res) => {
     }
     const id = crypto.randomUUID();
     await db.query(
-      `INSERT INTO push_subscriptions (id, sucursal_id, endpoint, p256dh, auth)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, p256dh = $4, auth = $5`,
-      [id, sid, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
+      `INSERT INTO push_subscriptions (id, sucursal_id, audiencia, alumno_id, endpoint, p256dh, auth)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (endpoint) DO UPDATE SET sucursal_id = $2, audiencia = $3, alumno_id = $4, p256dh = $6, auth = $7`,
+      [id, sid, PUSH_AUDIENCE_ESTUDIO, null, subscription.endpoint, subscription.keys.p256dh, subscription.keys.auth]
     );
     try {
       await webpush.sendNotification(
@@ -2504,6 +2552,136 @@ app.get('/api/recuperaciones/by-semana/:semana', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/liberaciones-semana/by-semana/:semana', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { rows } = await db.query(
+      `SELECT l.id, l.turno_id AS "turnoId", l.alumno_id AS "alumnoId", l.semana, l.created_at AS "createdAt"
+       FROM liberaciones_semana l
+       JOIN turnos t ON l.turno_id = t.id AND t.sucursal_id = $1
+       WHERE l.semana = $2`,
+      [sid, req.params.semana]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/liberaciones-semana', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { turnoId, alumnoId, semana } = req.body || {};
+    if (!turnoId || !alumnoId || !semana) {
+      return res.status(400).json({ error: 'Faltan turnoId, alumnoId o semana' });
+    }
+    const { rows: turnoRows } = await db.query(
+      'SELECT id, alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2',
+      [turnoId, sid]
+    );
+    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const turno = turnoRows[0];
+    const ids = turno.alumno_ids || [];
+    if (!ids.includes(alumnoId)) {
+      return res.status(400).json({ error: 'Ese alumno no tiene esta clase fija.' });
+    }
+    const { rows: alumnoRows } = await db.query(
+      'SELECT id FROM alumnos WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
+      [alumnoId, sid]
+    );
+    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Alumno no encontrado' });
+    const { rows: insRows } = await db.query(
+      'SELECT semana_desde FROM inscripciones_turno WHERE turno_id = $1 AND alumno_id = $2 LIMIT 1',
+      [turnoId, alumnoId]
+    );
+    if (insRows.length > 0 && insRows[0].semana_desde > semana) {
+      return res.status(400).json({ error: 'El alumno todavía no tiene esa clase asignada en esa semana.' });
+    }
+    const { rows: libRows } = await db.query(
+      'SELECT id, turno_id AS "turnoId", alumno_id AS "alumnoId", semana, created_at AS "createdAt" FROM liberaciones_semana WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3',
+      [turnoId, alumnoId, semana]
+    );
+    if (libRows.length > 0) return res.json(libRows[0]);
+    const id = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO liberaciones_semana (id, turno_id, alumno_id, semana, created_at) VALUES ($1, $2, $3, $4, NOW())',
+      [id, turnoId, alumnoId, semana]
+    );
+    await db.query(
+      'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
+      [alumnoId, sid]
+    );
+    res.status(201).json({ id, turnoId, alumnoId, semana, createdAt: new Date().toISOString() });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/liberaciones-semana/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const { rows: libRows } = await db.query(
+      `SELECT l.id, l.turno_id, l.alumno_id, l.semana,
+              a.id AS alumno_id_full, a.sucursal_id, a.actividad_id, a.clases_para_recuperar
+         FROM liberaciones_semana l
+         JOIN turnos t ON l.turno_id = t.id AND t.sucursal_id = $1
+         JOIN alumnos a ON l.alumno_id = a.id AND a.sucursal_id = $1
+        WHERE l.id = $2`,
+      [sid, req.params.id]
+    );
+    if (libRows.length === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
+    const lib = libRows[0];
+    const alumno = {
+      id: lib.alumno_id_full,
+      sucursal_id: lib.sucursal_id,
+      actividad_id: lib.actividad_id,
+      clases_para_recuperar: lib.clases_para_recuperar,
+    };
+    const semanaVista = lib.semana;
+    const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [sid]);
+    const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
+    const recuperacionesConCreditoPorLiberacion = ctx.recuperacionesSemana.filter((r) => r.origen_credito === 'liberacion').length;
+    const hayCreditoDeLiberacionSinUsar = ctx.liberacionesSemana.length > recuperacionesConCreditoPorLiberacion;
+    if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
+      return res.status(400).json({ error: 'Ya usó esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
+    }
+    const { rows: turnoRows } = await db.query(
+      `SELECT t.id, t.alumno_ids, t.cupo,
+              COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,
+              COALESCE((SELECT COUNT(*)::int FROM liberaciones_semana l WHERE l.turno_id = t.id AND l.semana = $2), 0) AS libs
+         FROM turnos t
+        WHERE t.id = $1 AND t.sucursal_id = $3`,
+      [lib.turno_id, semanaVista, sid]
+    );
+    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const turno = turnoRows[0];
+    const ocupacionActual = Math.max(0, (turno.alumno_ids || []).length - Number(turno.libs || 0) + Number(turno.recs || 0));
+    if (ocupacionActual >= Number(turno.cupo ?? 6)) {
+      return res.status(400).json({ error: 'No se puede cancelar la liberación porque ya no hay cupo en la clase.' });
+    }
+    const { rowCount } = await db.query('DELETE FROM liberaciones_semana WHERE id = $1', [req.params.id]);
+    if (rowCount === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
+    if (hayCreditoDeLiberacionSinUsar) {
+      await db.query(
+        'UPDATE alumnos SET clases_para_recuperar = GREATEST(0, COALESCE(clases_para_recuperar, 0) - 1) WHERE id = $1 AND sucursal_id = $2',
+        [alumno.id, sid]
+      );
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
@@ -2940,12 +3118,17 @@ function buildShareMeta(req, sucursal) {
   const currentUrl = `${origin}${req.originalUrl}`;
   const nombre = sucursal?.nombre_lugar || 'FitGest';
   const esRegistro = req.path === '/registro';
+  const esPortalAlumno = req.path === '/mi-clase';
   const title = esRegistro
     ? `${nombre} - Inscripción`
-    : `${nombre} - Tu Clase`;
+    : esPortalAlumno
+      ? `${nombre} - Tu Clase`
+      : `${nombre} - Sistema de Gestión`;
   const description = esRegistro
     ? `Inscripción online de ${nombre}. Completá tus datos y te contactamos.`
-    : `Portal de alumnos de ${nombre}. Entrá a Tu Clase y gestioná tus clases y recuperaciones.`;
+    : esPortalAlumno
+      ? `Portal de alumnos de ${nombre}. Entrá a Tu Clase y gestioná tus clases y recuperaciones.`
+      : `Sistema de gestión de ${nombre}.`;
   const image = getPublicLogoUrl(req, sucursal?.id);
   return {
     title,
@@ -3095,7 +3278,8 @@ app.get('/api/public/sucursal-logo/:id', async (req, res) => {
 // Servir frontend estático (después de build)
 const distPath = join(__dirname, '..', 'dist');
 if (existsSync(distPath)) {
-  app.get(['/mi-clase', '/registro'], async (req, res) => {
+  app.use(express.static(distPath, { index: false }));
+  app.get('*', async (req, res) => {
     try {
       const db = await getPool();
       const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
@@ -3105,14 +3289,10 @@ if (existsSync(distPath)) {
       res.send(html);
     } catch (e) {
       console.error(e);
-      res.sendFile(join(distPath, 'index.html'));
+      res.sendFile(join(distPath, 'index.html'), (err) => {
+        if (err) res.status(500).send('Error cargando la aplicación.');
+      });
     }
-  });
-  app.use(express.static(distPath));
-  app.get('*', (req, res) => {
-    res.sendFile(join(distPath, 'index.html'), (err) => {
-      if (err) res.status(500).send('Error cargando la aplicación.');
-    });
   });
 } else {
   app.get('*', (req, res) => res.send('Frontend no generado. Ejecutá "npm run build" antes de iniciar.'));

@@ -1435,6 +1435,7 @@ function mapPlanifEjercicioRow(r) {
     descripcion: r.descripcion || '',
     tipoId: r.tipo_id,
     maquinaId: r.maquina_id,
+    maquinaSecundariaId: r.maquina_secundaria_id ?? null,
     modoSeries: r.modo_series,
     unidad: r.unidad,
     valor: r.valor,
@@ -1641,10 +1642,11 @@ app.post('/api/planificacion/ejercicios', async (req, res) => {
     const descripcion = String(b.descripcion || '').trim();
     const tipoId = b.tipoId || null;
     const maquinaId = b.maquinaId || null;
+    const maquinaSecundariaId = b.maquinaSecundariaId || null;
     await db.query(
       `INSERT INTO planificacion_ejercicio (
-        id, sucursal_id, nombre, descripcion, tipo_id, maquina_id, modo_series, unidad, valor, num_series, series_detalle
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        id, sucursal_id, nombre, descripcion, tipo_id, maquina_id, maquina_secundaria_id, modo_series, unidad, valor, num_series, series_detalle
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         id,
         sid,
@@ -1652,6 +1654,7 @@ app.post('/api/planificacion/ejercicios', async (req, res) => {
         descripcion,
         tipoId,
         maquinaId,
+        maquinaSecundariaId,
         modoSeries,
         unidad,
         valor,
@@ -1717,17 +1720,19 @@ app.patch('/api/planificacion/ejercicios/:id', async (req, res) => {
         descripcion = COALESCE($2, descripcion),
         tipo_id = $3,
         maquina_id = $4,
-        modo_series = $5,
-        unidad = $6,
-        valor = $7,
-        num_series = $8,
-        series_detalle = $9::jsonb
-      WHERE id = $10 AND sucursal_id = $11`,
+        maquina_secundaria_id = $5,
+        modo_series = $6,
+        unidad = $7,
+        valor = $8,
+        num_series = $9,
+        series_detalle = $10::jsonb
+      WHERE id = $11 AND sucursal_id = $12`,
       [
         b.nombre !== undefined ? String(b.nombre).trim() : null,
         b.descripcion !== undefined ? String(b.descripcion).trim() : null,
         b.tipoId !== undefined ? b.tipoId || null : ex[0].tipo_id,
         b.maquinaId !== undefined ? b.maquinaId || null : ex[0].maquina_id,
+        b.maquinaSecundariaId !== undefined ? b.maquinaSecundariaId || null : ex[0].maquina_secundaria_id,
         modoSeries,
         unidad,
         valor,
@@ -1760,6 +1765,109 @@ app.delete('/api/planificacion/ejercicios/:id', async (req, res) => {
     );
     if (rowCount === 0) return res.status(404).json({ error: 'No encontrado' });
     res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Planificación por día de semana (0=Lunes … 5=Sábado), mismo criterio que el calendario */
+app.get('/api/planificacion/dias/:diaSemana', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const dia = parseInt(req.params.diaSemana, 10);
+    if (Number.isNaN(dia) || dia < 0 || dia > 5) {
+      return res.status(400).json({ error: 'Día 0 (Lunes) a 5 (Sábado)' });
+    }
+    const { rows } = await db.query(
+      `SELECT i.*, e.nombre AS ejercicio_nombre
+       FROM planificacion_dia_item i
+       JOIN planificacion_ejercicio e ON e.id = i.ejercicio_id
+       WHERE i.sucursal_id = $1 AND i.dia_semana = $2
+       ORDER BY i.orden ASC`,
+      [sid, dia]
+    );
+    res.json({
+      diaSemana: dia,
+      items: rows.map((it) => ({
+        id: it.id,
+        diaSemana: it.dia_semana,
+        orden: it.orden,
+        ejercicioId: it.ejercicio_id,
+        ejercicioNombre: it.ejercicio_nombre,
+        notas: it.notas || '',
+      })),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/planificacion/dias/:diaSemana/items', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const dia = parseInt(req.params.diaSemana, 10);
+    if (Number.isNaN(dia) || dia < 0 || dia > 5) {
+      return res.status(400).json({ error: 'Día 0 (Lunes) a 5 (Sábado)' });
+    }
+    const items = Array.isArray((req.body || {}).items) ? req.body.items : [];
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM planificacion_dia_item WHERE sucursal_id = $1 AND dia_semana = $2', [sid, dia]);
+      let orden = 0;
+      for (const it of items) {
+        const ejId = it.ejercicioId || it.ejercicio_id;
+        if (!ejId) continue;
+        const { rows: ej } = await client.query(
+          'SELECT id FROM planificacion_ejercicio WHERE id = $1 AND sucursal_id = $2',
+          [ejId, sid]
+        );
+        if (ej.length === 0) continue;
+        const iid = crypto.randomUUID();
+        await client.query(
+          'INSERT INTO planificacion_dia_item (id, sucursal_id, dia_semana, orden, ejercicio_id, notas) VALUES ($1, $2, $3, $4, $5, $6)',
+          [iid, sid, dia, orden++, ejId, String(it.notas || '').trim()]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    const { rows: out } = await db.query(
+      `SELECT i.*, e.nombre AS ejercicio_nombre
+       FROM planificacion_dia_item i
+       JOIN planificacion_ejercicio e ON e.id = i.ejercicio_id
+       WHERE i.sucursal_id = $1 AND i.dia_semana = $2
+       ORDER BY i.orden ASC`,
+      [sid, dia]
+    );
+    res.json({
+      items: out.map((it) => ({
+        id: it.id,
+        diaSemana: it.dia_semana,
+        orden: it.orden,
+        ejercicioId: it.ejercicio_id,
+        ejercicioNombre: it.ejercicio_nombre,
+        notas: it.notas || '',
+      })),
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

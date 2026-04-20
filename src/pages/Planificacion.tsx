@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus,
   Trash2,
@@ -7,18 +7,25 @@ import {
   ClipboardList,
   Dumbbell,
   Layers,
-  ListOrdered,
+  CalendarDays,
 } from 'lucide-react';
 import {
   PlanificacionEjercicio,
   PlanificacionMaquina,
-  PlanificacionPlan,
   PlanificacionTipoEjercicio,
   SerieDetallePlan,
+  DIAS_SEMANA,
 } from '../types';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { useToast } from '../components/ToastProvider';
 import { useAuth } from '../contexts/AuthContext';
+
+function etiquetaMaquinas(ej: PlanificacionEjercicio, maquinas: PlanificacionMaquina[]): string {
+  const a = maquinas.find((m) => m.id === ej.maquinaId)?.nombre;
+  const b = maquinas.find((m) => m.id === ej.maquinaSecundariaId)?.nombre;
+  if (a && b) return `${a} · ${b}`;
+  return a || b || '—';
+}
 
 function resumenSeries(e: PlanificacionEjercicio): string {
   if (e.modoSeries === 'tres_iguales') {
@@ -36,11 +43,10 @@ const emptySerie = (): SerieDetallePlan => ({ unidad: 'duracion', valor: '' });
 const Planificacion = () => {
   const toast = useToast();
   const { planificacionHabilitada, refreshPlanificacionFlag } = useAuth();
-  const [tab, setTab] = useState<'catalogo' | 'ejercicios' | 'planes'>('catalogo');
+  const [tab, setTab] = useState<'catalogo' | 'ejercicios' | 'semana'>('catalogo');
   const [tipos, setTipos] = useState<PlanificacionTipoEjercicio[]>([]);
   const [maquinas, setMaquinas] = useState<PlanificacionMaquina[]>([]);
   const [ejercicios, setEjercicios] = useState<PlanificacionEjercicio[]>([]);
-  const [planes, setPlanes] = useState<PlanificacionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [nuevoTipo, setNuevoTipo] = useState('');
   const [nuevaMaq, setNuevaMaq] = useState('');
@@ -51,6 +57,7 @@ const Planificacion = () => {
     descripcion: '',
     tipoId: '',
     maquinaId: '',
+    maquinaSecundariaId: '',
     modoSeries: 'tres_iguales' as 'tres_iguales' | 'serie_1_2_3',
     unidad: 'duracion' as 'duracion' | 'cantidad',
     valor: '',
@@ -59,24 +66,24 @@ const Planificacion = () => {
     s2: emptySerie(),
     s3: emptySerie(),
   });
-  const [planSeleccionado, setPlanSeleccionado] = useState<PlanificacionPlan | null>(null);
-  const [nuevoPlanNombre, setNuevoPlanNombre] = useState('');
+  const [diaSeleccionado, setDiaSeleccionado] = useState(0);
   const [itemsOrden, setItemsOrden] = useState<{ ejercicioId: string; notas: string }[]>([]);
+  const [filtroTipoId, setFiltroTipoId] = useState('');
+  const [filtroMaquinaId, setFiltroMaquinaId] = useState('');
+  const [busquedaEj, setBusquedaEj] = useState('');
 
   const loadAll = useCallback(async () => {
     if (!planificacionHabilitada) return;
     try {
       setLoading(true);
-      const [t, m, e, p] = await Promise.all([
+      const [t, m, e] = await Promise.all([
         storageHybrid.planificacion.getTipos(),
         storageHybrid.planificacion.getMaquinas(),
         storageHybrid.planificacion.getEjercicios(),
-        storageHybrid.planificacion.getPlanes(),
       ]);
       setTipos(t);
       setMaquinas(m);
       setEjercicios(e);
-      setPlanes(p);
     } catch (err) {
       console.error(err);
       toast.error('No se pudieron cargar los datos de planificación.');
@@ -93,6 +100,43 @@ const Planificacion = () => {
     void refreshPlanificacionFlag();
   }, [refreshPlanificacionFlag]);
 
+  useEffect(() => {
+    if (!planificacionHabilitada) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await storageHybrid.planificacion.getDia(diaSeleccionado);
+        if (cancelled) return;
+        setItemsOrden(
+          (data.items || []).map((it) => ({ ejercicioId: it.ejercicioId, notas: it.notas || '' }))
+        );
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) toast.error('No se pudo cargar la secuencia del día.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [planificacionHabilitada, diaSeleccionado, toast]);
+
+  const ejerciciosFiltrados = useMemo(() => {
+    const q = busquedaEj.trim().toLowerCase();
+    return ejercicios.filter((ej) => {
+      if (filtroTipoId && ej.tipoId !== filtroTipoId) return false;
+      if (filtroMaquinaId) {
+        const ok =
+          ej.maquinaId === filtroMaquinaId || ej.maquinaSecundariaId === filtroMaquinaId;
+        if (!ok) return false;
+      }
+      if (q) {
+        const n = `${ej.nombre} ${ej.descripcion || ''}`.toLowerCase();
+        if (!n.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [ejercicios, filtroTipoId, filtroMaquinaId, busquedaEj]);
+
   const openModalEjercicio = (ej?: PlanificacionEjercicio) => {
     if (ej) {
       setEditingEj(ej);
@@ -102,6 +146,7 @@ const Planificacion = () => {
         descripcion: ej.descripcion || '',
         tipoId: ej.tipoId || '',
         maquinaId: ej.maquinaId || '',
+        maquinaSecundariaId: ej.maquinaSecundariaId || '',
         modoSeries: ej.modoSeries,
         unidad: ej.unidad === 'cantidad' ? 'cantidad' : 'duracion',
         valor: ej.valor || '',
@@ -117,6 +162,7 @@ const Planificacion = () => {
         descripcion: '',
         tipoId: '',
         maquinaId: '',
+        maquinaSecundariaId: '',
         modoSeries: 'tres_iguales',
         unidad: 'duracion',
         valor: '',
@@ -149,6 +195,7 @@ const Planificacion = () => {
           descripcion: formEj.descripcion.trim(),
           tipoId: formEj.tipoId || null,
           maquinaId: formEj.maquinaId || null,
+          maquinaSecundariaId: formEj.maquinaSecundariaId || null,
           modoSeries: 'tres_iguales' as const,
           unidad: formEj.unidad,
           valor,
@@ -173,6 +220,7 @@ const Planificacion = () => {
           descripcion: formEj.descripcion.trim(),
           tipoId: formEj.tipoId || null,
           maquinaId: formEj.maquinaId || null,
+          maquinaSecundariaId: formEj.maquinaSecundariaId || null,
           modoSeries: 'serie_1_2_3' as const,
           seriesDetalle,
         };
@@ -206,50 +254,22 @@ const Planificacion = () => {
     }
   };
 
-  const crearPlan = async () => {
-    const n = nuevoPlanNombre.trim();
-    if (!n) {
-      toast.warning('Nombre del plan');
-      return;
-    }
+  const guardarItemsDia = async () => {
     try {
-      await storageHybrid.planificacion.addPlan({ nombre: n });
-      setNuevoPlanNombre('');
-      await loadAll();
-      toast.success('Plan creado');
-    } catch {
-      toast.error('No se pudo crear el plan');
-    }
-  };
-
-  const abrirPlan = async (p: PlanificacionPlan) => {
-    try {
-      const full = await storageHybrid.planificacion.getPlanById(p.id);
-      setPlanSeleccionado(full);
+      await storageHybrid.planificacion.putDiaItems(diaSeleccionado, itemsOrden);
+      toast.success('Secuencia del día guardada');
+      const data = await storageHybrid.planificacion.getDia(diaSeleccionado);
       setItemsOrden(
-        (full.items || []).map((it) => ({ ejercicioId: it.ejercicioId, notas: it.notas || '' }))
+        (data.items || []).map((it) => ({ ejercicioId: it.ejercicioId, notas: it.notas || '' }))
       );
     } catch {
-      toast.error('No se pudo abrir el plan');
+      toast.error('No se pudo guardar la secuencia');
     }
   };
 
-  const guardarItemsPlan = async () => {
-    if (!planSeleccionado) return;
-    try {
-      await storageHybrid.planificacion.putPlanItems(planSeleccionado.id, itemsOrden);
-      toast.success('Orden guardado');
-      await loadAll();
-      const full = await storageHybrid.planificacion.getPlanById(planSeleccionado.id);
-      setPlanSeleccionado(full);
-    } catch {
-      toast.error('No se pudo guardar el orden');
-    }
-  };
-
-  const agregarEjAlPlan = (ejercicioId: string) => {
+  const agregarEjAlDia = (ejercicioId: string) => {
     if (itemsOrden.some((x) => x.ejercicioId === ejercicioId)) {
-      toast.warning('Ese ejercicio ya está en el plan');
+      toast.warning('Ese ejercicio ya está en la lista del día');
       return;
     }
     setItemsOrden((prev) => [...prev, { ejercicioId, notas: '' }]);
@@ -277,7 +297,8 @@ const Planificacion = () => {
         <span className="page-title-accent" aria-hidden />
         <h1 className="page-title">Planificación</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Tipos y máquinas propios del estudio, ejercicios reutilizables y planes de clase ordenados.
+          Tipos y máquinas propios del estudio, ejercicios reutilizables y secuencia por día de la semana (como el
+          calendario: Lunes a Sábado).
         </p>
       </div>
 
@@ -286,7 +307,7 @@ const Planificacion = () => {
           [
             { id: 'catalogo' as const, label: 'Tipos y máquinas', icon: Layers },
             { id: 'ejercicios' as const, label: 'Ejercicios', icon: Dumbbell },
-            { id: 'planes' as const, label: 'Planes', icon: ListOrdered },
+            { id: 'semana' as const, label: 'Por día', icon: CalendarDays },
           ] as const
         ).map((x) => {
           const Icon = x.icon;
@@ -416,7 +437,7 @@ const Planificacion = () => {
                     <tr>
                       <th className="px-4 py-3">Nombre</th>
                       <th className="px-4 py-3">Tipo</th>
-                      <th className="px-4 py-3">Máquina</th>
+                      <th className="px-4 py-3">Máquinas</th>
                       <th className="px-4 py-3">Series</th>
                       <th className="px-4 py-3 w-24" />
                     </tr>
@@ -428,9 +449,7 @@ const Planificacion = () => {
                         <td className="px-4 py-3 text-gray-600">
                           {tipos.find((t) => t.id === ej.tipoId)?.nombre || '—'}
                         </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {maquinas.find((m) => m.id === ej.maquinaId)?.nombre || '—'}
-                        </td>
+                        <td className="px-4 py-3 text-gray-600">{etiquetaMaquinas(ej, maquinas)}</td>
                         <td className="px-4 py-3 text-gray-700 text-xs">{resumenSeries(ej)}</td>
                         <td className="px-4 py-3 text-right">
                           <button
@@ -459,137 +478,169 @@ const Planificacion = () => {
             </div>
           )}
 
-          {tab === 'planes' && (
+          {tab === 'semana' && (
             <div className="grid lg:grid-cols-2 gap-6">
-              <div className="card">
-                <h2 className="font-semibold text-gray-900 mb-3">Planes de clase</h2>
-                <div className="flex gap-2 mb-4">
-                  <input
-                    className="input-field flex-1"
-                    placeholder="Nombre del plan (ej. Clase mat lunes)"
-                    value={nuevoPlanNombre}
-                    onChange={(e) => setNuevoPlanNombre(e.target.value)}
-                  />
-                  <button type="button" className="btn-primary" onClick={() => void crearPlan()}>
-                    Crear
-                  </button>
-                </div>
-                <ul className="space-y-2">
-                  {planes.map((p) => (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        onClick={() => void abrirPlan(p)}
-                        className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                          planSeleccionado?.id === p.id
-                            ? 'border-primary-400 bg-primary-50'
-                            : 'border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        <span className="font-medium text-gray-900">{p.nombre}</span>
-                      </button>
-                    </li>
+              <div className="card space-y-4">
+                <h2 className="font-semibold text-gray-900">Día de la semana</h2>
+                <p className="text-xs text-gray-500">
+                  Mismo orden que el calendario: 0 = Lunes … 5 = Sábado. Elegí el día y armá la secuencia a la derecha.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {DIAS_SEMANA.map((nombre, i) => (
+                    <button
+                      key={nombre}
+                      type="button"
+                      onClick={() => setDiaSeleccionado(i)}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
+                        diaSeleccionado === i
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                      }`}
+                    >
+                      {nombre}
+                    </button>
                   ))}
-                </ul>
-                {planes.length === 0 && <p className="text-gray-500 text-sm">Creá un plan para armar la secuencia.</p>}
+                </div>
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs font-medium text-gray-700 mb-2">Filtrar ejercicios para agregar</p>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      className="input-field"
+                      placeholder="Buscar por nombre o descripción…"
+                      value={busquedaEj}
+                      onChange={(e) => setBusquedaEj(e.target.value)}
+                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <select
+                        className="input-field"
+                        value={filtroTipoId}
+                        onChange={(e) => setFiltroTipoId(e.target.value)}
+                      >
+                        <option value="">Todos los tipos</option>
+                        {tipos.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.nombre}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="input-field"
+                        value={filtroMaquinaId}
+                        onChange={(e) => setFiltroMaquinaId(e.target.value)}
+                      >
+                        <option value="">Todas las máquinas</option>
+                        {maquinas.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 mb-1">
+                    Tocá un ejercicio para sumarlo al día (misma lista que en la biblioteca).
+                  </p>
+                  <ul className="max-h-64 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-100">
+                    {ejerciciosFiltrados.map((ej) => (
+                      <li key={ej.id}>
+                        <button
+                          type="button"
+                          onClick={() => agregarEjAlDia(ej.id)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 transition-colors"
+                        >
+                          <span className="font-medium text-gray-900">{ej.nombre}</span>
+                          <span className="block text-xs text-gray-500 mt-0.5">
+                            {tipos.find((t) => t.id === ej.tipoId)?.nombre || '—'} · {etiquetaMaquinas(ej, maquinas)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {ejerciciosFiltrados.length === 0 && (
+                    <p className="text-sm text-gray-500 py-3 text-center">No hay ejercicios con este filtro.</p>
+                  )}
+                </div>
               </div>
               <div className="card">
-                <h2 className="font-semibold text-gray-900 mb-3">Contenido del plan</h2>
-                {!planSeleccionado ? (
-                  <p className="text-gray-500 text-sm">Elegí un plan a la izquierda.</p>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-600 mb-3">
-                      <strong>{planSeleccionado.nombre}</strong> — arrastrá el orden con los botones o agregá desde la lista.
-                    </p>
-                    <p className="text-xs font-medium text-gray-700 mb-2">Agregar ejercicio</p>
-                    <select
-                      className="input-field mb-4"
-                      defaultValue=""
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v) {
-                          agregarEjAlPlan(v);
-                          e.target.value = '';
-                        }
-                      }}
-                    >
-                      <option value="">Seleccionar ejercicio guardado…</option>
-                      {ejercicios.map((ej) => (
-                        <option key={ej.id} value={ej.id}>
-                          {ej.nombre}
-                        </option>
-                      ))}
-                    </select>
-                    <ol className="space-y-2 mb-4">
-                      {itemsOrden.map((it, idx) => (
-                        <li
-                          key={`${it.ejercicioId}-${idx}`}
-                          className="flex flex-wrap items-start gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100"
-                        >
-                          <span className="text-gray-400 text-xs w-6">{idx + 1}.</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 text-sm">
-                              {ejercicios.find((e) => e.id === it.ejercicioId)?.nombre || '—'}
+                <h2 className="font-semibold text-gray-900 mb-3">Secuencia del día</h2>
+                <p className="text-sm text-gray-600 mb-3">
+                  <strong>{DIAS_SEMANA[diaSeleccionado]}</strong> — ordená con las flechas o agregá desde la lista. Guardá
+                  para persistir.
+                </p>
+                <ol className="space-y-2 mb-4">
+                  {itemsOrden.map((it, idx) => {
+                    const ej = ejercicios.find((e) => e.id === it.ejercicioId);
+                    return (
+                      <li
+                        key={`${it.ejercicioId}-${idx}`}
+                        className="flex flex-wrap items-start gap-2 p-2 rounded-lg bg-gray-50 border border-gray-100"
+                      >
+                        <span className="text-gray-400 text-xs w-6">{idx + 1}.</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 text-sm">{ej?.nombre || '—'}</p>
+                          {ej && (
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {tipos.find((t) => t.id === ej.tipoId)?.nombre || '—'} · {etiquetaMaquinas(ej, maquinas)} ·{' '}
+                              {resumenSeries(ej)}
                             </p>
-                            <input
-                              className="input-field text-xs mt-1 py-1"
-                              placeholder="Notas (opcional)"
-                              value={it.notas}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setItemsOrden((prev) =>
-                                  prev.map((row, i) => (i === idx ? { ...row, notas: v } : row))
-                                );
-                              }}
-                            />
-                          </div>
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              className="btn-secondary text-xs py-1 px-2"
-                              disabled={idx === 0}
-                              onClick={() =>
-                                setItemsOrden((prev) => {
-                                  const n = [...prev];
-                                  [n[idx - 1], n[idx]] = [n[idx], n[idx - 1]];
-                                  return n;
-                                })
-                              }
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              className="btn-secondary text-xs py-1 px-2"
-                              disabled={idx >= itemsOrden.length - 1}
-                              onClick={() =>
-                                setItemsOrden((prev) => {
-                                  const n = [...prev];
-                                  [n[idx], n[idx + 1]] = [n[idx + 1], n[idx]];
-                                  return n;
-                                })
-                              }
-                            >
-                              ↓
-                            </button>
-                            <button
-                              type="button"
-                              className="text-red-600 p-1"
-                              onClick={() => quitarItem(idx)}
-                              aria-label="Quitar"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
-                    <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => void guardarItemsPlan()}>
-                      Guardar orden del plan
-                    </button>
-                  </>
-                )}
+                          )}
+                          <input
+                            className="input-field text-xs mt-1 py-1"
+                            placeholder="Notas (opcional)"
+                            value={it.notas}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setItemsOrden((prev) =>
+                                prev.map((row, i) => (i === idx ? { ...row, notas: v } : row))
+                              );
+                            }}
+                          />
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs py-1 px-2"
+                            disabled={idx === 0}
+                            onClick={() =>
+                              setItemsOrden((prev) => {
+                                const n = [...prev];
+                                [n[idx - 1], n[idx]] = [n[idx], n[idx - 1]];
+                                return n;
+                              })
+                            }
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs py-1 px-2"
+                            disabled={idx >= itemsOrden.length - 1}
+                            onClick={() =>
+                              setItemsOrden((prev) => {
+                                const n = [...prev];
+                                [n[idx], n[idx + 1]] = [n[idx + 1], n[idx]];
+                                return n;
+                              })
+                            }
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="text-red-600 p-1"
+                            onClick={() => quitarItem(idx)}
+                            aria-label="Quitar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+                <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => void guardarItemsDia()}>
+                  Guardar secuencia del día
+                </button>
               </div>
             </div>
           )}
@@ -623,24 +674,24 @@ const Planificacion = () => {
                   onChange={(e) => setFormEj((f) => ({ ...f, descripcion: e.target.value }))}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                <select
+                  className="input-field"
+                  value={formEj.tipoId}
+                  onChange={(e) => setFormEj((f) => ({ ...f, tipoId: e.target.value }))}
+                >
+                  <option value="">—</option>
+                  {tipos.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-                  <select
-                    className="input-field"
-                    value={formEj.tipoId}
-                    onChange={(e) => setFormEj((f) => ({ ...f, tipoId: e.target.value }))}
-                  >
-                    <option value="">—</option>
-                    {tipos.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Máquina</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Máquina principal</label>
                   <select
                     className="input-field"
                     value={formEj.maquinaId}
@@ -649,6 +700,24 @@ const Planificacion = () => {
                     <option value="">—</option>
                     {maquinas.map((m) => (
                       <option key={m.id} value={m.id}>
+                        {m.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Máquina alternativa (opcional)
+                  </label>
+                  <p className="text-xs text-gray-500 mb-1">Mismo ejercicio en dos aparatos distintos.</p>
+                  <select
+                    className="input-field"
+                    value={formEj.maquinaSecundariaId}
+                    onChange={(e) => setFormEj((f) => ({ ...f, maquinaSecundariaId: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    {maquinas.map((m) => (
+                      <option key={m.id} value={m.id} disabled={m.id === formEj.maquinaId}>
                         {m.nombre}
                       </option>
                     ))}

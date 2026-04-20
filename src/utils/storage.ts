@@ -17,6 +17,7 @@ import {
   PlanificacionEjercicio,
   PlanificacionPlan,
   PlanificacionPlanItem,
+  PlanificacionDiaItem,
 } from '../types';
 import { getFechaFromSemanaYDia } from './date';
 
@@ -38,6 +39,7 @@ const STORAGE_KEYS = {
   planifEjercicios: 'savia_planif_ejercicios',
   planifPlanes: 'savia_planif_planes',
   planifPlanItems: 'savia_planif_plan_items',
+  planifDiaItems: 'savia_planif_dia_items',
 } as const;
 
 export const storage = {
@@ -398,7 +400,12 @@ export const storage = {
     },
     getEjercicios: (): PlanificacionEjercicio[] => {
       const data = localStorage.getItem(STORAGE_KEYS.planifEjercicios);
-      return data ? JSON.parse(data) : [];
+      if (!data) return [];
+      const arr = JSON.parse(data) as PlanificacionEjercicio[];
+      return arr.map((e) => ({
+        ...e,
+        maquinaSecundariaId: e.maquinaSecundariaId ?? null,
+      }));
     },
     saveEjercicios: (rows: PlanificacionEjercicio[]): void => {
       localStorage.setItem(STORAGE_KEYS.planifEjercicios, JSON.stringify(rows));
@@ -416,6 +423,13 @@ export const storage = {
     },
     saveItemsMap: (m: Record<string, PlanificacionPlanItem[]>): void => {
       localStorage.setItem(STORAGE_KEYS.planifPlanItems, JSON.stringify(m));
+    },
+    getDiaItemsMap: (): Record<string, PlanificacionDiaItem[]> => {
+      const data = localStorage.getItem(STORAGE_KEYS.planifDiaItems);
+      return data ? JSON.parse(data) : {};
+    },
+    saveDiaItemsMap: (m: Record<string, PlanificacionDiaItem[]>): void => {
+      localStorage.setItem(STORAGE_KEYS.planifDiaItems, JSON.stringify(m));
     },
   },
 };

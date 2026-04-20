@@ -17,6 +17,7 @@ import {
   PlanificacionEjercicio,
   PlanificacionPlan,
   PlanificacionPlanItem,
+  PlanificacionDiaItem,
 } from '../types';
 import { buildCierreRetiro } from './cierre-caja';
 import { horaActualInput } from './date';
@@ -433,6 +434,7 @@ export const storageHybrid = {
         descripcion: (body.descripcion || '').trim(),
         tipoId: body.tipoId ?? null,
         maquinaId: body.maquinaId ?? null,
+        maquinaSecundariaId: body.maquinaSecundariaId ?? null,
         modoSeries: modo,
         unidad: modo === 'tres_iguales' ? (body.unidad === 'cantidad' ? 'cantidad' : 'duracion') : null,
         valor: modo === 'tres_iguales' ? String(body.valor || '').trim() : null,
@@ -536,6 +538,43 @@ export const storageHybrid = {
       const m = storage.planificacion.getItemsMap();
       m[planId] = out;
       storage.planificacion.saveItemsMap(m);
+      return { items: out };
+    },
+    getDia: async (diaSemana: number): Promise<{ diaSemana: number; items: PlanificacionDiaItem[] }> => {
+      if (useApi()) return storageApi.planificacion.getDia(diaSemana);
+      const m = storage.planificacion.getDiaItemsMap();
+      const key = String(diaSemana);
+      const raw = (m[key] || []).slice().sort((a, b) => a.orden - b.orden);
+      const ejList = storage.planificacion.getEjercicios();
+      return {
+        diaSemana,
+        items: raw.map((it) => ({
+          ...it,
+          ejercicioNombre: ejList.find((e) => e.id === it.ejercicioId)?.nombre || '—',
+        })),
+      };
+    },
+    putDiaItems: async (
+      diaSemana: number,
+      items: { ejercicioId: string; notas?: string }[]
+    ): Promise<{ items: PlanificacionDiaItem[] }> => {
+      if (useApi()) return storageApi.planificacion.putDiaItems(diaSemana, items);
+      const ejList = storage.planificacion.getEjercicios();
+      const out: PlanificacionDiaItem[] = [];
+      items.forEach((it, orden) => {
+        if (!ejList.some((e) => e.id === it.ejercicioId)) return;
+        out.push({
+          id: `di-${diaSemana}-${orden}-${Math.random().toString(36).slice(2, 9)}`,
+          diaSemana,
+          orden,
+          ejercicioId: it.ejercicioId,
+          notas: (it.notas || '').trim(),
+          ejercicioNombre: ejList.find((e) => e.id === it.ejercicioId)?.nombre,
+        });
+      });
+      const m = storage.planificacion.getDiaItemsMap();
+      m[String(diaSemana)] = out;
+      storage.planificacion.saveDiaItemsMap(m);
       return { items: out };
     },
   },

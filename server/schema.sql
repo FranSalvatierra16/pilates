@@ -308,3 +308,16 @@ CREATE TABLE IF NOT EXISTS planificacion_plan_item (
   notas TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_planif_item_plan ON planificacion_plan_item(plan_id);
+
+ALTER TABLE planificacion_ejercicio ADD COLUMN IF NOT EXISTS maquina_secundaria_id TEXT REFERENCES planificacion_maquina(id) ON DELETE SET NULL;
+
+-- Planificación por día de semana (0=Lunes … 5=Sábado), alineado al calendario
+CREATE TABLE IF NOT EXISTS planificacion_dia_item (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  dia_semana INTEGER NOT NULL CHECK (dia_semana >= 0 AND dia_semana <= 5),
+  orden INTEGER NOT NULL,
+  ejercicio_id TEXT NOT NULL REFERENCES planificacion_ejercicio(id) ON DELETE CASCADE,
+  notas TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_planif_dia_suc_dia ON planificacion_dia_item(sucursal_id, dia_semana);

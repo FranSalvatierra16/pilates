@@ -19,6 +19,7 @@ import {
   PlanificacionMaquina,
   PlanificacionEjercicio,
   PlanificacionPlan,
+  PlanificacionDiaItem,
 } from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -265,6 +266,16 @@ export const storageApi = {
       items: { ejercicioId: string; notas?: string }[]
     ): Promise<{ items: PlanificacionPlan['items'] }> =>
       request(`/api/planificacion/planes/${encodeURIComponent(planId)}/items`, {
+        method: 'PUT',
+        body: JSON.stringify({ items }),
+      }),
+    getDia: (diaSemana: number): Promise<{ diaSemana: number; items: PlanificacionDiaItem[] }> =>
+      request(`/api/planificacion/dias/${diaSemana}`),
+    putDiaItems: (
+      diaSemana: number,
+      items: { ejercicioId: string; notas?: string }[]
+    ): Promise<{ items: PlanificacionDiaItem[] }> =>
+      request(`/api/planificacion/dias/${diaSemana}/items`, {
         method: 'PUT',
         body: JSON.stringify({ items }),
       }),

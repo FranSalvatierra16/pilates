@@ -256,6 +256,8 @@ export interface PlanificacionEjercicio {
   descripcion: string;
   tipoId: string | null;
   maquinaId: string | null;
+  /** Opcional: segunda máquina (el mismo ejercicio puede hacerse con una u otra) */
+  maquinaSecundariaId: string | null;
   modoSeries: ModoSeriesEjercicio;
   unidad: UnidadEjercicioPlan | null;
   valor: string | null;
@@ -275,6 +277,16 @@ export interface PlanificacionPlan {
 export interface PlanificacionPlanItem {
   id: string;
   planId: string;
+  orden: number;
+  ejercicioId: string;
+  ejercicioNombre?: string;
+  notas: string;
+}
+
+/** Ítem de planificación del día (día = mismo índice que el calendario: 0=Lunes…5=Sábado) */
+export interface PlanificacionDiaItem {
+  id: string;
+  diaSemana: number;
   orden: number;
   ejercicioId: string;
   ejercicioNombre?: string;

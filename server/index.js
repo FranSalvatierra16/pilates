@@ -48,6 +48,8 @@ app.use('/api', (req, res, next) => {
 // Asegurar que las tablas existan antes de responder (evita "a veces vacío" en distintos dispositivos)
 app.use('/api', async (req, res, next) => {
   if (req.path === '/health') return next();
+  // Login no debe quedar bloqueado si initSchema tarda o falla una vez (el handler igual usa la BDD)
+  if (req.path === '/auth/login' && req.method === 'POST') return next();
   if (!getDatabaseUrl()) return next();
   try {
     await ensureSchemaReady();
@@ -74,7 +76,8 @@ app.use('/api', (req, res, next) => {
 });
 
 let pool = null;
-let schemaReady = null;
+/** Promesa única de initSchema; si falla se limpia para poder reintentar en el próximo request */
+let schemaInitPromise = null;
 
 function getDatabaseUrl() {
   return (
@@ -94,14 +97,22 @@ async function getPool() {
   }
   pool = new pg.Pool({
     connectionString: databaseUrl,
-    ssl: databaseUrl.includes('railway') ? { rejectUnauthorized: false } : undefined,
+    ssl:
+      databaseUrl.includes('railway') || databaseUrl.includes('amazonaws.com') || databaseUrl.includes('neon.tech')
+        ? { rejectUnauthorized: false }
+        : undefined,
   });
   return pool;
 }
 
 function ensureSchemaReady() {
-  if (!schemaReady) schemaReady = initSchema();
-  return schemaReady;
+  if (!schemaInitPromise) {
+    schemaInitPromise = initSchema().catch((err) => {
+      schemaInitPromise = null;
+      throw err;
+    });
+  }
+  return schemaInitPromise;
 }
 
 async function seedAdminAndSucursal(db) {

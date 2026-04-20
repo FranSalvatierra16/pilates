@@ -8,6 +8,8 @@
     "preview": "vite preview",
     "start": "node server/index.js",
     "seed-demo": "node server/seed-demo.js",
+    "seed:planif-savia3": "node server/seed-planificacion-savia3.js",
+    "seed:planif-cleanup": "node server/cleanup-planif-seed.js",
     "db:schema": "node server/run-schema.js",
     "admin:update": "node server/update-admin.js",
     "sucursal:clone": "node server/clone-sucursal.js"

@@ -320,7 +320,7 @@ CREATE TABLE IF NOT EXISTS planificacion_dia_item (
   ejercicio_id TEXT NOT NULL REFERENCES planificacion_ejercicio(id) ON DELETE CASCADE,
   notas TEXT DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_planif_dia_suc_fecha ON planificacion_dia_item(sucursal_id, fecha);
+-- No crear índice sobre fecha aquí: si la tabla ya existía solo con dia_semana, fecha aún no existe hasta el ALTER de abajo.
 
 -- Migración desde planificación por día de semana (plantilla): datos previos no se convierten
 ALTER TABLE planificacion_dia_item ADD COLUMN IF NOT EXISTS fecha DATE;

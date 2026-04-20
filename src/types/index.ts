@@ -283,10 +283,10 @@ export interface PlanificacionPlanItem {
   notas: string;
 }
 
-/** Ítem de planificación del día (día = mismo índice que el calendario: 0=Lunes…5=Sábado) */
+/** Ítem de planificación guardado por fecha concreta (YYYY-MM-DD), no por plantilla semanal */
 export interface PlanificacionDiaItem {
   id: string;
-  diaSemana: number;
+  fecha: string;
   orden: number;
   ejercicioId: string;
   ejercicioNombre?: string;

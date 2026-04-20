@@ -8,6 +8,8 @@ import {
   Dumbbell,
   Layers,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   PlanificacionEjercicio,
@@ -19,6 +21,28 @@ import {
 import { storageHybrid } from '../utils/storage-hybrid';
 import { useToast } from '../components/ToastProvider';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  getSemanaAnterior,
+  getSemanaSiguiente,
+  getRangoSemana,
+  getFechaFromSemanaYDia,
+  getSemanaFromDate,
+  parseFechaLocal,
+  formatDate,
+  fechaDefaultPlanificacionStudio,
+  getDiaSemanaCalendarioDesdeISO,
+  hoyISO,
+  getSemanaActual,
+} from '../utils/date';
+
+const DIAS_GRID = [0, 1, 2, 3, 4, 5] as const;
+
+function etiquetaDiaCalendario(iso: string): string {
+  const d = parseFechaLocal(iso);
+  const js = d.getDay();
+  if (js === 0) return 'Domingo';
+  return DIAS_SEMANA[js - 1];
+}
 
 function etiquetaMaquinas(ej: PlanificacionEjercicio, maquinas: PlanificacionMaquina[]): string {
   const a = maquinas.find((m) => m.id === ej.maquinaId)?.nombre;
@@ -66,7 +90,10 @@ const Planificacion = () => {
     s2: emptySerie(),
     s3: emptySerie(),
   });
-  const [diaSeleccionado, setDiaSeleccionado] = useState(0);
+  const [semanaVista, setSemanaVista] = useState(() =>
+    getSemanaFromDate(parseFechaLocal(fechaDefaultPlanificacionStudio()))
+  );
+  const [fechaSeleccionada, setFechaSeleccionada] = useState(fechaDefaultPlanificacionStudio);
   const [itemsOrden, setItemsOrden] = useState<{ ejercicioId: string; notas: string }[]>([]);
   const [filtroTipoId, setFiltroTipoId] = useState('');
   const [filtroMaquinaId, setFiltroMaquinaId] = useState('');
@@ -105,7 +132,7 @@ const Planificacion = () => {
     let cancelled = false;
     void (async () => {
       try {
-        const data = await storageHybrid.planificacion.getDia(diaSeleccionado);
+        const data = await storageHybrid.planificacion.getFecha(fechaSeleccionada);
         if (cancelled) return;
         setItemsOrden(
           (data.items || []).map((it) => ({ ejercicioId: it.ejercicioId, notas: it.notas || '' }))
@@ -118,7 +145,7 @@ const Planificacion = () => {
     return () => {
       cancelled = true;
     };
-  }, [planificacionHabilitada, diaSeleccionado, toast]);
+  }, [planificacionHabilitada, fechaSeleccionada, toast]);
 
   const ejerciciosFiltrados = useMemo(() => {
     const q = busquedaEj.trim().toLowerCase();
@@ -256,15 +283,26 @@ const Planificacion = () => {
 
   const guardarItemsDia = async () => {
     try {
-      await storageHybrid.planificacion.putDiaItems(diaSeleccionado, itemsOrden);
-      toast.success('Secuencia del día guardada');
-      const data = await storageHybrid.planificacion.getDia(diaSeleccionado);
+      await storageHybrid.planificacion.putFechaItems(fechaSeleccionada, itemsOrden);
+      toast.success('Secuencia guardada para esta fecha');
+      const data = await storageHybrid.planificacion.getFecha(fechaSeleccionada);
       setItemsOrden(
         (data.items || []).map((it) => ({ ejercicioId: it.ejercicioId, notas: it.notas || '' }))
       );
     } catch {
       toast.error('No se pudo guardar la secuencia');
     }
+  };
+
+  const cambiarSemana = (dir: 'prev' | 'next') => {
+    const s = dir === 'prev' ? getSemanaAnterior(semanaVista) : getSemanaSiguiente(semanaVista);
+    setSemanaVista(s);
+    const idx = getDiaSemanaCalendarioDesdeISO(fechaSeleccionada);
+    setFechaSeleccionada(getFechaFromSemanaYDia(s, idx));
+  };
+
+  const elegirDiaGrilla = (diaIndex: number) => {
+    setFechaSeleccionada(getFechaFromSemanaYDia(semanaVista, diaIndex));
   };
 
   const agregarEjAlDia = (ejercicioId: string) => {
@@ -297,8 +335,8 @@ const Planificacion = () => {
         <span className="page-title-accent" aria-hidden />
         <h1 className="page-title">Planificación</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Tipos y máquinas propios del estudio, ejercicios reutilizables y secuencia por día de la semana (como el
-          calendario: Lunes a Sábado).
+          Tipos y máquinas propios del estudio, ejercicios reutilizables y secuencia por fecha: cada día del calendario
+          (Lunes a Sábado) puede tener su plan distinto según la semana.
         </p>
       </div>
 
@@ -481,25 +519,85 @@ const Planificacion = () => {
           {tab === 'semana' && (
             <div className="grid lg:grid-cols-2 gap-6">
               <div className="card space-y-4">
-                <h2 className="font-semibold text-gray-900">Día de la semana</h2>
+                <h2 className="font-semibold text-gray-900">Semana (como el calendario)</h2>
                 <p className="text-xs text-gray-500">
-                  Mismo orden que el calendario: 0 = Lunes … 5 = Sábado. Elegí el día y armá la secuencia a la derecha.
+                  Cada fecha guarda su propia secuencia: el lunes de esta semana es independiente del lunes pasado. Elegí
+                  el día en la grilla (Lun–Sáb) y editá a la derecha.
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {DIAS_SEMANA.map((nombre, i) => (
-                    <button
-                      key={nombre}
-                      type="button"
-                      onClick={() => setDiaSeleccionado(i)}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
-                        diaSeleccionado === i
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                      }`}
-                    >
-                      {nombre}
-                    </button>
-                  ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary inline-flex items-center gap-1 px-2 py-2"
+                    onClick={() => cambiarSemana('prev')}
+                    aria-label="Semana anterior"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <span className="text-sm font-medium text-gray-800 min-w-[10rem] text-center flex-1">
+                    {getRangoSemana(semanaVista)}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-secondary inline-flex items-center gap-1 px-2 py-2"
+                    onClick={() => cambiarSemana('next')}
+                    aria-label="Semana siguiente"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+                {semanaVista !== getSemanaActual() && (
+                  <button
+                    type="button"
+                    className="text-sm text-primary-600 hover:underline"
+                    onClick={() => {
+                      const s = getSemanaActual();
+                      setSemanaVista(s);
+                      const idx = getDiaSemanaCalendarioDesdeISO(fechaSeleccionada);
+                      setFechaSeleccionada(getFechaFromSemanaYDia(s, idx));
+                    }}
+                  >
+                    Ir a la semana actual
+                  </button>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Otra fecha</label>
+                  <input
+                    type="date"
+                    className="input-field max-w-[200px]"
+                    value={fechaSeleccionada}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      setFechaSeleccionada(v);
+                      setSemanaVista(getSemanaFromDate(parseFechaLocal(v)));
+                    }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {DIAS_GRID.map((diaIndex) => {
+                    const fechaIso = getFechaFromSemanaYDia(semanaVista, diaIndex);
+                    const nombre = DIAS_SEMANA[diaIndex];
+                    const sel = fechaIso === fechaSeleccionada;
+                    const hoy = fechaIso === hoyISO();
+                    return (
+                      <button
+                        key={fechaIso}
+                        type="button"
+                        onClick={() => elegirDiaGrilla(diaIndex)}
+                        className={`rounded-lg border px-2 py-2 text-left text-sm transition-colors touch-manipulation ${
+                          sel
+                            ? 'border-primary-500 bg-primary-50 ring-1 ring-primary-400'
+                            : 'border-gray-200 bg-white hover:border-primary-300'
+                        }`}
+                      >
+                        <span className="block font-medium text-gray-900">{nombre}</span>
+                        <span className={`text-xs ${hoy ? 'text-primary-600 font-semibold' : 'text-gray-500'}`}>
+                          {formatDate(fechaIso)}
+                          {hoy ? ' · Hoy' : ''}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="border-t border-gray-100 pt-4">
                   <p className="text-xs font-medium text-gray-700 mb-2">Filtrar ejercicios para agregar</p>
@@ -562,10 +660,12 @@ const Planificacion = () => {
                 </div>
               </div>
               <div className="card">
-                <h2 className="font-semibold text-gray-900 mb-3">Secuencia del día</h2>
+                <h2 className="font-semibold text-gray-900 mb-3">Secuencia de esta fecha</h2>
                 <p className="text-sm text-gray-600 mb-3">
-                  <strong>{DIAS_SEMANA[diaSeleccionado]}</strong> — ordená con las flechas o agregá desde la lista. Guardá
-                  para persistir.
+                  <strong>
+                    {etiquetaDiaCalendario(fechaSeleccionada)} · {formatDate(fechaSeleccionada)}
+                  </strong>{' '}
+                  — solo esta fecha. Ordená con las flechas o agregá desde la lista y guardá.
                 </p>
                 <ol className="space-y-2 mb-4">
                   {itemsOrden.map((it, idx) => {
@@ -639,7 +739,7 @@ const Planificacion = () => {
                   })}
                 </ol>
                 <button type="button" className="btn-primary w-full sm:w-auto" onClick={() => void guardarItemsDia()}>
-                  Guardar secuencia del día
+                  Guardar secuencia de esta fecha
                 </button>
               </div>
             </div>

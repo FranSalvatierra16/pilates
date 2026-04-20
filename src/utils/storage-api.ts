@@ -269,13 +269,13 @@ export const storageApi = {
         method: 'PUT',
         body: JSON.stringify({ items }),
       }),
-    getDia: (diaSemana: number): Promise<{ diaSemana: number; items: PlanificacionDiaItem[] }> =>
-      request(`/api/planificacion/dias/${diaSemana}`),
-    putDiaItems: (
-      diaSemana: number,
+    getFecha: (fecha: string): Promise<{ fecha: string; items: PlanificacionDiaItem[] }> =>
+      request(`/api/planificacion/fechas/${encodeURIComponent(fecha)}`),
+    putFechaItems: (
+      fecha: string,
       items: { ejercicioId: string; notas?: string }[]
     ): Promise<{ items: PlanificacionDiaItem[] }> =>
-      request(`/api/planificacion/dias/${diaSemana}/items`, {
+      request(`/api/planificacion/fechas/${encodeURIComponent(fecha)}/items`, {
         method: 'PUT',
         body: JSON.stringify({ items }),
       }),

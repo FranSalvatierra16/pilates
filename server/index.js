@@ -1771,8 +1771,13 @@ app.delete('/api/planificacion/ejercicios/:id', async (req, res) => {
   }
 });
 
-/** Planificación por día de semana (0=Lunes … 5=Sábado), mismo criterio que el calendario */
-app.get('/api/planificacion/dias/:diaSemana', async (req, res) => {
+/** Planificación por fecha concreta (YYYY-MM-DD): cada día puede tener secuencia distinta */
+function parseFechaPlanifParam(s) {
+  if (!s || typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  return s;
+}
+
+app.get('/api/planificacion/fechas/:fecha', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
@@ -1781,23 +1786,21 @@ app.get('/api/planificacion/dias/:diaSemana', async (req, res) => {
     if (!(await sucursalPlanificacionHabilitada(db, sid))) {
       return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
     }
-    const dia = parseInt(req.params.diaSemana, 10);
-    if (Number.isNaN(dia) || dia < 0 || dia > 5) {
-      return res.status(400).json({ error: 'Día 0 (Lunes) a 5 (Sábado)' });
-    }
+    const fecha = parseFechaPlanifParam(req.params.fecha);
+    if (!fecha) return res.status(400).json({ error: 'Fecha inválida (usar YYYY-MM-DD)' });
     const { rows } = await db.query(
       `SELECT i.*, e.nombre AS ejercicio_nombre
        FROM planificacion_dia_item i
        JOIN planificacion_ejercicio e ON e.id = i.ejercicio_id
-       WHERE i.sucursal_id = $1 AND i.dia_semana = $2
+       WHERE i.sucursal_id = $1 AND i.fecha = $2::date
        ORDER BY i.orden ASC`,
-      [sid, dia]
+      [sid, fecha]
     );
     res.json({
-      diaSemana: dia,
+      fecha,
       items: rows.map((it) => ({
         id: it.id,
-        diaSemana: it.dia_semana,
+        fecha: it.fecha instanceof Date ? it.fecha.toISOString().slice(0, 10) : String(it.fecha).slice(0, 10),
         orden: it.orden,
         ejercicioId: it.ejercicio_id,
         ejercicioNombre: it.ejercicio_nombre,
@@ -1810,7 +1813,7 @@ app.get('/api/planificacion/dias/:diaSemana', async (req, res) => {
   }
 });
 
-app.put('/api/planificacion/dias/:diaSemana/items', async (req, res) => {
+app.put('/api/planificacion/fechas/:fecha/items', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
@@ -1819,15 +1822,13 @@ app.put('/api/planificacion/dias/:diaSemana/items', async (req, res) => {
     if (!(await sucursalPlanificacionHabilitada(db, sid))) {
       return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
     }
-    const dia = parseInt(req.params.diaSemana, 10);
-    if (Number.isNaN(dia) || dia < 0 || dia > 5) {
-      return res.status(400).json({ error: 'Día 0 (Lunes) a 5 (Sábado)' });
-    }
+    const fecha = parseFechaPlanifParam(req.params.fecha);
+    if (!fecha) return res.status(400).json({ error: 'Fecha inválida (usar YYYY-MM-DD)' });
     const items = Array.isArray((req.body || {}).items) ? req.body.items : [];
     const client = await db.connect();
     try {
       await client.query('BEGIN');
-      await client.query('DELETE FROM planificacion_dia_item WHERE sucursal_id = $1 AND dia_semana = $2', [sid, dia]);
+      await client.query('DELETE FROM planificacion_dia_item WHERE sucursal_id = $1 AND fecha = $2::date', [sid, fecha]);
       let orden = 0;
       for (const it of items) {
         const ejId = it.ejercicioId || it.ejercicio_id;
@@ -1839,8 +1840,8 @@ app.put('/api/planificacion/dias/:diaSemana/items', async (req, res) => {
         if (ej.length === 0) continue;
         const iid = crypto.randomUUID();
         await client.query(
-          'INSERT INTO planificacion_dia_item (id, sucursal_id, dia_semana, orden, ejercicio_id, notas) VALUES ($1, $2, $3, $4, $5, $6)',
-          [iid, sid, dia, orden++, ejId, String(it.notas || '').trim()]
+          'INSERT INTO planificacion_dia_item (id, sucursal_id, fecha, orden, ejercicio_id, notas) VALUES ($1, $2, $3::date, $4, $5, $6)',
+          [iid, sid, fecha, orden++, ejId, String(it.notas || '').trim()]
         );
       }
       await client.query('COMMIT');
@@ -1854,14 +1855,14 @@ app.put('/api/planificacion/dias/:diaSemana/items', async (req, res) => {
       `SELECT i.*, e.nombre AS ejercicio_nombre
        FROM planificacion_dia_item i
        JOIN planificacion_ejercicio e ON e.id = i.ejercicio_id
-       WHERE i.sucursal_id = $1 AND i.dia_semana = $2
+       WHERE i.sucursal_id = $1 AND i.fecha = $2::date
        ORDER BY i.orden ASC`,
-      [sid, dia]
+      [sid, fecha]
     );
     res.json({
       items: out.map((it) => ({
         id: it.id,
-        diaSemana: it.dia_semana,
+        fecha: it.fecha instanceof Date ? it.fecha.toISOString().slice(0, 10) : String(it.fecha).slice(0, 10),
         orden: it.orden,
         ejercicioId: it.ejercicio_id,
         ejercicioNombre: it.ejercicio_nombre,

@@ -70,6 +70,33 @@ export function getFechaFromSemanaYDia(semana: string, diaSemana: number): strin
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Hoy en YYYY-MM-DD (medianoche local). */
+export function hoyISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Fecha inicial para planificación (Lun–Sáb). Si hoy es domingo, se usa el lunes siguiente.
+ */
+export function fechaDefaultPlanificacionStudio(): string {
+  const d = new Date();
+  if (d.getDay() === 0) {
+    d.setDate(d.getDate() + 1);
+  }
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Columna del calendario (0=Lunes … 5=Sábado) desde YYYY-MM-DD. Domingo se mapea a 0 (lunes).
+ */
+export function getDiaSemanaCalendarioDesdeISO(iso: string): number {
+  const d = parseFechaLocal(iso);
+  let js = d.getDay();
+  if (js === 0) js = 1;
+  return js - 1;
+}
+
 export const formatDate = (dateString: string): string => {
   if (!dateString || dateString.trim() === '') {
     return '-';

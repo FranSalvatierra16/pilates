@@ -540,32 +540,32 @@ export const storageHybrid = {
       storage.planificacion.saveItemsMap(m);
       return { items: out };
     },
-    getDia: async (diaSemana: number): Promise<{ diaSemana: number; items: PlanificacionDiaItem[] }> => {
-      if (useApi()) return storageApi.planificacion.getDia(diaSemana);
+    getFecha: async (fecha: string): Promise<{ fecha: string; items: PlanificacionDiaItem[] }> => {
+      if (useApi()) return storageApi.planificacion.getFecha(fecha);
       const m = storage.planificacion.getDiaItemsMap();
-      const key = String(diaSemana);
-      const raw = (m[key] || []).slice().sort((a, b) => a.orden - b.orden);
+      const raw = (m[fecha] || []).slice().sort((a, b) => a.orden - b.orden);
       const ejList = storage.planificacion.getEjercicios();
       return {
-        diaSemana,
+        fecha,
         items: raw.map((it) => ({
           ...it,
+          fecha: it.fecha || fecha,
           ejercicioNombre: ejList.find((e) => e.id === it.ejercicioId)?.nombre || '—',
         })),
       };
     },
-    putDiaItems: async (
-      diaSemana: number,
+    putFechaItems: async (
+      fecha: string,
       items: { ejercicioId: string; notas?: string }[]
     ): Promise<{ items: PlanificacionDiaItem[] }> => {
-      if (useApi()) return storageApi.planificacion.putDiaItems(diaSemana, items);
+      if (useApi()) return storageApi.planificacion.putFechaItems(fecha, items);
       const ejList = storage.planificacion.getEjercicios();
       const out: PlanificacionDiaItem[] = [];
       items.forEach((it, orden) => {
         if (!ejList.some((e) => e.id === it.ejercicioId)) return;
         out.push({
-          id: `di-${diaSemana}-${orden}-${Math.random().toString(36).slice(2, 9)}`,
-          diaSemana,
+          id: `di-${fecha}-${orden}-${Math.random().toString(36).slice(2, 9)}`,
+          fecha,
           orden,
           ejercicioId: it.ejercicioId,
           notas: (it.notas || '').trim(),
@@ -573,7 +573,7 @@ export const storageHybrid = {
         });
       });
       const m = storage.planificacion.getDiaItemsMap();
-      m[String(diaSemana)] = out;
+      m[fecha] = out;
       storage.planificacion.saveDiaItemsMap(m);
       return { items: out };
     },

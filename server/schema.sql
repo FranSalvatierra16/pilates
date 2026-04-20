@@ -311,13 +311,29 @@ CREATE INDEX IF NOT EXISTS idx_planif_item_plan ON planificacion_plan_item(plan_
 
 ALTER TABLE planificacion_ejercicio ADD COLUMN IF NOT EXISTS maquina_secundaria_id TEXT REFERENCES planificacion_maquina(id) ON DELETE SET NULL;
 
--- Planificación por día de semana (0=Lunes … 5=Sábado), alineado al calendario
+-- Planificación por fecha calendario (cada clase / día puede tener su secuencia distinta)
 CREATE TABLE IF NOT EXISTS planificacion_dia_item (
   id TEXT PRIMARY KEY,
   sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
-  dia_semana INTEGER NOT NULL CHECK (dia_semana >= 0 AND dia_semana <= 5),
+  fecha DATE NOT NULL,
   orden INTEGER NOT NULL,
   ejercicio_id TEXT NOT NULL REFERENCES planificacion_ejercicio(id) ON DELETE CASCADE,
   notas TEXT DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_planif_dia_suc_dia ON planificacion_dia_item(sucursal_id, dia_semana);
+CREATE INDEX IF NOT EXISTS idx_planif_dia_suc_fecha ON planificacion_dia_item(sucursal_id, fecha);
+
+-- Migración desde planificación por día de semana (plantilla): datos previos no se convierten
+ALTER TABLE planificacion_dia_item ADD COLUMN IF NOT EXISTS fecha DATE;
+DELETE FROM planificacion_dia_item WHERE fecha IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'planificacion_dia_item' AND column_name = 'dia_semana'
+  ) THEN
+    ALTER TABLE planificacion_dia_item DROP COLUMN dia_semana;
+  END IF;
+END $$;
+ALTER TABLE planificacion_dia_item ALTER COLUMN fecha SET NOT NULL;
+DROP INDEX IF EXISTS idx_planif_dia_suc_dia;
+CREATE INDEX IF NOT EXISTS idx_planif_dia_suc_fecha ON planificacion_dia_item(sucursal_id, fecha);

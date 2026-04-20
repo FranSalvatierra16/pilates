@@ -426,7 +426,18 @@ export const storage = {
     },
     getDiaItemsMap: (): Record<string, PlanificacionDiaItem[]> => {
       const data = localStorage.getItem(STORAGE_KEYS.planifDiaItems);
-      return data ? JSON.parse(data) : {};
+      if (!data) return {};
+      const raw = JSON.parse(data) as Record<string, PlanificacionDiaItem[]>;
+      const out: Record<string, PlanificacionDiaItem[]> = {};
+      for (const [k, items] of Object.entries(raw)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(k)) continue;
+        out[k] = (items || []).map((it, orden) => ({
+          ...it,
+          fecha: it.fecha || k,
+          orden: typeof it.orden === 'number' ? it.orden : orden,
+        }));
+      }
+      return out;
     },
     saveDiaItemsMap: (m: Record<string, PlanificacionDiaItem[]>): void => {
       localStorage.setItem(STORAGE_KEYS.planifDiaItems, JSON.stringify(m));

@@ -1,4 +1,23 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja, AgendaNota, LiberacionSemana } from '../types';
+import {
+  Alumno,
+  Actividad,
+  Pago,
+  Turno,
+  Gasto,
+  Asistencia,
+  Profesor,
+  Recuperacion,
+  AsistenciaHistorialItem,
+  InscripcionTurno,
+  CierreCaja,
+  AgendaNota,
+  LiberacionSemana,
+  PlanificacionTipoEjercicio,
+  PlanificacionMaquina,
+  PlanificacionEjercicio,
+  PlanificacionPlan,
+  PlanificacionPlanItem,
+} from '../types';
 import { getFechaFromSemanaYDia } from './date';
 
 const STORAGE_KEYS = {
@@ -14,6 +33,11 @@ const STORAGE_KEYS = {
   inscripcionesTurno: 'savia_inscripciones_turno',
   cierresCaja: 'savia_cierres_caja',
   agendaNotas: 'savia_agenda_notas',
+  planifTipos: 'savia_planif_tipos',
+  planifMaquinas: 'savia_planif_maquinas',
+  planifEjercicios: 'savia_planif_ejercicios',
+  planifPlanes: 'savia_planif_planes',
+  planifPlanItems: 'savia_planif_plan_items',
 } as const;
 
 export const storage = {
@@ -354,6 +378,44 @@ export const storage = {
     delete: (id: string): void => {
       const notas = storage.agendaNotas.getAll().filter((n) => n.id !== id);
       storage.agendaNotas.save(notas);
+    },
+  },
+
+  planificacion: {
+    getTipos: (): PlanificacionTipoEjercicio[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.planifTipos);
+      return data ? JSON.parse(data) : [];
+    },
+    saveTipos: (rows: PlanificacionTipoEjercicio[]): void => {
+      localStorage.setItem(STORAGE_KEYS.planifTipos, JSON.stringify(rows));
+    },
+    getMaquinas: (): PlanificacionMaquina[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.planifMaquinas);
+      return data ? JSON.parse(data) : [];
+    },
+    saveMaquinas: (rows: PlanificacionMaquina[]): void => {
+      localStorage.setItem(STORAGE_KEYS.planifMaquinas, JSON.stringify(rows));
+    },
+    getEjercicios: (): PlanificacionEjercicio[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.planifEjercicios);
+      return data ? JSON.parse(data) : [];
+    },
+    saveEjercicios: (rows: PlanificacionEjercicio[]): void => {
+      localStorage.setItem(STORAGE_KEYS.planifEjercicios, JSON.stringify(rows));
+    },
+    getPlanes: (): PlanificacionPlan[] => {
+      const data = localStorage.getItem(STORAGE_KEYS.planifPlanes);
+      return data ? JSON.parse(data) : [];
+    },
+    savePlanes: (rows: PlanificacionPlan[]): void => {
+      localStorage.setItem(STORAGE_KEYS.planifPlanes, JSON.stringify(rows));
+    },
+    getItemsMap: (): Record<string, PlanificacionPlanItem[]> => {
+      const data = localStorage.getItem(STORAGE_KEYS.planifPlanItems);
+      return data ? JSON.parse(data) : {};
+    },
+    saveItemsMap: (m: Record<string, PlanificacionPlanItem[]>): void => {
+      localStorage.setItem(STORAGE_KEYS.planifPlanItems, JSON.stringify(m));
     },
   },
 };

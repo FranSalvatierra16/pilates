@@ -1389,6 +1389,579 @@ app.patch('/api/sucursal/horarios', async (req, res) => {
   }
 });
 
+// --- Flags por sucursal (sesión) ---
+app.get('/api/sucursal/features', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const { rows } = await db.query('SELECT COALESCE(planificacion_habilitada, false) AS ph FROM sucursales WHERE id = $1', [sid]);
+    if (rows.length === 0) return res.status(404).json({ error: 'No encontrado' });
+    res.json({ planificacionHabilitada: rows[0].ph === true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Planificación de entrenamientos ---
+async function sucursalPlanificacionHabilitada(db, sucursalId) {
+  const { rows } = await db.query(
+    'SELECT COALESCE(planificacion_habilitada, false) AS ph FROM sucursales WHERE id = $1',
+    [sucursalId]
+  );
+  return rows.length > 0 && rows[0].ph === true;
+}
+
+function mapPlanifTipoRow(r) {
+  return { id: r.id, nombre: r.nombre, createdAt: r.created_at?.toISOString?.() ?? r.created_at };
+}
+function mapPlanifMaqRow(r) {
+  return { id: r.id, nombre: r.nombre, createdAt: r.created_at?.toISOString?.() ?? r.created_at };
+}
+function mapPlanifEjercicioRow(r) {
+  let sd = r.series_detalle;
+  if (sd && typeof sd === 'string') {
+    try {
+      sd = JSON.parse(sd);
+    } catch {
+      sd = null;
+    }
+  }
+  return {
+    id: r.id,
+    nombre: r.nombre,
+    descripcion: r.descripcion || '',
+    tipoId: r.tipo_id,
+    maquinaId: r.maquina_id,
+    modoSeries: r.modo_series,
+    unidad: r.unidad,
+    valor: r.valor,
+    numSeries: r.num_series != null ? Number(r.num_series) : 3,
+    seriesDetalle: Array.isArray(sd) ? sd : null,
+    createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+  };
+}
+function mapPlanifPlanRow(r) {
+  return {
+    id: r.id,
+    nombre: r.nombre,
+    descripcion: r.descripcion || '',
+    createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+  };
+}
+
+app.get('/api/planificacion/tipos', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rows } = await db.query(
+      'SELECT * FROM planificacion_tipo_ejercicio WHERE sucursal_id = $1 ORDER BY nombre',
+      [sid]
+    );
+    res.json(rows.map(mapPlanifTipoRow));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/planificacion/tipos', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const nombre = String((req.body || {}).nombre || '').trim();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const id = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO planificacion_tipo_ejercicio (id, sucursal_id, nombre) VALUES ($1, $2, $3)',
+      [id, sid, nombre]
+    );
+    const { rows } = await db.query('SELECT * FROM planificacion_tipo_ejercicio WHERE id = $1', [id]);
+    res.status(201).json(mapPlanifTipoRow(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/planificacion/tipos/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rowCount } = await db.query(
+      'DELETE FROM planificacion_tipo_ejercicio WHERE id = $1 AND sucursal_id = $2',
+      [req.params.id, sid]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'No encontrado' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/planificacion/maquinas', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rows } = await db.query(
+      'SELECT * FROM planificacion_maquina WHERE sucursal_id = $1 ORDER BY nombre',
+      [sid]
+    );
+    res.json(rows.map(mapPlanifMaqRow));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/planificacion/maquinas', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const nombre = String((req.body || {}).nombre || '').trim();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const id = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO planificacion_maquina (id, sucursal_id, nombre) VALUES ($1, $2, $3)',
+      [id, sid, nombre]
+    );
+    const { rows } = await db.query('SELECT * FROM planificacion_maquina WHERE id = $1', [id]);
+    res.status(201).json(mapPlanifMaqRow(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/planificacion/maquinas/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rowCount } = await db.query(
+      'DELETE FROM planificacion_maquina WHERE id = $1 AND sucursal_id = $2',
+      [req.params.id, sid]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'No encontrado' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/planificacion/ejercicios', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rows } = await db.query(
+      'SELECT * FROM planificacion_ejercicio WHERE sucursal_id = $1 ORDER BY nombre',
+      [sid]
+    );
+    res.json(rows.map(mapPlanifEjercicioRow));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/planificacion/ejercicios', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const b = req.body || {};
+    const nombre = String(b.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const modoSeries = b.modoSeries === 'serie_1_2_3' ? 'serie_1_2_3' : 'tres_iguales';
+    let unidad = null;
+    let valor = null;
+    let numSeries = 3;
+    let seriesDetalle = null;
+    if (modoSeries === 'tres_iguales') {
+      unidad = b.unidad === 'cantidad' ? 'cantidad' : 'duracion';
+      valor = String(b.valor || '').trim();
+      if (!valor) return res.status(400).json({ error: 'Indicá duración o cantidad' });
+      numSeries = Math.min(10, Math.max(1, parseInt(b.numSeries, 10) || 3));
+    } else {
+      const arr = Array.isArray(b.seriesDetalle) ? b.seriesDetalle : [];
+      if (arr.length !== 3) {
+        return res.status(400).json({ error: 'Modo serie 1, 2 y 3: cargá exactamente 3 series' });
+      }
+      seriesDetalle = arr.map((x) => ({
+        unidad: x.unidad === 'cantidad' ? 'cantidad' : 'duracion',
+        valor: String(x.valor || '').trim(),
+      }));
+      if (seriesDetalle.some((x) => !x.valor)) {
+        return res.status(400).json({ error: 'Cada serie necesita duración o cantidad' });
+      }
+    }
+    const id = crypto.randomUUID();
+    const descripcion = String(b.descripcion || '').trim();
+    const tipoId = b.tipoId || null;
+    const maquinaId = b.maquinaId || null;
+    await db.query(
+      `INSERT INTO planificacion_ejercicio (
+        id, sucursal_id, nombre, descripcion, tipo_id, maquina_id, modo_series, unidad, valor, num_series, series_detalle
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [
+        id,
+        sid,
+        nombre,
+        descripcion,
+        tipoId,
+        maquinaId,
+        modoSeries,
+        unidad,
+        valor,
+        modoSeries === 'tres_iguales' ? numSeries : null,
+        seriesDetalle ? JSON.stringify(seriesDetalle) : null,
+      ]
+    );
+    const { rows } = await db.query('SELECT * FROM planificacion_ejercicio WHERE id = $1', [id]);
+    res.status(201).json(mapPlanifEjercicioRow(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/planificacion/ejercicios/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rows: ex } = await db.query(
+      'SELECT * FROM planificacion_ejercicio WHERE id = $1 AND sucursal_id = $2',
+      [req.params.id, sid]
+    );
+    if (ex.length === 0) return res.status(404).json({ error: 'No encontrado' });
+    const b = req.body || {};
+    const modoSeries = b.modoSeries === 'serie_1_2_3' ? 'serie_1_2_3' : b.modoSeries === 'tres_iguales' ? 'tres_iguales' : ex[0].modo_series;
+    let unidad = ex[0].unidad;
+    let valor = ex[0].valor;
+    let numSeries = ex[0].num_series;
+    let seriesDetalle = ex[0].series_detalle;
+    if (modoSeries === 'tres_iguales') {
+      unidad = b.unidad === 'cantidad' ? 'cantidad' : b.unidad === 'duracion' ? 'duracion' : unidad;
+      if (b.valor !== undefined) valor = String(b.valor).trim();
+      if (b.numSeries !== undefined) numSeries = Math.min(10, Math.max(1, parseInt(b.numSeries, 10) || 3));
+      seriesDetalle = null;
+    } else {
+      if (Array.isArray(b.seriesDetalle) && b.seriesDetalle.length === 3) {
+        seriesDetalle = JSON.stringify(
+          b.seriesDetalle.map((x) => ({
+            unidad: x.unidad === 'cantidad' ? 'cantidad' : 'duracion',
+            valor: String(x.valor || '').trim(),
+          }))
+        );
+      } else {
+        const sd = ex[0].series_detalle;
+        seriesDetalle =
+          sd == null ? null : typeof sd === 'string' ? sd : JSON.stringify(sd);
+      }
+      unidad = null;
+      valor = null;
+      numSeries = null;
+    }
+    const sdParam =
+      seriesDetalle == null ? null : typeof seriesDetalle === 'string' ? seriesDetalle : JSON.stringify(seriesDetalle);
+    await db.query(
+      `UPDATE planificacion_ejercicio SET
+        nombre = COALESCE($1, nombre),
+        descripcion = COALESCE($2, descripcion),
+        tipo_id = $3,
+        maquina_id = $4,
+        modo_series = $5,
+        unidad = $6,
+        valor = $7,
+        num_series = $8,
+        series_detalle = $9::jsonb
+      WHERE id = $10 AND sucursal_id = $11`,
+      [
+        b.nombre !== undefined ? String(b.nombre).trim() : null,
+        b.descripcion !== undefined ? String(b.descripcion).trim() : null,
+        b.tipoId !== undefined ? b.tipoId || null : ex[0].tipo_id,
+        b.maquinaId !== undefined ? b.maquinaId || null : ex[0].maquina_id,
+        modoSeries,
+        unidad,
+        valor,
+        modoSeries === 'tres_iguales' ? numSeries : null,
+        sdParam,
+        req.params.id,
+        sid,
+      ]
+    );
+    const { rows } = await db.query('SELECT * FROM planificacion_ejercicio WHERE id = $1', [req.params.id]);
+    res.json(mapPlanifEjercicioRow(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/planificacion/ejercicios/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rowCount } = await db.query(
+      'DELETE FROM planificacion_ejercicio WHERE id = $1 AND sucursal_id = $2',
+      [req.params.id, sid]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'No encontrado' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/planificacion/planes', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rows } = await db.query(
+      'SELECT * FROM planificacion_plan WHERE sucursal_id = $1 ORDER BY created_at DESC',
+      [sid]
+    );
+    res.json(rows.map(mapPlanifPlanRow));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/planificacion/planes/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rows: pr } = await db.query(
+      'SELECT * FROM planificacion_plan WHERE id = $1 AND sucursal_id = $2',
+      [req.params.id, sid]
+    );
+    if (pr.length === 0) return res.status(404).json({ error: 'No encontrado' });
+    const { rows: items } = await db.query(
+      `SELECT i.*, e.nombre AS ejercicio_nombre
+       FROM planificacion_plan_item i
+       JOIN planificacion_ejercicio e ON e.id = i.ejercicio_id
+       WHERE i.plan_id = $1
+       ORDER BY i.orden ASC`,
+      [req.params.id]
+    );
+    const plan = mapPlanifPlanRow(pr[0]);
+    plan.items = items.map((it) => ({
+      id: it.id,
+      planId: it.plan_id,
+      orden: it.orden,
+      ejercicioId: it.ejercicio_id,
+      ejercicioNombre: it.ejercicio_nombre,
+      notas: it.notas || '',
+    }));
+    res.json(plan);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/planificacion/planes', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const b = req.body || {};
+    const nombre = String(b.nombre || '').trim();
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const descripcion = String(b.descripcion || '').trim();
+    const id = crypto.randomUUID();
+    await db.query(
+      'INSERT INTO planificacion_plan (id, sucursal_id, nombre, descripcion) VALUES ($1, $2, $3, $4)',
+      [id, sid, nombre, descripcion]
+    );
+    const { rows } = await db.query('SELECT * FROM planificacion_plan WHERE id = $1', [id]);
+    res.status(201).json(mapPlanifPlanRow(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/planificacion/planes/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const b = req.body || {};
+    const { rows } = await db.query(
+      'UPDATE planificacion_plan SET nombre = COALESCE($1, nombre), descripcion = COALESCE($2, descripcion) WHERE id = $3 AND sucursal_id = $4 RETURNING *',
+      [
+        b.nombre !== undefined ? String(b.nombre).trim() : null,
+        b.descripcion !== undefined ? String(b.descripcion).trim() : null,
+        req.params.id,
+        sid,
+      ]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'No encontrado' });
+    res.json(mapPlanifPlanRow(rows[0]));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/planificacion/planes/:id', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rowCount } = await db.query(
+      'DELETE FROM planificacion_plan WHERE id = $1 AND sucursal_id = $2',
+      [req.params.id, sid]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'No encontrado' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/planificacion/planes/:id/items', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const { rows: pr } = await db.query(
+      'SELECT id FROM planificacion_plan WHERE id = $1 AND sucursal_id = $2',
+      [req.params.id, sid]
+    );
+    if (pr.length === 0) return res.status(404).json({ error: 'No encontrado' });
+    const items = Array.isArray((req.body || {}).items) ? req.body.items : [];
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM planificacion_plan_item WHERE plan_id = $1', [req.params.id]);
+      let orden = 0;
+      for (const it of items) {
+        const ejId = it.ejercicioId || it.ejercicio_id;
+        if (!ejId) continue;
+        const { rows: ej } = await client.query(
+          'SELECT id FROM planificacion_ejercicio WHERE id = $1 AND sucursal_id = $2',
+          [ejId, sid]
+        );
+        if (ej.length === 0) continue;
+        const iid = crypto.randomUUID();
+        await client.query(
+          `INSERT INTO planificacion_plan_item (id, plan_id, orden, ejercicio_id, notas) VALUES ($1, $2, $3, $4, $5)`,
+          [iid, req.params.id, orden++, ejId, String(it.notas || '').trim()]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    const { rows: out } = await db.query(
+      `SELECT i.*, e.nombre AS ejercicio_nombre
+       FROM planificacion_plan_item i
+       JOIN planificacion_ejercicio e ON e.id = i.ejercicio_id
+       WHERE i.plan_id = $1 ORDER BY i.orden`,
+      [req.params.id]
+    );
+    res.json({
+      items: out.map((it) => ({
+        id: it.id,
+        planId: it.plan_id,
+        orden: it.orden,
+        ejercicioId: it.ejercicio_id,
+        ejercicioNombre: it.ejercicio_nombre,
+        notas: it.notas || '',
+      })),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Portal alumno (sin auth: por token o por DNI) ---
 function getSemanaActual() {
   const d = new Date();
@@ -2819,7 +3392,7 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
     const { rows: sucRows } = await db.query(
-      'SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil, activa, fecha_vencimiento_cuenta FROM sucursales WHERE usuario = $1',
+      'SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil, activa, fecha_vencimiento_cuenta, planificacion_habilitada FROM sucursales WHERE usuario = $1',
       [u]
     );
     if (sucRows.length === 0) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
@@ -2850,6 +3423,7 @@ app.post('/api/auth/login', async (req, res) => {
       sucursalId: s.id,
       sucursalNombre: s.nombre_lugar,
       fotoPerfil: s.foto_perfil || null,
+      planificacionHabilitada: s.planificacion_habilitada === true,
     });
   } catch (e) {
     console.error(e);
@@ -2965,6 +3539,7 @@ app.get('/api/admin/sucursales', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query(
       `SELECT s.id, s.nombre_lugar, s.usuario, s.foto_perfil, s.pago_mensual, s.fecha_vencimiento_cuenta, s.activa,
+        s.planificacion_habilitada,
         s.hora_inicio_manana, s.hora_fin_manana, s.hora_inicio_tarde, s.hora_fin_tarde,
         s.horas_antes_anotarse_clase, s.horas_antes_liberar_clase, s.created_at,
         (SELECT COUNT(*) FROM alumnos a WHERE a.sucursal_id = s.id) AS cantidad_alumnos,
@@ -2980,6 +3555,7 @@ app.get('/api/admin/sucursales', async (req, res) => {
       pagoMensual: r.pago_mensual != null ? Number(r.pago_mensual) : null,
       fechaVencimientoCuenta: r.fecha_vencimiento_cuenta ? r.fecha_vencimiento_cuenta.toISOString().slice(0, 10) : null,
       activa: r.activa !== false,
+      planificacionHabilitada: r.planificacion_habilitada === true,
       horaInicioManana: r.hora_inicio_manana || '07:00',
       horaFinManana: r.hora_fin_manana || '12:00',
       horaInicioTarde: r.hora_inicio_tarde || '16:00',
@@ -3049,6 +3625,7 @@ app.patch('/api/admin/sucursales/:id', async (req, res) => {
     if (b.horaFinTarde !== undefined) { updates.push(`hora_fin_tarde = $${i++}`); values.push(b.horaFinTarde || '21:00'); }
     if (b.horasAntesAnotarseClase !== undefined) { updates.push(`horas_antes_anotarse_clase = $${i++}`); values.push(Math.max(0, parseInt(b.horasAntesAnotarseClase, 10) || 0)); }
     if (b.horasAntesLiberarClase !== undefined) { updates.push(`horas_antes_liberar_clase = $${i++}`); values.push(Math.max(0, parseInt(b.horasAntesLiberarClase, 10) || 0)); }
+    if (typeof b.planificacionHabilitada === 'boolean') { updates.push(`planificacion_habilitada = $${i++}`); values.push(b.planificacionHabilitada); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id);
     await db.query(`UPDATE sucursales SET ${updates.join(', ')} WHERE id = $${i}`, values);

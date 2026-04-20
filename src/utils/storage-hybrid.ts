@@ -1,4 +1,23 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, Profesor, Recuperacion, AsistenciaHistorialItem, InscripcionTurno, CierreCaja, AgendaNota, LiberacionSemana } from '../types';
+import {
+  Alumno,
+  Actividad,
+  Pago,
+  Turno,
+  Gasto,
+  Asistencia,
+  Profesor,
+  Recuperacion,
+  AsistenciaHistorialItem,
+  InscripcionTurno,
+  CierreCaja,
+  AgendaNota,
+  LiberacionSemana,
+  PlanificacionTipoEjercicio,
+  PlanificacionMaquina,
+  PlanificacionEjercicio,
+  PlanificacionPlan,
+  PlanificacionPlanItem,
+} from '../types';
 import { buildCierreRetiro } from './cierre-caja';
 import { horaActualInput } from './date';
 import { storage } from './storage';
@@ -355,6 +374,169 @@ export const storageHybrid = {
     deleteByTurnoYAlumno: async (turnoId: string, alumnoId: string): Promise<void> => {
       if (useApi()) await storageApi.inscripcionesTurno.deleteByTurnoYAlumno(turnoId, alumnoId);
       else storage.inscripcionesTurno.deleteByTurnoYAlumno(turnoId, alumnoId);
+    },
+  },
+
+  planificacion: {
+    getTipos: async (): Promise<PlanificacionTipoEjercicio[]> => {
+      if (useApi()) return storageApi.planificacion.getTipos();
+      return storage.planificacion.getTipos();
+    },
+    addTipo: async (nombre: string): Promise<PlanificacionTipoEjercicio> => {
+      if (useApi()) return storageApi.planificacion.addTipo(nombre);
+      const row: PlanificacionTipoEjercicio = {
+        id: `pt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        nombre: nombre.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      const list = storage.planificacion.getTipos();
+      list.push(row);
+      storage.planificacion.saveTipos(list);
+      return row;
+    },
+    deleteTipo: async (id: string): Promise<void> => {
+      if (useApi()) return storageApi.planificacion.deleteTipo(id);
+      storage.planificacion.saveTipos(storage.planificacion.getTipos().filter((t) => t.id !== id));
+    },
+    getMaquinas: async (): Promise<PlanificacionMaquina[]> => {
+      if (useApi()) return storageApi.planificacion.getMaquinas();
+      return storage.planificacion.getMaquinas();
+    },
+    addMaquina: async (nombre: string): Promise<PlanificacionMaquina> => {
+      if (useApi()) return storageApi.planificacion.addMaquina(nombre);
+      const row: PlanificacionMaquina = {
+        id: `pm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        nombre: nombre.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      const list = storage.planificacion.getMaquinas();
+      list.push(row);
+      storage.planificacion.saveMaquinas(list);
+      return row;
+    },
+    deleteMaquina: async (id: string): Promise<void> => {
+      if (useApi()) return storageApi.planificacion.deleteMaquina(id);
+      storage.planificacion.saveMaquinas(storage.planificacion.getMaquinas().filter((m) => m.id !== id));
+    },
+    getEjercicios: async (): Promise<PlanificacionEjercicio[]> => {
+      if (useApi()) return storageApi.planificacion.getEjercicios();
+      return storage.planificacion.getEjercicios();
+    },
+    addEjercicio: async (
+      body: Partial<PlanificacionEjercicio> & { nombre: string }
+    ): Promise<PlanificacionEjercicio> => {
+      if (useApi()) return storageApi.planificacion.addEjercicio(body);
+      const modo = body.modoSeries === 'serie_1_2_3' ? 'serie_1_2_3' : 'tres_iguales';
+      const row: PlanificacionEjercicio = {
+        id: `pe-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        nombre: body.nombre.trim(),
+        descripcion: (body.descripcion || '').trim(),
+        tipoId: body.tipoId ?? null,
+        maquinaId: body.maquinaId ?? null,
+        modoSeries: modo,
+        unidad: modo === 'tres_iguales' ? (body.unidad === 'cantidad' ? 'cantidad' : 'duracion') : null,
+        valor: modo === 'tres_iguales' ? String(body.valor || '').trim() : null,
+        numSeries: modo === 'tres_iguales' ? Math.min(10, Math.max(1, Number(body.numSeries) || 3)) : 3,
+        seriesDetalle:
+          modo === 'serie_1_2_3' && Array.isArray(body.seriesDetalle) && body.seriesDetalle.length === 3
+            ? body.seriesDetalle.map((x) => ({
+                unidad: x.unidad === 'cantidad' ? 'cantidad' : 'duracion',
+                valor: String(x.valor || '').trim(),
+              }))
+            : null,
+        createdAt: new Date().toISOString(),
+      };
+      const list = storage.planificacion.getEjercicios();
+      list.push(row);
+      storage.planificacion.saveEjercicios(list);
+      return row;
+    },
+    updateEjercicio: async (id: string, body: Partial<PlanificacionEjercicio>): Promise<PlanificacionEjercicio> => {
+      if (useApi()) return storageApi.planificacion.updateEjercicio(id, body);
+      const list = storage.planificacion.getEjercicios();
+      const i = list.findIndex((e) => e.id === id);
+      if (i === -1) throw new Error('No encontrado');
+      list[i] = { ...list[i], ...body, id: list[i].id, createdAt: list[i].createdAt };
+      storage.planificacion.saveEjercicios(list);
+      return list[i];
+    },
+    deleteEjercicio: async (id: string): Promise<void> => {
+      if (useApi()) return storageApi.planificacion.deleteEjercicio(id);
+      storage.planificacion.saveEjercicios(storage.planificacion.getEjercicios().filter((e) => e.id !== id));
+    },
+    getPlanes: async (): Promise<PlanificacionPlan[]> => {
+      if (useApi()) return storageApi.planificacion.getPlanes();
+      return storage.planificacion.getPlanes();
+    },
+    getPlanById: async (id: string): Promise<PlanificacionPlan> => {
+      if (useApi()) return storageApi.planificacion.getPlanById(id);
+      const planes = storage.planificacion.getPlanes();
+      const p = planes.find((x) => x.id === id);
+      if (!p) throw new Error('No encontrado');
+      const ej = storage.planificacion.getEjercicios();
+      const map = storage.planificacion.getItemsMap();
+      const raw = (map[id] || []).slice().sort((a, b) => a.orden - b.orden);
+      const items: PlanificacionPlanItem[] = raw.map((it) => ({
+        ...it,
+        ejercicioNombre: ej.find((e) => e.id === it.ejercicioId)?.nombre || '—',
+      }));
+      return { ...p, items };
+    },
+    addPlan: async (body: { nombre: string; descripcion?: string }): Promise<PlanificacionPlan> => {
+      if (useApi()) return storageApi.planificacion.addPlan(body);
+      const row: PlanificacionPlan = {
+        id: `pp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        nombre: body.nombre.trim(),
+        descripcion: (body.descripcion || '').trim(),
+        createdAt: new Date().toISOString(),
+      };
+      const list = storage.planificacion.getPlanes();
+      list.push(row);
+      storage.planificacion.savePlanes(list);
+      return row;
+    },
+    updatePlan: async (id: string, body: { nombre?: string; descripcion?: string }): Promise<PlanificacionPlan> => {
+      if (useApi()) return storageApi.planificacion.updatePlan(id, body);
+      const list = storage.planificacion.getPlanes();
+      const i = list.findIndex((p) => p.id === id);
+      if (i === -1) throw new Error('No encontrado');
+      list[i] = {
+        ...list[i],
+        nombre: body.nombre !== undefined ? body.nombre.trim() : list[i].nombre,
+        descripcion: body.descripcion !== undefined ? body.descripcion.trim() : list[i].descripcion,
+      };
+      storage.planificacion.savePlanes(list);
+      return list[i];
+    },
+    deletePlan: async (id: string): Promise<void> => {
+      if (useApi()) return storageApi.planificacion.deletePlan(id);
+      storage.planificacion.savePlanes(storage.planificacion.getPlanes().filter((p) => p.id !== id));
+      const m = storage.planificacion.getItemsMap();
+      delete m[id];
+      storage.planificacion.saveItemsMap(m);
+    },
+    putPlanItems: async (
+      planId: string,
+      items: { ejercicioId: string; notas?: string }[]
+    ): Promise<{ items: PlanificacionPlan['items'] }> => {
+      if (useApi()) return storageApi.planificacion.putPlanItems(planId, items);
+      const ej = storage.planificacion.getEjercicios();
+      const out: PlanificacionPlanItem[] = [];
+      items.forEach((it, orden) => {
+        if (!ej.some((e) => e.id === it.ejercicioId)) return;
+        out.push({
+          id: `pi-${planId}-${orden}-${Date.now()}`,
+          planId,
+          orden,
+          ejercicioId: it.ejercicioId,
+          notas: (it.notas || '').trim(),
+          ejercicioNombre: ej.find((e) => e.id === it.ejercicioId)?.nombre,
+        });
+      });
+      const m = storage.planificacion.getItemsMap();
+      m[planId] = out;
+      storage.planificacion.saveItemsMap(m);
+      return { items: out };
     },
   },
 };

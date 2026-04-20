@@ -20,6 +20,8 @@ export interface Sucursal {
   cantidadAlumnos: number;
   cantidadActividades: number;
   cantidadProfesores: number;
+  /** Admin: módulo de planificación de entrenamientos (por defecto desactivado) */
+  planificacionHabilitada?: boolean;
 }
 
 /** Respuesta de GET /api/sucursal/horarios */
@@ -223,6 +225,60 @@ export interface AgendaNota {
   hora?: string;
   importante?: boolean;
   createdAt: string;
+}
+
+/** Catálogo de tipo de ejercicio (lo define cada estudio) */
+export interface PlanificacionTipoEjercicio {
+  id: string;
+  nombre: string;
+  createdAt: string;
+}
+
+/** Catálogo de máquina / aparato (lo define cada estudio) */
+export interface PlanificacionMaquina {
+  id: string;
+  nombre: string;
+  createdAt: string;
+}
+
+export type ModoSeriesEjercicio = 'tres_iguales' | 'serie_1_2_3';
+export type UnidadEjercicioPlan = 'duracion' | 'cantidad';
+
+export interface SerieDetallePlan {
+  unidad: UnidadEjercicioPlan;
+  valor: string;
+}
+
+/** Ejercicio guardado para reutilizar en planes */
+export interface PlanificacionEjercicio {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  tipoId: string | null;
+  maquinaId: string | null;
+  modoSeries: ModoSeriesEjercicio;
+  unidad: UnidadEjercicioPlan | null;
+  valor: string | null;
+  numSeries: number;
+  seriesDetalle: SerieDetallePlan[] | null;
+  createdAt: string;
+}
+
+export interface PlanificacionPlan {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  createdAt: string;
+  items?: PlanificacionPlanItem[];
+}
+
+export interface PlanificacionPlanItem {
+  id: string;
+  planId: string;
+  orden: number;
+  ejercicioId: string;
+  ejercicioNombre?: string;
+  notas: string;
 }
 
 // Nombres de días de la semana (sin domingo)

@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Menu,
   X,
-  Bell
+  Bell,
+  ClipboardList,
 } from 'lucide-react';
 import type { NotificacionItem } from '../pages/Notificaciones';
 
@@ -45,7 +46,11 @@ function formatNotifFecha(iso: string) {
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
-  const { logout, sucursalNombre, fotoPerfil } = useAuth();
+  const { logout, sucursalNombre, fotoPerfil, planificacionHabilitada, refreshPlanificacionFlag } = useAuth();
+
+  useEffect(() => {
+    void refreshPlanificacionFlag();
+  }, [refreshPlanificacionFlag]);
   const navigate = useNavigate();
   const [dbStatus, setDbStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -143,19 +148,26 @@ const Layout = ({ children }: LayoutProps) => {
       .catch(() => {});
   };
 
-  const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/calendario', label: 'Calendario', icon: Calendar },
-    { path: '/alumnos', label: 'Alumnos', icon: Users },
-    // { path: '/registros-link', label: 'Registros por link', icon: Link2 },
-    { path: '/profesores', label: 'Profesores', icon: GraduationCap },
-    { path: '/actividades', label: 'Actividades', icon: Activity },
-    { path: '/acceso', label: 'Acceso', icon: DoorOpen },
-    { path: '/pagos', label: 'Pagos', icon: CreditCard },
-    { path: '/caja', label: 'Caja', icon: Wallet },
-    { path: '/agenda', label: 'Agenda', icon: FileText },
-    { path: '/notificaciones', label: 'Notif.', icon: Bell },
-  ];
+  const navItems = useMemo(() => {
+    const base: Array<{ path: string; label: string; icon: typeof LayoutDashboard }> = [
+      { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/calendario', label: 'Calendario', icon: Calendar },
+      { path: '/alumnos', label: 'Alumnos', icon: Users },
+      { path: '/profesores', label: 'Profesores', icon: GraduationCap },
+      { path: '/actividades', label: 'Actividades', icon: Activity },
+    ];
+    if (planificacionHabilitada) {
+      base.push({ path: '/planificacion', label: 'Planificación', icon: ClipboardList });
+    }
+    base.push(
+      { path: '/acceso', label: 'Acceso', icon: DoorOpen },
+      { path: '/pagos', label: 'Pagos', icon: CreditCard },
+      { path: '/caja', label: 'Caja', icon: Wallet },
+      { path: '/agenda', label: 'Agenda', icon: FileText },
+      { path: '/notificaciones', label: 'Notif.', icon: Bell }
+    );
+    return base;
+  }, [planificacionHabilitada]);
 
   return (
     <div className="min-h-screen min-h-dvh flex flex-col">

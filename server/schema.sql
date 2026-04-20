@@ -255,3 +255,56 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_liberaciones_semana_unique
   ON liberaciones_semana(turno_id, alumno_id, semana);
 CREATE INDEX IF NOT EXISTS idx_liberaciones_semana_turno
   ON liberaciones_semana(turno_id, semana);
+
+-- Planificación de entrenamientos (opcional por sucursal; admin habilita)
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS planificacion_habilitada BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS planificacion_tipo_ejercicio (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_planif_tipo_sucursal ON planificacion_tipo_ejercicio(sucursal_id);
+
+CREATE TABLE IF NOT EXISTS planificacion_maquina (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_planif_maq_sucursal ON planificacion_maquina(sucursal_id);
+
+CREATE TABLE IF NOT EXISTS planificacion_ejercicio (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  descripcion TEXT DEFAULT '',
+  tipo_id TEXT REFERENCES planificacion_tipo_ejercicio(id) ON DELETE SET NULL,
+  maquina_id TEXT REFERENCES planificacion_maquina(id) ON DELETE SET NULL,
+  modo_series TEXT NOT NULL CHECK (modo_series IN ('tres_iguales', 'serie_1_2_3')),
+  unidad TEXT CHECK (unidad IN ('duracion', 'cantidad')),
+  valor TEXT,
+  num_series INTEGER DEFAULT 3,
+  series_detalle JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_planif_ej_sucursal ON planificacion_ejercicio(sucursal_id);
+
+CREATE TABLE IF NOT EXISTS planificacion_plan (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  nombre TEXT NOT NULL,
+  descripcion TEXT DEFAULT '',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_planif_plan_sucursal ON planificacion_plan(sucursal_id);
+
+CREATE TABLE IF NOT EXISTS planificacion_plan_item (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES planificacion_plan(id) ON DELETE CASCADE,
+  orden INTEGER NOT NULL,
+  ejercicio_id TEXT NOT NULL REFERENCES planificacion_ejercicio(id) ON DELETE CASCADE,
+  notas TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_planif_item_plan ON planificacion_plan_item(plan_id);

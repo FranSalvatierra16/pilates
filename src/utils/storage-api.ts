@@ -1,4 +1,25 @@
-import { Alumno, Actividad, Pago, Turno, Gasto, Asistencia, AsistenciaHistorialItem, Profesor, RegistroLink, Sucursal, HorariosSucursal, Recuperacion, InscripcionTurno, CierreCaja, AgendaNota, LiberacionSemana } from '../types';
+import {
+  Alumno,
+  Actividad,
+  Pago,
+  Turno,
+  Gasto,
+  Asistencia,
+  AsistenciaHistorialItem,
+  Profesor,
+  RegistroLink,
+  Sucursal,
+  HorariosSucursal,
+  Recuperacion,
+  InscripcionTurno,
+  CierreCaja,
+  AgendaNota,
+  LiberacionSemana,
+  PlanificacionTipoEjercicio,
+  PlanificacionMaquina,
+  PlanificacionEjercicio,
+  PlanificacionPlan,
+} from '../types';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -203,6 +224,50 @@ export const storageApi = {
       horasAntesLiberarClase?: number;
     }): Promise<void> =>
       request('/api/sucursal/horarios', { method: 'PATCH', body: JSON.stringify(data) }),
+    getFeatures: (): Promise<{ planificacionHabilitada: boolean }> =>
+      request('/api/sucursal/features'),
+  },
+  planificacion: {
+    getTipos: (): Promise<PlanificacionTipoEjercicio[]> => request('/api/planificacion/tipos'),
+    addTipo: (nombre: string): Promise<PlanificacionTipoEjercicio> =>
+      request('/api/planificacion/tipos', { method: 'POST', body: JSON.stringify({ nombre }) }),
+    deleteTipo: (id: string): Promise<void> =>
+      request(`/api/planificacion/tipos/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    getMaquinas: (): Promise<PlanificacionMaquina[]> => request('/api/planificacion/maquinas'),
+    addMaquina: (nombre: string): Promise<PlanificacionMaquina> =>
+      request('/api/planificacion/maquinas', { method: 'POST', body: JSON.stringify({ nombre }) }),
+    deleteMaquina: (id: string): Promise<void> =>
+      request(`/api/planificacion/maquinas/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    getEjercicios: (): Promise<PlanificacionEjercicio[]> => request('/api/planificacion/ejercicios'),
+    addEjercicio: (body: Partial<PlanificacionEjercicio> & { nombre: string }): Promise<PlanificacionEjercicio> =>
+      request('/api/planificacion/ejercicios', { method: 'POST', body: JSON.stringify(body) }),
+    updateEjercicio: (id: string, body: Partial<PlanificacionEjercicio>): Promise<PlanificacionEjercicio> =>
+      request(`/api/planificacion/ejercicios/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    deleteEjercicio: (id: string): Promise<void> =>
+      request(`/api/planificacion/ejercicios/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    getPlanes: (): Promise<PlanificacionPlan[]> => request('/api/planificacion/planes'),
+    getPlanById: (id: string): Promise<PlanificacionPlan> =>
+      request(`/api/planificacion/planes/${encodeURIComponent(id)}`),
+    addPlan: (body: { nombre: string; descripcion?: string }): Promise<PlanificacionPlan> =>
+      request('/api/planificacion/planes', { method: 'POST', body: JSON.stringify(body) }),
+    updatePlan: (id: string, body: { nombre?: string; descripcion?: string }): Promise<PlanificacionPlan> =>
+      request(`/api/planificacion/planes/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    deletePlan: (id: string): Promise<void> =>
+      request(`/api/planificacion/planes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    putPlanItems: (
+      planId: string,
+      items: { ejercicioId: string; notas?: string }[]
+    ): Promise<{ items: PlanificacionPlan['items'] }> =>
+      request(`/api/planificacion/planes/${encodeURIComponent(planId)}/items`, {
+        method: 'PUT',
+        body: JSON.stringify({ items }),
+      }),
   },
   admin: {
     getSucursales: (): Promise<Sucursal[]> => request<Sucursal[]>('/api/admin/sucursales'),
@@ -229,6 +294,7 @@ export const storageApi = {
         horaFinTarde?: string;
         horasAntesAnotarseClase?: number;
         horasAntesLiberarClase?: number;
+        planificacionHabilitada?: boolean;
       }
     ): Promise<void> =>
       request(`/api/admin/sucursales/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),

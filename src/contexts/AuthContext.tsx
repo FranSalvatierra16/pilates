@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { setAuthToken } from '../utils/storage-api';
+import { setAuthToken, storageApi } from '../utils/storage-api';
 
 const TOKEN_KEY = 'savia_token';
 const ROLE_KEY = 'savia_role';
 const SUCURSAL_ID_KEY = 'savia_sucursalId';
 const SUCURSAL_NOMBRE_KEY = 'savia_sucursalNombre';
 const FOTO_PERFIL_KEY = 'savia_fotoPerfil';
+const PLANIFICACION_KEY = 'savia_planificacion_habilitada';
 
 export type Role = 'admin' | 'sucursal';
 
@@ -16,9 +17,13 @@ interface AuthContextType {
   sucursalId: string | null;
   sucursalNombre: string | null;
   fotoPerfil: string | null;
+  /** Solo sucursal: módulo planificación (admin lo activa por sede) */
+  planificacionHabilitada: boolean;
   isAdmin: boolean;
   login: (username: string, password: string) => Promise<{ role: Role } | { error: string }>;
   logout: () => void;
+  /** Sincroniza el flag con el servidor (ej. después de que admin habilita planificación) */
+  refreshPlanificacionFlag: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,6 +35,10 @@ const useApi = () => {
 };
 const getApiBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
+function readPlanificacionStored(): boolean {
+  return localStorage.getItem(PLANIFICACION_KEY) === 'true';
+}
+
 type AuthState = {
   isAuthenticated: boolean;
   role: Role | null;
@@ -37,14 +46,24 @@ type AuthState = {
   sucursalId: string | null;
   sucursalNombre: string | null;
   fotoPerfil: string | null;
+  planificacionHabilitada: boolean;
 };
 
 function loadStored(): AuthState {
   const token = localStorage.getItem(TOKEN_KEY);
   const role = localStorage.getItem(ROLE_KEY) as Role | null;
-  if (!token || !role) return { isAuthenticated: false, role: null, token: null, sucursalId: null, sucursalNombre: null, fotoPerfil: null };
+  if (!token || !role) {
+    return {
+      isAuthenticated: false,
+      role: null,
+      token: null,
+      sucursalId: null,
+      sucursalNombre: null,
+      fotoPerfil: null,
+      planificacionHabilitada: false,
+    };
+  }
   let sucursalId = localStorage.getItem(SUCURSAL_ID_KEY);
-  // Sesiones antiguas pueden no tener sucursalId; lo obtenemos del JWT
   if (!sucursalId && role === 'sucursal') {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
@@ -54,6 +73,7 @@ function loadStored(): AuthState {
       // ignore
     }
   }
+  const planificacionHabilitada = role === 'sucursal' ? readPlanificacionStored() : false;
   return {
     isAuthenticated: true,
     role,
@@ -61,6 +81,7 @@ function loadStored(): AuthState {
     sucursalId,
     sucursalNombre: localStorage.getItem(SUCURSAL_NOMBRE_KEY),
     fotoPerfil: localStorage.getItem(FOTO_PERFIL_KEY),
+    planificacionHabilitada,
   };
 }
 
@@ -82,11 +103,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       else localStorage.removeItem(SUCURSAL_NOMBRE_KEY);
       if (state.fotoPerfil) localStorage.setItem(FOTO_PERFIL_KEY, state.fotoPerfil);
       else localStorage.removeItem(FOTO_PERFIL_KEY);
+      if (state.role === 'sucursal') {
+        localStorage.setItem(PLANIFICACION_KEY, state.planificacionHabilitada ? 'true' : 'false');
+      }
     } else {
       setAuthToken(null);
-      [TOKEN_KEY, ROLE_KEY, SUCURSAL_ID_KEY, SUCURSAL_NOMBRE_KEY, FOTO_PERFIL_KEY].forEach((k) => localStorage.removeItem(k));
+      [TOKEN_KEY, ROLE_KEY, SUCURSAL_ID_KEY, SUCURSAL_NOMBRE_KEY, FOTO_PERFIL_KEY, PLANIFICACION_KEY].forEach((k) =>
+        localStorage.removeItem(k)
+      );
     }
-  }, [state.isAuthenticated, state.token, state.role, state.sucursalId, state.sucursalNombre, state.fotoPerfil]);
+  }, [
+    state.isAuthenticated,
+    state.token,
+    state.role,
+    state.sucursalId,
+    state.sucursalNombre,
+    state.fotoPerfil,
+    state.planificacionHabilitada,
+  ]);
+
+  const refreshPlanificacionFlag = useCallback(async () => {
+    if (!useApi()) {
+      setState((s) => (s.role === 'sucursal' ? { ...s, planificacionHabilitada: true } : s));
+      return;
+    }
+    if (state.role !== 'sucursal' || !state.token) return;
+    try {
+      const { planificacionHabilitada } = await storageApi.sucursal.getFeatures();
+      setState((s) => ({ ...s, planificacionHabilitada }));
+    } catch {
+      /* ignore */
+    }
+  }, [state.role, state.token]);
 
   const login = useCallback(async (username: string, password: string): Promise<{ role: Role } | { error: string }> => {
     if (useApi()) {
@@ -99,6 +147,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok && data.token && data.role) {
           const role = data.role as Role;
+          const planificacionHabilitada = role === 'sucursal' && data.planificacionHabilitada === true;
           setAuthToken(data.token);
           localStorage.setItem(TOKEN_KEY, data.token);
           localStorage.setItem(ROLE_KEY, role);
@@ -108,6 +157,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           else localStorage.removeItem(SUCURSAL_NOMBRE_KEY);
           if (data.fotoPerfil) localStorage.setItem(FOTO_PERFIL_KEY, data.fotoPerfil);
           else localStorage.removeItem(FOTO_PERFIL_KEY);
+          if (role === 'sucursal') {
+            localStorage.setItem(PLANIFICACION_KEY, planificacionHabilitada ? 'true' : 'false');
+          }
           setState({
             isAuthenticated: true,
             token: data.token,
@@ -115,6 +167,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             sucursalId: data.sucursalId ?? null,
             sucursalNombre: data.sucursalNombre ?? null,
             fotoPerfil: data.fotoPerfil ?? null,
+            planificacionHabilitada: role === 'sucursal' ? planificacionHabilitada : false,
           });
           return { role };
         }
@@ -124,6 +177,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     if (username === 'Savia' && password === '2286') {
+      localStorage.setItem(PLANIFICACION_KEY, 'true');
       setState({
         isAuthenticated: true,
         token: null,
@@ -131,6 +185,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         sucursalId: null,
         sucursalNombre: 'Savia',
         fotoPerfil: null,
+        planificacionHabilitada: true,
       });
       return { role: 'sucursal' };
     }
@@ -145,6 +200,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       sucursalId: null,
       sucursalNombre: null,
       fotoPerfil: null,
+      planificacionHabilitada: false,
     });
   }, []);
 
@@ -157,9 +213,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         sucursalId: state.sucursalId,
         sucursalNombre: state.sucursalNombre,
         fotoPerfil: state.fotoPerfil,
+        planificacionHabilitada: state.planificacionHabilitada,
         isAdmin: state.role === 'admin',
         login,
         logout,
+        refreshPlanificacionFlag,
       }}
     >
       {children}

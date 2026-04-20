@@ -19,6 +19,7 @@ export default function AdminSucursalEditar() {
   const [horaFinManana, setHoraFinManana] = useState('12:00');
   const [horaInicioTarde, setHoraInicioTarde] = useState('16:00');
   const [horaFinTarde, setHoraFinTarde] = useState('21:00');
+  const [planificacionHabilitada, setPlanificacionHabilitada] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
@@ -41,6 +42,7 @@ export default function AdminSucursalEditar() {
           setHoraFinManana(s.horaFinManana || '12:00');
           setHoraInicioTarde(s.horaInicioTarde || '16:00');
           setHoraFinTarde(s.horaFinTarde || '21:00');
+          setPlanificacionHabilitada(s.planificacionHabilitada === true);
         } else {
           setLoadError('Sucursal no encontrada');
         }
@@ -80,6 +82,7 @@ export default function AdminSucursalEditar() {
       horaFinManana?: string;
       horaInicioTarde?: string;
       horaFinTarde?: string;
+      planificacionHabilitada?: boolean;
     } = {
       nombreLugar: nombreLugar.trim(),
       usuario: usuario.trim(),
@@ -93,6 +96,7 @@ export default function AdminSucursalEditar() {
     updates.horaFinManana = horaFinManana;
     updates.horaInicioTarde = horaInicioTarde;
     updates.horaFinTarde = horaFinTarde;
+    updates.planificacionHabilitada = planificacionHabilitada;
     setLoading(true);
     try {
       await storageApi.admin.updateSucursal(id, updates);
@@ -240,6 +244,24 @@ export default function AdminSucursalEditar() {
             <label htmlFor="activa" className="text-sm font-medium text-gray-700">
               Cuenta activa (si la desactivás, no podrá iniciar sesión hasta que la reactives)
             </label>
+          </div>
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-violet-200 bg-violet-50/80">
+            <input
+              type="checkbox"
+              id="planificacion"
+              checked={planificacionHabilitada}
+              onChange={(e) => setPlanificacionHabilitada(e.target.checked)}
+              className="w-4 h-4 mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <div>
+              <label htmlFor="planificacion" className="text-sm font-medium text-gray-800">
+                Planificación de entrenamientos
+              </label>
+              <p className="text-xs text-gray-600 mt-0.5">
+                Por defecto está desactivada. Si la activás, esta sede verá el menú Planificación para cargar ejercicios,
+                tipos, máquinas y planes de clase.
+              </p>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Foto de perfil</label>

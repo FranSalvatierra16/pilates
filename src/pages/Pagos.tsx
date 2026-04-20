@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, X, Save, Calendar, Trash2 } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, CierreCaja } from '../types';
 import { storage } from '../utils/storage';
@@ -22,6 +22,9 @@ const Pagos = () => {
     fecha: new Date().toISOString().split('T')[0],
     descripcion: '', // para aporte a caja (sin alumno)
   });
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   useEffect(() => {
@@ -157,6 +160,12 @@ const Pagos = () => {
     if (!ok) return;
     try {
       await storageHybrid.pagos.delete(pago.id);
+      setSelectedIds((prev) => {
+        if (!prev.has(pago.id)) return prev;
+        const next = new Set(prev);
+        next.delete(pago.id);
+        return next;
+      });
       await loadPagos();
       await loadAlumnos();
     } catch (error) {
@@ -165,10 +174,88 @@ const Pagos = () => {
     }
   };
 
-  const ultimoCierre = getUltimoCierre(cierres);
-  const pagosCajaActual = ultimoCierre
-    ? pagos.filter((p) => estaEnPeriodoAbiertoCaja(p, ultimoCierre))
-    : pagos;
+  const ultimoCierre = useMemo(() => getUltimoCierre(cierres), [cierres]);
+  const pagosCajaActual = useMemo(
+    () =>
+      ultimoCierre ? pagos.filter((p) => estaEnPeriodoAbiertoCaja(p, ultimoCierre)) : pagos,
+    [pagos, ultimoCierre]
+  );
+
+  useEffect(() => {
+    const valid = new Set(pagosCajaActual.map((p) => p.id));
+    setSelectedIds((prev) => {
+      let removed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (valid.has(id)) next.add(id);
+        else removed = true;
+      });
+      return removed ? next : prev;
+    });
+  }, [pagosCajaActual]);
+
+  const idsVisibles = useMemo(() => pagosCajaActual.map((p) => p.id), [pagosCajaActual]);
+  const todosSeleccionados =
+    idsVisibles.length > 0 && idsVisibles.every((id) => selectedIds.has(id));
+  const algunosSeleccionados = idsVisibles.some((id) => selectedIds.has(id)) && !todosSeleccionados;
+
+  useEffect(() => {
+    const el = selectAllRef.current;
+    if (el) el.indeterminate = algunosSeleccionados;
+  }, [algunosSeleccionados]);
+
+  const toggleSeleccion = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSeleccionarTodosVisibles = () => {
+    setSelectedIds((prev) => {
+      if (idsVisibles.length === 0) return prev;
+      if (idsVisibles.every((id) => prev.has(id))) {
+        const next = new Set(prev);
+        idsVisibles.forEach((id) => next.delete(id));
+        return next;
+      }
+      const next = new Set(prev);
+      idsVisibles.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const limpiarSeleccion = () => setSelectedIds(new Set());
+
+  const handleEliminarSeleccionados = async () => {
+    const seleccionados = pagosCajaActual.filter((p) => selectedIds.has(p.id));
+    if (seleccionados.length === 0) return;
+    const total = seleccionados.reduce((s, p) => s + p.monto, 0);
+    const ok = await toast.confirm(
+      `¿Eliminar ${seleccionados.length} pago${seleccionados.length === 1 ? '' : 's'} (${formatCurrency(total)})? Esta acción no se puede deshacer.`,
+      { title: 'Eliminar pagos', confirmText: 'Eliminar todos' }
+    );
+    if (!ok) return;
+    try {
+      for (const p of seleccionados) {
+        await storageHybrid.pagos.delete(p.id);
+      }
+      limpiarSeleccion();
+      await loadPagos();
+      await loadAlumnos();
+      toast.success(
+        seleccionados.length === 1 ? 'Pago eliminado.' : `${seleccionados.length} pagos eliminados.`
+      );
+    } catch (error) {
+      console.error('Error al eliminar pagos:', error);
+      toast.error('No se pudieron eliminar todos los pagos. Recargá la lista y revisá qué quedó registrado.');
+      await loadPagos();
+    }
+  };
+
+  const cantidadSeleccionados = idsVisibles.filter((id) => selectedIds.has(id)).length;
   const totalEfectivo = pagosCajaActual
     .filter(p => p.metodoPago === 'efectivo')
     .reduce((sum, p) => sum + p.monto, 0);
@@ -250,6 +337,29 @@ const Pagos = () => {
         </div>
       </div>
 
+      {!loading && pagosCajaActual.length > 0 && cantidadSeleccionados > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 sm:p-4 rounded-xl border border-primary-200 bg-primary-50/80">
+          <p className="text-sm font-medium text-gray-800">
+            {cantidadSeleccionados === 1
+              ? '1 pago seleccionado'
+              : `${cantidadSeleccionados} pagos seleccionados`}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={limpiarSeleccion} className="btn-secondary text-sm py-2 px-3">
+              Quitar selección
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleEliminarSeleccionados()}
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 text-white text-sm font-medium py-2 px-3 hover:bg-red-700 touch-manipulation"
+            >
+              <Trash2 className="w-4 h-4" />
+              Eliminar seleccionados
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Lista de Pagos */}
       {loading ? (
         <div className="card text-center py-12">
@@ -268,13 +378,22 @@ const Pagos = () => {
           {pagosCajaActual.map((pago) => (
             <div key={pago.id} className="card p-4 border border-gray-200">
               <div className="flex justify-between items-start gap-2 mb-2">
-                <div>
+                <label className="flex items-start gap-3 min-w-0 flex-1 cursor-pointer touch-manipulation">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    checked={selectedIds.has(pago.id)}
+                    onChange={() => toggleSeleccion(pago.id)}
+                    aria-label={`Seleccionar pago de ${getAlumnoNombre(pago)}`}
+                  />
+                  <div className="min-w-0">
                   <p className="font-semibold text-gray-900 text-base">{getAlumnoNombre(pago)}</p>
                   <p className="text-sm text-gray-500 flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
                     {formatDate(pago.fecha)} {formatHora24(pago.hora)}
                   </p>
-                </div>
+                  </div>
+                </label>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <span className="text-lg font-bold text-gray-900">{formatCurrency(pago.monto)}</span>
                   <button
@@ -304,16 +423,35 @@ const Pagos = () => {
             <table className="w-full min-w-[640px]">
               <thead className="bg-primary-50">
                 <tr>
+                  <th className="pl-4 sm:pl-6 pr-2 py-3 w-12">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      checked={todosSeleccionados}
+                      onChange={toggleSeleccionarTodosVisibles}
+                      aria-label="Seleccionar todos los pagos visibles"
+                    />
+                  </th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Fecha</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Alumno</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Monto</th>
                   <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Método</th>
-                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-20">Eliminar</th>
+                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider w-24">Acciones</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {pagosCajaActual.map((pago) => (
                   <tr key={pago.id} className="hover:bg-gray-50">
+                    <td className="pl-4 sm:pl-6 pr-2 py-4 align-middle">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        checked={selectedIds.has(pago.id)}
+                        onChange={() => toggleSeleccion(pago.id)}
+                        aria-label={`Seleccionar pago de ${getAlumnoNombre(pago)}`}
+                      />
+                    </td>
                     <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2 text-sm text-gray-900">
                         <Calendar className="w-4 h-4 text-gray-400" />

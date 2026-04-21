@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Plus, X, Save, Calendar, Trash2 } from 'lucide-react';
-import { Alumno, Pago, MetodoPago, CierreCaja } from '../types';
+import { Alumno, Pago, MetodoPago, CierreCaja, Gasto } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, calcularFechaVencimiento, horaActualInput, formatHora24, formatDateTime } from '../utils/date';
@@ -11,6 +11,7 @@ import { useToast } from '../components/ToastProvider';
 const Pagos = () => {
   const toast = useToast();
   const [pagos, setPagos] = useState<Pago[]>([]);
+  const [gastos, setGastos] = useState<Gasto[]>([]);
   const [cierres, setCierres] = useState<CierreCaja[]>([]);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,23 +44,27 @@ const Pagos = () => {
   const loadPagos = async () => {
     try {
       setLoading(true);
-      const [todosPagos, todosCierres] = await Promise.all([
+      const [todosPagos, todosCierres, todosGastos] = await Promise.all([
         storageHybrid.pagos.getAll(),
         storageHybrid.cierresCaja.getAll().catch(() => [] as CierreCaja[]),
+        storageHybrid.gastos.getAll().catch(() => [] as Gasto[]),
       ]);
       setPagos(todosPagos.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ));
       setCierres(todosCierres);
+      setGastos(todosGastos);
     } catch (error) {
       console.error('Error loading pagos:', error);
       // Fallback a localStorage
       const todosPagos = storage.pagos.getAll();
       const todosCierres = storage.cierresCaja.getAll();
+      const todosGastos = storage.gastos.getAll();
       setPagos(todosPagos.sort((a, b) => 
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       ));
       setCierres(todosCierres);
+      setGastos(todosGastos);
     } finally {
       setLoading(false);
     }
@@ -181,6 +186,12 @@ const Pagos = () => {
     [pagos, ultimoCierre]
   );
 
+  /** Misma regla que Caja: período abierto (sueldos no entran al resumen de sesión). */
+  const gastosCajaActual = useMemo(
+    () => gastos.filter((g) => estaEnPeriodoAbiertoCaja(g, ultimoCierre)),
+    [gastos, ultimoCierre]
+  );
+
   useEffect(() => {
     const valid = new Set(pagosCajaActual.map((p) => p.id));
     setSelectedIds((prev) => {
@@ -256,13 +267,24 @@ const Pagos = () => {
   };
 
   const cantidadSeleccionados = idsVisibles.filter((id) => selectedIds.has(id)).length;
-  const totalEfectivo = pagosCajaActual
-    .filter(p => p.metodoPago === 'efectivo')
+
+  const periodoEfectivoIng = pagosCajaActual
+    .filter((p) => p.metodoPago === 'efectivo')
     .reduce((sum, p) => sum + p.monto, 0);
-  const totalTransferencia = pagosCajaActual
-    .filter(p => p.metodoPago === 'transferencia')
+  const periodoTransfIng = pagosCajaActual
+    .filter((p) => p.metodoPago === 'transferencia')
     .reduce((sum, p) => sum + p.monto, 0);
-  const totalGeneral = totalEfectivo + totalTransferencia;
+  const periodoEfectivoGas = gastosCajaActual
+    .filter((g) => g.metodoPago === 'efectivo')
+    .reduce((sum, g) => sum + g.monto, 0);
+  const periodoTransfGas = gastosCajaActual
+    .filter((g) => g.metodoPago === 'transferencia')
+    .reduce((sum, g) => sum + g.monto, 0);
+  const periodoIngresos = periodoEfectivoIng + periodoTransfIng;
+  const periodoGastos = periodoEfectivoGas + periodoTransfGas;
+  const periodoNeto = periodoIngresos - periodoGastos;
+  const netEfectivoPeriodo = periodoEfectivoIng - periodoEfectivoGas;
+  const netTransferenciaPeriodo = periodoTransfIng - periodoTransfGas;
   const periodoTexto = ultimoCierre
     ? formatDateTime(
         ultimoCierre.cerradoEn ??
@@ -291,46 +313,62 @@ const Pagos = () => {
         </button>
       </div>
 
-      {/* Resumen: saldo neto por método (en Pagos solo hay ingresos) */}
+      {/* Resumen: mismos criterios que Caja (ingresos − gastos por método en el período actual) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="card bg-green-50 border border-green-200">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-green-600 mb-1">Efectivo — Caja actual</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-green-600 mb-1">Efectivo — período actual</p>
               <p className="text-2xl font-bold text-green-900">
-                {formatCurrency(totalEfectivo)}
+                {formatCurrency(netEfectivoPeriodo)}
               </p>
-              <p className="text-xs text-green-700 mt-0.5">Ingresos en efectivo de la caja abierta</p>
+              <p className="text-xs text-green-700 mt-0.5">
+                Ingresos: {formatCurrency(periodoEfectivoIng)}
+              </p>
+              {periodoEfectivoGas > 0 ? (
+                <p className="text-xs text-red-600">Gastos: - {formatCurrency(periodoEfectivoGas)}</p>
+              ) : (
+                <p className="text-xs text-green-700">Sin gastos en efectivo (período)</p>
+              )}
             </div>
-            <div className="bg-green-200 p-3 rounded-lg">
+            <div className="bg-green-200 p-3 rounded-lg shrink-0">
               <span className="text-2xl">💰</span>
             </div>
           </div>
         </div>
         <div className="card bg-blue-50 border border-blue-200">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-blue-600 mb-1">Transferencia — Caja actual</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-blue-600 mb-1">Transferencia — período actual</p>
               <p className="text-2xl font-bold text-blue-900">
-                {formatCurrency(totalTransferencia)}
+                {formatCurrency(netTransferenciaPeriodo)}
               </p>
-              <p className="text-xs text-blue-700 mt-0.5">Ingresos por transferencia de la caja abierta</p>
+              <p className="text-xs text-blue-700 mt-0.5">
+                Ingresos: {formatCurrency(periodoTransfIng)}
+              </p>
+              {periodoTransfGas > 0 ? (
+                <p className="text-xs text-red-600">Gastos: - {formatCurrency(periodoTransfGas)}</p>
+              ) : (
+                <p className="text-xs text-blue-700">Sin gastos en transferencia (período)</p>
+              )}
             </div>
-            <div className="bg-blue-200 p-3 rounded-lg">
+            <div className="bg-blue-200 p-3 rounded-lg shrink-0">
               <span className="text-2xl">💳</span>
             </div>
           </div>
         </div>
         <div className="card bg-primary-50 border border-primary-200">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-primary-600 mb-1">Total — Caja actual</p>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-primary-600 mb-1">Neto — período actual</p>
               <p className="text-2xl font-bold text-primary-900">
-                {formatCurrency(totalGeneral)}
+                {formatCurrency(periodoNeto)}
               </p>
-              <p className="text-xs text-primary-700 mt-0.5">Todos los pagos de la caja abierta</p>
+              <p className="text-xs text-primary-700 mt-0.5">
+                Ingresos {formatCurrency(periodoIngresos)} − gastos {formatCurrency(periodoGastos)}
+              </p>
             </div>
-            <div className="bg-primary-200 p-3 rounded-lg">
+            <div className="bg-primary-200 p-3 rounded-lg shrink-0">
               <span className="text-2xl">💵</span>
             </div>
           </div>

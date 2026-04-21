@@ -10,6 +10,9 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
+  Copy,
+  Download,
 } from 'lucide-react';
 import {
   PlanificacionEjercicio,
@@ -98,6 +101,10 @@ const Planificacion = () => {
   const [filtroTipoId, setFiltroTipoId] = useState('');
   const [filtroMaquinaId, setFiltroMaquinaId] = useState('');
   const [busquedaEj, setBusquedaEj] = useState('');
+  const [fechaCopiarDestino, setFechaCopiarDestino] = useState('');
+  const [fechaTraerOrigen, setFechaTraerOrigen] = useState('');
+  const [modalReemplazoIdx, setModalReemplazoIdx] = useState<number | null>(null);
+  const [busquedaReemplazo, setBusquedaReemplazo] = useState('');
 
   const loadAll = useCallback(async () => {
     if (!planificacionHabilitada) return;
@@ -315,6 +322,70 @@ const Planificacion = () => {
 
   const quitarItem = (index: number) => {
     setItemsOrden((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const copiarSecuenciaAOtraFecha = async () => {
+    const dest = fechaCopiarDestino.trim();
+    if (!dest) {
+      toast.warning('Elegí la fecha destino');
+      return;
+    }
+    if (dest === fechaSeleccionada) {
+      toast.warning('La fecha destino tiene que ser distinta a la que estás editando');
+      return;
+    }
+    const ok = await toast.confirm(
+      `¿Copiar estos ${itemsOrden.length} ejercicios al ${formatDate(dest)}? Se reemplaza lo que hubiera guardado ese día.`,
+      { title: 'Copiar secuencia', confirmText: 'Copiar' }
+    );
+    if (!ok) return;
+    try {
+      await storageHybrid.planificacion.putFechaItems(dest, itemsOrden);
+      toast.success(`Secuencia copiada al ${formatDate(dest)}`);
+    } catch {
+      toast.error('No se pudo copiar');
+    }
+  };
+
+  const traerSecuenciaDesdeOtraFecha = async () => {
+    const orig = fechaTraerOrigen.trim();
+    if (!orig) {
+      toast.warning('Elegí la fecha de origen');
+      return;
+    }
+    try {
+      const data = await storageHybrid.planificacion.getFecha(orig);
+      setItemsOrden(
+        (data.items || []).map((it) => ({ ejercicioId: it.ejercicioId, notas: it.notas || '' }))
+      );
+      toast.success(
+        `Cargada la secuencia del ${formatDate(orig)}. Revisá y tocá «Guardar» para dejarla en ${formatDate(fechaSeleccionada)}.`
+      );
+    } catch {
+      toast.error('No se pudo cargar esa fecha');
+    }
+  };
+
+  const ejerciciosParaReemplazo = useMemo(() => {
+    const q = busquedaReemplazo.trim().toLowerCase();
+    return ejercicios.filter((ej) => {
+      if (!q) return true;
+      return `${ej.nombre} ${ej.descripcion || ''}`.toLowerCase().includes(q);
+    });
+  }, [ejercicios, busquedaReemplazo]);
+
+  const aplicarReemplazo = (nuevoEjercicioId: string) => {
+    if (modalReemplazoIdx === null) return;
+    const idx = modalReemplazoIdx;
+    const anterior = itemsOrden[idx]?.ejercicioId;
+    setItemsOrden((prev) =>
+      prev.map((row, i) => (i === idx ? { ...row, ejercicioId: nuevoEjercicioId } : row))
+    );
+    setModalReemplazoIdx(null);
+    setBusquedaReemplazo('');
+    if (nuevoEjercicioId !== anterior) {
+      toast.success('Ejercicio reemplazado (guardá la secuencia para persistir)');
+    }
   };
 
   if (!planificacionHabilitada) {
@@ -667,6 +738,51 @@ const Planificacion = () => {
                   </strong>{' '}
                   — solo esta fecha. Ordená con las flechas o agregá desde la lista y guardá.
                 </p>
+                <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 mb-4 space-y-3">
+                  <p className="text-xs font-medium text-gray-700">Copiar entre fechas</p>
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 items-end">
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="block text-xs text-gray-600 mb-1">Traer secuencia desde</label>
+                      <input
+                        type="date"
+                        className="input-field text-sm"
+                        value={fechaTraerOrigen}
+                        onChange={(e) => setFechaTraerOrigen(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary inline-flex items-center gap-1.5 text-sm"
+                      onClick={() => void traerSecuenciaDesdeOtraFecha()}
+                    >
+                      <Download className="w-4 h-4" />
+                      Traer al día actual
+                    </button>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 items-end border-t border-gray-200 pt-3">
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="block text-xs text-gray-600 mb-1">Copiar esta secuencia a</label>
+                      <input
+                        type="date"
+                        className="input-field text-sm"
+                        value={fechaCopiarDestino}
+                        onChange={(e) => setFechaCopiarDestino(e.target.value)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-primary inline-flex items-center gap-1.5 text-sm"
+                      onClick={() => void copiarSecuenciaAOtraFecha()}
+                      disabled={itemsOrden.length === 0}
+                    >
+                      <Copy className="w-4 h-4" />
+                      Copiar (guarda allá)
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    «Traer» carga en pantalla (podés editar antes de guardar). «Copiar» escribe ya en la otra fecha.
+                  </p>
+                </div>
                 <ol className="space-y-2 mb-4">
                   {itemsOrden.map((it, idx) => {
                     const ej = ejercicios.find((e) => e.id === it.ejercicioId);
@@ -696,7 +812,7 @@ const Planificacion = () => {
                             }}
                           />
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 items-center flex-shrink-0">
                           <button
                             type="button"
                             className="btn-secondary text-xs py-1 px-2"
@@ -724,6 +840,18 @@ const Planificacion = () => {
                             }
                           >
                             ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="p-1.5 rounded text-primary-600 hover:bg-primary-50"
+                            title="Reemplazar por otro ejercicio"
+                            aria-label="Reemplazar ejercicio"
+                            onClick={() => {
+                              setBusquedaReemplazo('');
+                              setModalReemplazoIdx(idx);
+                            }}
+                          >
+                            <RefreshCw className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
@@ -931,6 +1059,57 @@ const Planificacion = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {modalReemplazoIdx !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-[60] p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[85vh] flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h2 className="text-lg font-bold text-gray-900">Reemplazar ejercicio</h2>
+              <button
+                type="button"
+                className="p-2 text-gray-400 hover:text-gray-600"
+                onClick={() => {
+                  setModalReemplazoIdx(null);
+                  setBusquedaReemplazo('');
+                }}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-hidden flex flex-col gap-3">
+              <p className="text-xs text-gray-600">
+                Elegí otro ejercicio de la biblioteca; se mantienen las notas de este ítem.
+              </p>
+              <input
+                className="input-field"
+                placeholder="Buscar en la biblioteca…"
+                value={busquedaReemplazo}
+                onChange={(e) => setBusquedaReemplazo(e.target.value)}
+                autoFocus
+              />
+              <ul className="overflow-y-auto max-h-64 rounded-lg border border-gray-100 divide-y divide-gray-100">
+                {ejerciciosParaReemplazo.map((ej) => (
+                  <li key={ej.id}>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-primary-50 transition-colors"
+                      onClick={() => aplicarReemplazo(ej.id)}
+                    >
+                      <span className="font-medium text-gray-900">{ej.nombre}</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        {tipos.find((t) => t.id === ej.tipoId)?.nombre || '—'} · {etiquetaMaquinas(ej, maquinas)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {ejerciciosParaReemplazo.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-2">No hay coincidencias.</p>
+              )}
+            </div>
           </div>
         </div>
       )}

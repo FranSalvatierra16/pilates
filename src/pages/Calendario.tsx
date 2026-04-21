@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana } from '../types';
 import { storage } from '../utils/storage';
@@ -239,6 +239,9 @@ const Calendario = () => {
   const [modalNotaFecha, setModalNotaFecha] = useState<string | null>(null);
   const [draftNotaTexto, setDraftNotaTexto] = useState('');
   const [guardandoNotaPlanif, setGuardandoNotaPlanif] = useState(false);
+  /** Tamaño/posición del viewport visible (teclado móvil). */
+  const [notaPlanifViewport, setNotaPlanifViewport] = useState<{ h: number; top: number } | null>(null);
+  const notaPlanifTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [selectedDiaMobile, setSelectedDiaMobile] = useState<number | null>(null);
@@ -309,6 +312,29 @@ const Calendario = () => {
       cancelled = true;
     };
   }, [planificacionHabilitada, semanaVista]);
+
+  /** Modal nota: seguir visualViewport para que el teclado no tape el texto (iOS / Android). */
+  useLayoutEffect(() => {
+    if (!modalNotaFecha) {
+      setNotaPlanifViewport(null);
+      return;
+    }
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) {
+      setNotaPlanifViewport({ h: window.innerHeight, top: 0 });
+      return;
+    }
+    const sync = () => {
+      setNotaPlanifViewport({ h: vv.height, top: vv.offsetTop });
+    };
+    sync();
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    return () => {
+      vv.removeEventListener('resize', sync);
+      vv.removeEventListener('scroll', sync);
+    };
+  }, [modalNotaFecha]);
 
   useEffect(() => {
     if (showModalHorarios && useApi()) {
@@ -2395,27 +2421,43 @@ const Calendario = () => {
       )}
 
       {modalNotaFecha && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/55 backdrop-blur-[2px]">
+        <div
+          className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] sm:flex sm:items-center sm:justify-center sm:p-6"
+          aria-hidden={false}
+        >
           <div
-            className="bg-white shadow-2xl w-full max-w-5xl max-h-[96vh] sm:max-h-[92vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-amber-100/90 ring-1 ring-black/5"
+            className="bg-white shadow-2xl w-full max-w-5xl flex flex-col overflow-hidden border border-amber-100/90 ring-1 ring-black/5 rounded-t-3xl sm:rounded-2xl sm:relative sm:mx-auto sm:max-h-[92vh] sm:h-auto min-h-0"
+            style={
+              isMobile
+                ? {
+                    position: 'fixed',
+                    left: 0,
+                    right: 0,
+                    zIndex: 51,
+                    top: notaPlanifViewport?.top ?? 0,
+                    height: notaPlanifViewport?.h ?? (typeof window !== 'undefined' ? window.innerHeight : '100dvh'),
+                    maxHeight: notaPlanifViewport?.h ?? (typeof window !== 'undefined' ? window.innerHeight : '100dvh'),
+                  }
+                : undefined
+            }
             role="dialog"
             aria-labelledby="modal-nota-planif-titulo"
             aria-modal="true"
           >
-            <div className="flex-shrink-0 px-5 sm:px-8 pt-6 pb-5 bg-gradient-to-br from-amber-50 via-white to-violet-50/60 border-b border-amber-100/80">
-              <div className="flex justify-between items-start gap-4">
-                <div className="flex gap-4 min-w-0">
+            <div className="flex-shrink-0 px-4 sm:px-8 pt-4 sm:pt-6 pb-3 sm:pb-5 bg-gradient-to-br from-amber-50 via-white to-violet-50/60 border-b border-amber-100/80">
+              <div className="flex justify-between items-start gap-3 sm:gap-4">
+                <div className="flex gap-3 sm:gap-4 min-w-0">
                   <div className="hidden sm:flex h-14 w-14 shrink-0 rounded-2xl bg-amber-100/90 border border-amber-200/80 items-center justify-center text-amber-900 shadow-sm">
                     <StickyNote className="w-7 h-7" strokeWidth={1.75} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800/90 mb-1">
+                    <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide text-amber-800/90 mb-0.5 sm:mb-1">
                       Planificación del día
                     </p>
-                    <h2 id="modal-nota-planif-titulo" className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+                    <h2 id="modal-nota-planif-titulo" className="text-xl sm:text-3xl font-bold text-gray-900 tracking-tight">
                       {formatDate(modalNotaFecha)}
                     </h2>
-                    <p className="text-sm text-gray-600 mt-2 leading-relaxed max-w-2xl">
+                    <p className="text-xs sm:text-sm text-gray-600 mt-1 sm:mt-2 leading-relaxed max-w-2xl hidden sm:block">
                       Escribí series, máquinas y abreviaturas como quieras. Guardá vacío para borrar la nota de este día.
                     </p>
                   </div>
@@ -2423,7 +2465,7 @@ const Calendario = () => {
                 <button
                   type="button"
                   onClick={cerrarModalNotaPlanif}
-                  className="shrink-0 p-2.5 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-white/80 border border-transparent hover:border-amber-200/60 transition-colors"
+                  className="shrink-0 p-2.5 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-white/80 border border-transparent hover:border-amber-200/60 transition-colors touch-manipulation"
                   aria-label="Cerrar"
                 >
                   <X className="w-6 h-6" />
@@ -2431,26 +2473,37 @@ const Calendario = () => {
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 flex flex-col px-5 sm:px-8 py-5 sm:py-6 bg-slate-50/40">
+            <div className="flex-1 min-h-0 flex flex-col px-4 sm:px-8 py-3 sm:py-6 bg-slate-50/40 overflow-hidden">
               <label htmlFor="nota-planif-textarea" className="sr-only">
                 Contenido de la nota de planificación
               </label>
               <textarea
+                ref={notaPlanifTextareaRef}
                 id="nota-planif-textarea"
-                className="w-full flex-1 min-h-[min(52vh,420px)] sm:min-h-[min(58vh,520px)] rounded-xl border-2 border-gray-200 bg-white px-4 py-4 sm:px-5 sm:py-5 text-[15px] sm:text-base font-mono leading-relaxed text-gray-900 placeholder:text-gray-400 whitespace-pre-wrap shadow-inner focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100/80 transition-shadow resize-y"
+                className="w-full flex-1 min-h-[120px] sm:min-h-[min(58vh,520px)] rounded-xl border-2 border-gray-200 bg-white px-4 py-4 sm:px-5 sm:py-5 text-base font-mono leading-relaxed text-gray-900 placeholder:text-gray-400 whitespace-pre-wrap shadow-inner focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100/80 transition-shadow resize-none sm:resize-y"
                 value={draftNotaTexto}
                 onChange={(e) => setDraftNotaTexto(e.target.value)}
+                onFocus={(e) => {
+                  window.setTimeout(() => {
+                    try {
+                      e.target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    } catch {
+                      /* noop */
+                    }
+                  }, 280);
+                }}
                 placeholder="Ej. oso atrás, plancha, R- estocada, T- abs, TRX escalador… (podés pegar listas largas)"
                 spellCheck={false}
                 autoComplete="off"
+                enterKeyHint="done"
               />
             </div>
 
-            <div className="flex-shrink-0 px-5 sm:px-8 py-4 sm:py-5 bg-white border-t border-gray-200/90 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
+            <div className="flex-shrink-0 px-4 sm:px-8 py-3 sm:py-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-5 bg-white border-t border-gray-200/90 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
               <button
                 type="button"
                 onClick={cerrarModalNotaPlanif}
-                className="btn-secondary min-h-[48px] px-6 w-full sm:w-auto text-base"
+                className="btn-secondary min-h-[48px] px-6 w-full sm:w-auto text-base touch-manipulation"
               >
                 Cancelar
               </button>
@@ -2458,7 +2511,7 @@ const Calendario = () => {
                 type="button"
                 onClick={() => void guardarNotaPlanif()}
                 disabled={guardandoNotaPlanif}
-                className="btn-primary min-h-[48px] px-8 w-full sm:w-auto text-base font-semibold disabled:opacity-60 shadow-md shadow-primary-600/15"
+                className="btn-primary min-h-[48px] px-8 w-full sm:w-auto text-base font-semibold disabled:opacity-60 shadow-md shadow-primary-600/15 touch-manipulation"
               >
                 {guardandoNotaPlanif ? 'Guardando…' : 'Guardar nota'}
               </button>

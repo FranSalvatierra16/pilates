@@ -20,7 +20,9 @@ import {
   PlanificacionEjercicio,
   PlanificacionPlan,
   PlanificacionDiaItem,
+  FinanzasEstado,
 } from '../types';
+import { clearFinanzasSession, getFinanzasToken, setFinanzasSession } from './finanzas-session';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -31,8 +33,11 @@ export function setAuthToken(token: string | null) {
 
 function getAuthHeaders(): Record<string, string> {
   const token = authToken ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('savia_token') : null);
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const ft = getFinanzasToken();
+  if (ft) headers['X-Finanzas-Token'] = ft;
+  return headers;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -227,6 +232,34 @@ export const storageApi = {
       request('/api/sucursal/horarios', { method: 'PATCH', body: JSON.stringify(data) }),
     getFeatures: (): Promise<{ planificacionHabilitada: boolean }> =>
       request('/api/sucursal/features'),
+  },
+  finanzas: {
+    getEstado: (): Promise<FinanzasEstado> => request<FinanzasEstado>('/api/sucursal/finanzas/estado'),
+    desbloquear: async (pin: string): Promise<{ token: string; expiresAt: number }> => {
+      const r = await request<{ token: string; expiresAt: number }>('/api/sucursal/finanzas/desbloquear', {
+        method: 'POST',
+        body: JSON.stringify({ pin }),
+      });
+      setFinanzasSession(r.token, r.expiresAt);
+      return r;
+    },
+    crearPin: (body: { pin: string; pinConfirm: string; autoBloqueoMinutos: number }): Promise<void> =>
+      request('/api/sucursal/finanzas/pin', { method: 'POST', body: JSON.stringify(body) }),
+    actualizarPin: (body: {
+      pinActual?: string;
+      pin?: string;
+      pinConfirm?: string;
+      autoBloqueoMinutos?: number;
+    }): Promise<void> =>
+      request('/api/sucursal/finanzas/pin', { method: 'PATCH', body: JSON.stringify(body) }),
+    quitarPin: async (pinActual: string): Promise<void> => {
+      await request('/api/sucursal/finanzas/pin', {
+        method: 'DELETE',
+        body: JSON.stringify({ pinActual }),
+      });
+      clearFinanzasSession();
+    },
+    bloquearSesion: (): void => clearFinanzasSession(),
   },
   planificacion: {
     getTipos: (): Promise<PlanificacionTipoEjercicio[]> => request('/api/planificacion/tipos'),

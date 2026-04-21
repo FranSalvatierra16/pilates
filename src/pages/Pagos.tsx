@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, X, Save, Calendar, Trash2 } from 'lucide-react';
-import { Alumno, Pago, MetodoPago, CierreCaja, Gasto } from '../types';
+import { Plus, X, Save, Calendar, Trash2, Lock } from 'lucide-react';
+import { Alumno, Pago, MetodoPago, CierreCaja, Gasto, FinanzasEstado } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, calcularFechaVencimiento, horaActualInput, formatHora24, formatDateTime } from '../utils/date';
@@ -28,6 +28,23 @@ const Pagos = () => {
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+  const [finEstado, setFinEstado] = useState<FinanzasEstado | null>(null);
+  const [showPinPagos, setShowPinPagos] = useState(false);
+  const [pinPagos, setPinPagos] = useState('');
+  const [pinPagosError, setPinPagosError] = useState('');
+
+  const refreshFinEstado = async () => {
+    try {
+      const st = await storageHybrid.finanzas.getEstado();
+      setFinEstado(st);
+      return st;
+    } catch {
+      const fb: FinanzasEstado = { pinConfigurado: false, autoBloqueoMinutos: 15, desbloqueado: true };
+      setFinEstado(fb);
+      return fb;
+    }
+  };
+
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
     const fn = () => setIsMobile(mq.matches);
@@ -37,9 +54,29 @@ const Pagos = () => {
   }, []);
 
   useEffect(() => {
-    loadPagos();
-    loadAlumnos();
+    void (async () => {
+      await refreshFinEstado();
+      await loadPagos();
+      await loadAlumnos();
+    })();
   }, []);
+
+  const finanzasRestringidas = !!(finEstado?.pinConfigurado && !finEstado.desbloqueado);
+
+  const handleDesbloquearPagos = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinPagosError('');
+    try {
+      await storageHybrid.finanzas.desbloquear(pinPagos);
+      await refreshFinEstado();
+      setPinPagos('');
+      setShowPinPagos(false);
+      await loadPagos();
+      toast.success('Listo: ya podés ver totales y el historial completo.');
+    } catch (err: unknown) {
+      setPinPagosError(err instanceof Error ? err.message : 'PIN incorrecto');
+    }
+  };
 
   const loadPagos = async () => {
     try {
@@ -157,6 +194,10 @@ const Pagos = () => {
   };
 
   const handleEliminarPago = async (pago: Pago) => {
+    if (finanzasRestringidas) {
+      toast.warning('Ingresá el PIN en Pagos para poder eliminar pagos.');
+      return;
+    }
     const nombre = getAlumnoNombre(pago);
     const ok = await toast.confirm(`¿Eliminar el pago de ${formatCurrency(pago.monto)} (${nombre}, ${formatDate(pago.fecha)})? Esta acción no se puede deshacer.`, {
       title: 'Eliminar pago',
@@ -241,6 +282,10 @@ const Pagos = () => {
   const limpiarSeleccion = () => setSelectedIds(new Set());
 
   const handleEliminarSeleccionados = async () => {
+    if (finanzasRestringidas) {
+      toast.warning('Ingresá el PIN en Pagos para poder eliminar pagos.');
+      return;
+    }
     const seleccionados = pagosCajaActual.filter((p) => selectedIds.has(p.id));
     if (seleccionados.length === 0) return;
     const total = seleccionados.reduce((s, p) => s + p.monto, 0);
@@ -299,9 +344,11 @@ const Pagos = () => {
           <span className="page-title-accent" aria-hidden />
           <h1 className="page-title">Pagos</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {periodoTexto
-              ? `Mostrando solo pagos de la caja actual: movimientos después del cierre del ${periodoTexto}.`
-              : 'Sin cierres todavía: se muestran todos los pagos.'}
+            {finanzasRestringidas
+              ? 'Vista restringida: solo pagos del día de hoy. Ingresá el PIN de finanzas para ver totales y el historial de la caja actual.'
+              : periodoTexto
+                ? `Mostrando solo pagos de la caja actual: movimientos después del cierre del ${periodoTexto}.`
+                : 'Sin cierres todavía: se muestran todos los pagos.'}
           </p>
         </div>
         <button
@@ -314,19 +361,21 @@ const Pagos = () => {
       </div>
 
       {/* Resumen: mismos criterios que Caja (ingresos − gastos por método en el período actual) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="card bg-green-50 border border-green-200">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
               <p className="text-sm font-medium text-green-600 mb-1">Efectivo — período actual</p>
               <p className="text-2xl font-bold text-green-900">
-                {formatCurrency(netEfectivoPeriodo)}
+                {finanzasRestringidas ? '••••' : formatCurrency(netEfectivoPeriodo)}
               </p>
               <p className="text-xs text-green-700 mt-0.5">
-                Ingresos: {formatCurrency(periodoEfectivoIng)}
+                Ingresos: {finanzasRestringidas ? '••••' : formatCurrency(periodoEfectivoIng)}
               </p>
               {periodoEfectivoGas > 0 ? (
-                <p className="text-xs text-red-600">Gastos: - {formatCurrency(periodoEfectivoGas)}</p>
+                <p className="text-xs text-red-600">
+                  Gastos: - {finanzasRestringidas ? '••••' : formatCurrency(periodoEfectivoGas)}
+                </p>
               ) : (
                 <p className="text-xs text-green-700">Sin gastos en efectivo (período)</p>
               )}
@@ -341,13 +390,15 @@ const Pagos = () => {
             <div className="min-w-0">
               <p className="text-sm font-medium text-blue-600 mb-1">Transferencia — período actual</p>
               <p className="text-2xl font-bold text-blue-900">
-                {formatCurrency(netTransferenciaPeriodo)}
+                {finanzasRestringidas ? '••••' : formatCurrency(netTransferenciaPeriodo)}
               </p>
               <p className="text-xs text-blue-700 mt-0.5">
-                Ingresos: {formatCurrency(periodoTransfIng)}
+                Ingresos: {finanzasRestringidas ? '••••' : formatCurrency(periodoTransfIng)}
               </p>
               {periodoTransfGas > 0 ? (
-                <p className="text-xs text-red-600">Gastos: - {formatCurrency(periodoTransfGas)}</p>
+                <p className="text-xs text-red-600">
+                  Gastos: - {finanzasRestringidas ? '••••' : formatCurrency(periodoTransfGas)}
+                </p>
               ) : (
                 <p className="text-xs text-blue-700">Sin gastos en transferencia (período)</p>
               )}
@@ -362,10 +413,11 @@ const Pagos = () => {
             <div className="min-w-0">
               <p className="text-sm font-medium text-primary-600 mb-1">Neto — período actual</p>
               <p className="text-2xl font-bold text-primary-900">
-                {formatCurrency(periodoNeto)}
+                {finanzasRestringidas ? '••••' : formatCurrency(periodoNeto)}
               </p>
               <p className="text-xs text-primary-700 mt-0.5">
-                Ingresos {formatCurrency(periodoIngresos)} − gastos {formatCurrency(periodoGastos)}
+                Ingresos {finanzasRestringidas ? '••••' : formatCurrency(periodoIngresos)} − gastos{' '}
+                {finanzasRestringidas ? '••••' : formatCurrency(periodoGastos)}
               </p>
             </div>
             <div className="bg-primary-200 p-3 rounded-lg shrink-0">
@@ -373,6 +425,15 @@ const Pagos = () => {
             </div>
           </div>
         </div>
+        {finanzasRestringidas ? (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl bg-white/75 backdrop-blur-[2px] border border-gray-200/80 p-4 text-center">
+            <Lock className="w-10 h-10 text-primary-600 mb-2" aria-hidden />
+            <p className="text-sm font-medium text-gray-800 mb-3">Totales ocultos hasta ingresar el PIN</p>
+            <button type="button" className="btn-primary text-sm py-2 px-4" onClick={() => setShowPinPagos(true)}>
+              Ingresar PIN
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {!loading && pagosCajaActual.length > 0 && cantidadSeleccionados > 0 && (
@@ -389,7 +450,8 @@ const Pagos = () => {
             <button
               type="button"
               onClick={() => void handleEliminarSeleccionados()}
-              className="inline-flex items-center gap-2 rounded-lg bg-red-600 text-white text-sm font-medium py-2 px-3 hover:bg-red-700 touch-manipulation"
+              disabled={finanzasRestringidas}
+              className="inline-flex items-center gap-2 rounded-lg bg-red-600 text-white text-sm font-medium py-2 px-3 hover:bg-red-700 touch-manipulation disabled:opacity-40 disabled:pointer-events-none"
             >
               <Trash2 className="w-4 h-4" />
               Eliminar seleccionados
@@ -437,8 +499,9 @@ const Pagos = () => {
                   <button
                     type="button"
                     onClick={() => handleEliminarPago(pago)}
-                    className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation"
-                    title="Eliminar pago"
+                    disabled={finanzasRestringidas}
+                    className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation disabled:opacity-40 disabled:pointer-events-none"
+                    title={finanzasRestringidas ? 'Ingresá el PIN para eliminar' : 'Eliminar pago'}
                     aria-label="Eliminar pago"
                   >
                     <Trash2 className="w-5 h-5" />
@@ -507,8 +570,9 @@ const Pagos = () => {
                       <button
                         type="button"
                         onClick={() => handleEliminarPago(pago)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
-                        title="Eliminar pago"
+                        disabled={finanzasRestringidas}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation disabled:opacity-40 disabled:pointer-events-none"
+                        title={finanzasRestringidas ? 'Ingresá el PIN para eliminar' : 'Eliminar pago'}
                         aria-label="Eliminar pago"
                       >
                         <Trash2 className="w-5 h-5" />
@@ -518,6 +582,43 @@ const Pagos = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {showPinPagos && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-900">PIN de finanzas</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPinPagos(false);
+                  setPinPagosError('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={(ev) => void handleDesbloquearPagos(ev)} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">PIN</label>
+                <input
+                  type="password"
+                  autoComplete="one-time-code"
+                  className="input-field"
+                  value={pinPagos}
+                  onChange={(e) => setPinPagos(e.target.value)}
+                />
+                {pinPagosError ? <p className="text-sm text-red-600 mt-1">{pinPagosError}</p> : null}
+              </div>
+              <button type="submit" className="btn-primary w-full">
+                Desbloquear
+              </button>
+            </form>
           </div>
         </div>
       )}

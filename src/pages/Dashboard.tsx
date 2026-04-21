@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { isCuotaVencida } from '../utils/date';
+import type { FinanzasEstado } from '../types';
 
 const Dashboard = () => {
   const { sucursalNombre } = useAuth();
@@ -20,9 +21,18 @@ const Dashboard = () => {
     /** ingresosCaja - gastosCaja (misma lógica que la página Caja → Saldo final) */
     totalCajaNeto: 0,
   });
+  const [finBloqueado, setFinBloqueado] = useState(false);
 
   useEffect(() => {
     (async () => {
+      let fin: FinanzasEstado | null = null;
+      try {
+        fin = await storageHybrid.finanzas.getEstado();
+      } catch {
+        fin = null;
+      }
+      const bloqueado = !!(fin?.pinConfigurado && !fin.desbloqueado);
+      setFinBloqueado(bloqueado);
       const [alumnos, actividades, pagos, gastos] = await Promise.all([
         storageHybrid.alumnos.getAll(),
         storageHybrid.actividades.getAll(),
@@ -56,9 +66,9 @@ const Dashboard = () => {
         totalAlumnos: alumnos.length,
         totalActividades: actividades.length,
         cuotasVencidas: cuotasVencidas.length,
-        ingresosCaja,
-        gastosCaja,
-        totalCajaNeto,
+        ingresosCaja: bloqueado ? 0 : ingresosCaja,
+        gastosCaja: bloqueado ? 0 : gastosCaja,
+        totalCajaNeto: bloqueado ? 0 : totalCajaNeto,
       });
     })();
   }, []);
@@ -94,8 +104,10 @@ const Dashboard = () => {
     },
     {
       title: 'Saldo en caja',
-      value: formatCurrency(stats.totalCajaNeto),
-      subtitle: `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)}`,
+      value: finBloqueado ? '••••' : formatCurrency(stats.totalCajaNeto),
+      subtitle: finBloqueado
+        ? 'Desbloqueá en Caja o Pagos con el PIN para ver montos'
+        : `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)}`,
       icon: DollarSign,
       color: 'bg-yellow-500',
       link: '/caja',

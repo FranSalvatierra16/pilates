@@ -18,12 +18,15 @@ import {
   PlanificacionPlan,
   PlanificacionPlanItem,
   PlanificacionDiaItem,
+  FinanzasEstado,
 } from '../types';
 import { buildCierreRetiro } from './cierre-caja';
 import { horaActualInput } from './date';
 import { storage } from './storage';
 import { storageSupabase } from './storage-supabase';
 import { storageApi } from './storage-api';
+import * as finanzasLocal from './finanzas-local';
+import { clearFinanzasSession, getFinanzasExpiresAtMs } from './finanzas-session';
 
 // En producción usamos la API por defecto (así funciona aunque Docker no reciba VITE_USE_API)
 const useApi = () => {
@@ -107,7 +110,11 @@ export const storageHybrid = {
     getAll: async (): Promise<Pago[]> => {
       const b = backend();
       if (b) return await b.pagos.getAll();
-      return storage.pagos.getAll();
+      let all = storage.pagos.getAll();
+      if (finanzasLocal.finanzasLocalRestringido()) {
+        all = finanzasLocal.filtrarPagosHoyLocal(all);
+      }
+      return all;
     },
     add: async (pago: Pago): Promise<void> => {
       const b = backend();
@@ -117,7 +124,11 @@ export const storageHybrid = {
     getByAlumnoId: async (alumnoId: string): Promise<Pago[]> => {
       const b = backend();
       if (b) return await b.pagos.getByAlumnoId(alumnoId);
-      return storage.pagos.getByAlumnoId(alumnoId);
+      let list = storage.pagos.getByAlumnoId(alumnoId);
+      if (finanzasLocal.finanzasLocalRestringido()) {
+        list = finanzasLocal.filtrarPagosHoyLocal(list);
+      }
+      return list;
     },
     delete: async (id: string): Promise<void> => {
       const b = backend();
@@ -130,6 +141,7 @@ export const storageHybrid = {
     getAll: async (): Promise<Gasto[]> => {
       const b = backend();
       if (b) return await b.gastos.getAll();
+      if (finanzasLocal.finanzasLocalRestringido()) return [];
       return storage.gastos.getAll();
     },
     add: async (gasto: Gasto): Promise<void> => {
@@ -152,10 +164,12 @@ export const storageHybrid = {
   cierresCaja: {
     getAll: async (): Promise<CierreCaja[]> => {
       if (useApi()) return storageApi.cierresCaja.getAll();
+      if (finanzasLocal.finanzasLocalRestringido()) return [];
       return storage.cierresCaja.getAll();
     },
     getById: async (id: string): Promise<CierreCaja | undefined> => {
       if (useApi()) return storageApi.cierresCaja.getById(id);
+      if (finanzasLocal.finanzasLocalRestringido()) return undefined;
       return storage.cierresCaja.getById(id);
     },
     crear: async (input: {
@@ -181,6 +195,61 @@ export const storageHybrid = {
       );
       storage.cierresCaja.add(cierre);
       return cierre;
+    },
+  },
+
+  finanzas: {
+    getEstado: async (): Promise<FinanzasEstado> => {
+      if (useApi()) return storageApi.finanzas.getEstado();
+      return finanzasLocal.getEstadoLocal();
+    },
+    desbloquear: async (pin: string): Promise<void> => {
+      if (useApi()) {
+        await storageApi.finanzas.desbloquear(pin);
+        return;
+      }
+      await finanzasLocal.desbloquearLocal(pin);
+    },
+    bloquearSesion: (): void => {
+      clearFinanzasSession();
+      finanzasLocal.clearUnlockLocal();
+    },
+    getUnlockExpiryMs: (): number | null => {
+      if (useApi()) return getFinanzasExpiresAtMs();
+      return finanzasLocal.getUnlockUntilMs();
+    },
+    crearPin: async (body: { pin: string; pinConfirm: string; autoBloqueoMinutos: number }): Promise<void> => {
+      if (useApi()) {
+        await storageApi.finanzas.crearPin(body);
+        return;
+      }
+      await finanzasLocal.crearPinLocal(body.pin, body.pinConfirm, body.autoBloqueoMinutos);
+    },
+    actualizarPin: async (body: {
+      pinActual: string;
+      pin?: string;
+      pinConfirm?: string;
+      autoBloqueoMinutos?: number;
+    }): Promise<void> => {
+      if (useApi()) {
+        await storageApi.finanzas.actualizarPin(body);
+        return;
+      }
+      await finanzasLocal.cambiarPinLocal(body);
+    },
+    actualizarSoloAuto: async (autoBloqueoMinutos: number): Promise<void> => {
+      if (useApi()) {
+        await storageApi.finanzas.actualizarPin({ autoBloqueoMinutos });
+        return;
+      }
+      finanzasLocal.actualizarSoloAutoLocal(autoBloqueoMinutos);
+    },
+    quitarPin: async (pinActual: string): Promise<void> => {
+      if (useApi()) {
+        await storageApi.finanzas.quitarPin(pinActual);
+        return;
+      }
+      await finanzasLocal.quitarPinLocal(pinActual);
     },
   },
 

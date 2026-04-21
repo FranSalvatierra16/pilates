@@ -1,5 +1,21 @@
 import { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, DollarSign, CreditCard, Wallet, TrendingUp, Calendar, Plus, X, Save, Trash2, Archive, Eye, Banknote } from 'lucide-react';
+import {
+  RefreshCw,
+  DollarSign,
+  CreditCard,
+  Wallet,
+  TrendingUp,
+  Calendar,
+  Plus,
+  X,
+  Save,
+  Trash2,
+  Archive,
+  Eye,
+  Banknote,
+  Lock,
+  Shield,
+} from 'lucide-react';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
@@ -12,7 +28,7 @@ import {
   instanteCierre,
   movimientosRangoCierre,
 } from '../utils/cierre-caja';
-import { CierreCaja, Gasto, MetodoPago, Pago, Profesor } from '../types';
+import { CierreCaja, FinanzasEstado, Gasto, MetodoPago, Pago, Profesor } from '../types';
 import { useToast } from '../components/ToastProvider';
 
 /** Ingresos − gastos de la sesión cerrada (usa totales guardados si existen). */
@@ -203,6 +219,32 @@ const Caja = () => {
   });
   const [guardandoSueldos, setGuardandoSueldos] = useState(false);
 
+  const [finEstado, setFinEstado] = useState<FinanzasEstado | null>(null);
+  const [cajaPidePin, setCajaPidePin] = useState(false);
+  const [pinInputCaja, setPinInputCaja] = useState('');
+  const [pinCajaError, setPinCajaError] = useState('');
+  const [showSetupFinanzas, setShowSetupFinanzas] = useState(false);
+  const [showAjustesFinanzas, setShowAjustesFinanzas] = useState(false);
+  const [setupFin, setSetupFin] = useState({ pin: '', pinConfirm: '', auto: 15 });
+  const [ajustesFin, setAjustesFin] = useState({ pinActual: '', pin: '', pinConfirm: '', auto: 15 });
+  const [guardandoFin, setGuardandoFin] = useState(false);
+
+  const refreshFinEstado = async () => {
+    try {
+      const st = await storageHybrid.finanzas.getEstado();
+      setFinEstado(st);
+      return st;
+    } catch {
+      const fallback: FinanzasEstado = {
+        pinConfigurado: false,
+        autoBloqueoMinutos: 15,
+        desbloqueado: true,
+      };
+      setFinEstado(fallback);
+      return fallback;
+    }
+  };
+
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
     const fn = () => setIsMobile(mq.matches);
@@ -224,8 +266,52 @@ const Caja = () => {
   }, []);
 
   useEffect(() => {
-    loadStats();
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const st = await refreshFinEstado();
+      if (cancelled) return;
+      if (st?.pinConfigurado && !st.desbloqueado) {
+        setCajaPidePin(true);
+        setLoading(false);
+        return;
+      }
+      setCajaPidePin(false);
+      await loadStats();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!finEstado?.pinConfigurado || !finEstado.desbloqueado || cajaPidePin) return;
+    const exp = storageHybrid.finanzas.getUnlockExpiryMs();
+    if (!exp) return;
+    const ms = exp - Date.now();
+    if (ms <= 0) {
+      storageHybrid.finanzas.bloquearSesion();
+      setPagos([]);
+      setGastos([]);
+      setCierres([]);
+      setStats(computeCajaStats([], [], []));
+      setCajaPidePin(true);
+      void refreshFinEstado();
+      toast.info('Caja bloqueada por tiempo');
+      return;
+    }
+    const t = window.setTimeout(() => {
+      storageHybrid.finanzas.bloquearSesion();
+      setPagos([]);
+      setGastos([]);
+      setCierres([]);
+      setStats(computeCajaStats([], [], []));
+      setCajaPidePin(true);
+      void refreshFinEstado();
+      toast.info('Caja bloqueada por tiempo');
+    }, ms);
+    return () => window.clearTimeout(t);
+  }, [finEstado?.desbloqueado, finEstado?.pinConfigurado, cajaPidePin]);
 
   const loadStats = async () => {
     try {
@@ -568,12 +654,167 @@ const Caja = () => {
     }
   };
 
+  const handleDesbloquearCaja = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinCajaError('');
+    try {
+      await storageHybrid.finanzas.desbloquear(pinInputCaja);
+      await refreshFinEstado();
+      setCajaPidePin(false);
+      setPinInputCaja('');
+      await loadStats();
+      toast.success('Caja desbloqueada');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'No se pudo validar el PIN';
+      setPinCajaError(msg);
+    }
+  };
+
+  const handleBloquearCaja = () => {
+    storageHybrid.finanzas.bloquearSesion();
+    setPagos([]);
+    setGastos([]);
+    setCierres([]);
+    setStats(computeCajaStats([], [], []));
+    setCajaPidePin(true);
+    void refreshFinEstado();
+    toast.info('Caja bloqueada');
+  };
+
+  const handleCrearPinFinanzas = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (setupFin.pin.length < 4) {
+      toast.warning('El PIN debe tener al menos 4 caracteres');
+      return;
+    }
+    if (setupFin.pin !== setupFin.pinConfirm) {
+      toast.warning('Los PIN no coinciden');
+      return;
+    }
+    setGuardandoFin(true);
+    try {
+      await storageHybrid.finanzas.crearPin({
+        pin: setupFin.pin,
+        pinConfirm: setupFin.pinConfirm,
+        autoBloqueoMinutos: setupFin.auto,
+      });
+      await refreshFinEstado();
+      setShowSetupFinanzas(false);
+      setSetupFin({ pin: '', pinConfirm: '', auto: 15 });
+      setCajaPidePin(true);
+      toast.success('PIN creado. Ingresalo para ver la caja.');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar');
+    } finally {
+      setGuardandoFin(false);
+    }
+  };
+
+  const handleGuardarAjustesFinanzas = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const piPin = ajustesFin.pin.trim();
+    const hayCambioPin = piPin.length > 0;
+    if (hayCambioPin) {
+      if (ajustesFin.pinActual.length < 4) {
+        toast.warning('Indicá el PIN actual para cambiar el PIN');
+        return;
+      }
+      if (piPin !== ajustesFin.pinConfirm) {
+        toast.warning('Los PIN nuevos no coinciden');
+        return;
+      }
+    }
+    setGuardandoFin(true);
+    try {
+      if (hayCambioPin) {
+        await storageHybrid.finanzas.actualizarPin({
+          pinActual: ajustesFin.pinActual,
+          pin: piPin,
+          pinConfirm: ajustesFin.pinConfirm,
+          autoBloqueoMinutos: ajustesFin.auto,
+        });
+      } else {
+        await storageHybrid.finanzas.actualizarSoloAuto(ajustesFin.auto);
+      }
+      await refreshFinEstado();
+      setShowAjustesFinanzas(false);
+      setAjustesFin({ pinActual: '', pin: '', pinConfirm: '', auto: finEstado?.autoBloqueoMinutos ?? 15 });
+      toast.success('Cambios guardados');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar');
+    } finally {
+      setGuardandoFin(false);
+    }
+  };
+
+  const handleQuitarSeguridadFinanzas = async () => {
+    const pinActual = ajustesFin.pinActual.trim();
+    if (pinActual.length < 4) {
+      toast.warning('Indicá el PIN actual para quitar la seguridad');
+      return;
+    }
+    const ok = await toast.confirm(
+      'Se va a quitar el PIN de Caja y Pagos. ¿Continuar?',
+      { title: 'Quitar seguridad', confirmText: 'Quitar' }
+    );
+    if (!ok) return;
+    setGuardandoFin(true);
+    try {
+      await storageHybrid.finanzas.quitarPin(pinActual);
+      await refreshFinEstado();
+      setShowAjustesFinanzas(false);
+      setAjustesFin({ pinActual: '', pin: '', pinConfirm: '', auto: 15 });
+      setCajaPidePin(false);
+      await loadStats();
+      toast.success('Seguridad quitada');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo quitar');
+    } finally {
+      setGuardandoFin(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (cajaPidePin && finEstado?.pinConfigurado) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-4">
+        <div className="card max-w-md w-full p-8 border border-gray-200 shadow-lg">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-3 rounded-full bg-primary-100 text-primary-700">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Caja protegida</h1>
+              <p className="text-sm text-gray-600">Ingresá el PIN de finanzas para continuar.</p>
+            </div>
+          </div>
+          <form onSubmit={(ev) => void handleDesbloquearCaja(ev)} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">PIN</label>
+              <input
+                type="password"
+                autoComplete="one-time-code"
+                value={pinInputCaja}
+                onChange={(e) => setPinInputCaja(e.target.value)}
+                className="input-field"
+                placeholder="PIN"
+              />
+              {pinCajaError ? <p className="text-sm text-red-600 mt-1">{pinCajaError}</p> : null}
+            </div>
+            <button type="submit" className="btn-primary w-full">
+              Desbloquear
+            </button>
+          </form>
         </div>
       </div>
     );
@@ -587,6 +828,39 @@ const Caja = () => {
           <h1 className="page-title">Caja</h1>
         </div>
         <div className="flex gap-3 flex-wrap">
+          {finEstado?.pinConfigurado && !cajaPidePin ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setAjustesFin((f) => ({ ...f, auto: finEstado.autoBloqueoMinutos }));
+                  setShowAjustesFinanzas(true);
+                }}
+                className="btn-secondary flex items-center gap-2 border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100"
+              >
+                <Shield className="w-5 h-5" />
+                Seguridad
+              </button>
+              <button
+                type="button"
+                onClick={handleBloquearCaja}
+                className="btn-secondary flex items-center gap-2 border-gray-300"
+              >
+                <Lock className="w-5 h-5" />
+                Bloquear caja
+              </button>
+            </>
+          ) : null}
+          {!finEstado?.pinConfigurado ? (
+            <button
+              type="button"
+              onClick={() => setShowSetupFinanzas(true)}
+              className="btn-secondary flex items-center gap-2 border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100"
+            >
+              <Shield className="w-5 h-5" />
+              Agregar método de seguridad
+            </button>
+          ) : null}
           <button
             onClick={handleOpenModalGasto}
             className="btn-primary flex items-center gap-2"
@@ -1544,6 +1818,154 @@ const Caja = () => {
           </div>
         </div>
       )}
+
+      {showSetupFinanzas && (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Método de seguridad</h2>
+              <button
+                type="button"
+                onClick={() => setShowSetupFinanzas(false)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Definí un PIN para proteger la Caja y los totales en Pagos. Tras desbloquear, la caja se vuelve a bloquear sola al pasar el tiempo que elijas (o podés bloquearla vos cuando quieras).
+            </p>
+            <form onSubmit={(ev) => void handleCrearPinFinanzas(ev)} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">PIN (mín. 4 caracteres)</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  className="input-field"
+                  value={setupFin.pin}
+                  onChange={(e) => setSetupFin((s) => ({ ...s, pin: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Repetir PIN</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  className="input-field"
+                  value={setupFin.pinConfirm}
+                  onChange={(e) => setSetupFin((s) => ({ ...s, pinConfirm: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bloqueo automático</label>
+                <select
+                  className="input-field"
+                  value={setupFin.auto}
+                  onChange={(e) => setSetupFin((s) => ({ ...s, auto: Number(e.target.value) }))}
+                >
+                  {[5, 10, 15, 20, 30, 45, 60, 90, 120, 240, 480].map((n) => (
+                    <option key={n} value={n}>
+                      {n} minutos
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button type="button" className="btn-secondary" onClick={() => setShowSetupFinanzas(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={guardandoFin}>
+                  {guardandoFin ? 'Guardando…' : 'Guardar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAjustesFinanzas && finEstado?.pinConfigurado ? (
+        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Seguridad de Caja</h2>
+              <button
+                type="button"
+                onClick={() => setShowAjustesFinanzas(false)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={(ev) => void handleGuardarAjustesFinanzas(ev)} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bloqueo automático</label>
+                <select
+                  className="input-field"
+                  value={ajustesFin.auto}
+                  onChange={(e) => setAjustesFin((s) => ({ ...s, auto: Number(e.target.value) }))}
+                >
+                  {[5, 10, 15, 20, 30, 45, 60, 90, 120, 240, 480].map((n) => (
+                    <option key={n} value={n}>
+                      {n} minutos
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Se aplica después de cada desbloqueo con el PIN.</p>
+              </div>
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <p className="text-sm font-medium text-gray-800">Cambiar PIN (opcional)</p>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">PIN actual</label>
+                  <input
+                    type="password"
+                    className="input-field"
+                    value={ajustesFin.pinActual}
+                    onChange={(e) => setAjustesFin((s) => ({ ...s, pinActual: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">PIN nuevo</label>
+                  <input
+                    type="password"
+                    className="input-field"
+                    value={ajustesFin.pin}
+                    onChange={(e) => setAjustesFin((s) => ({ ...s, pin: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Repetir PIN nuevo</label>
+                  <input
+                    type="password"
+                    className="input-field"
+                    value={ajustesFin.pinConfirm}
+                    onChange={(e) => setAjustesFin((s) => ({ ...s, pinConfirm: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-between gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  className="text-sm text-red-600 hover:underline"
+                  disabled={guardandoFin}
+                  onClick={() => void handleQuitarSeguridadFinanzas()}
+                >
+                  Quitar seguridad
+                </button>
+                <div className="flex gap-2">
+                  <button type="button" className="btn-secondary" onClick={() => setShowAjustesFinanzas(false)}>
+                    Cerrar
+                  </button>
+                  <button type="submit" className="btn-primary" disabled={guardandoFin}>
+                    {guardandoFin ? 'Guardando…' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

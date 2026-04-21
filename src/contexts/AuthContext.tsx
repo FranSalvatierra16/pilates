@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { setAuthToken, storageApi } from '../utils/storage-api';
+import { clearFinanzasSession } from '../utils/finanzas-session';
+import { clearUnlockLocal } from '../utils/finanzas-local';
 
 const TOKEN_KEY = 'savia_token';
 const ROLE_KEY = 'savia_role';
@@ -108,6 +110,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     } else {
       setAuthToken(null);
+      clearFinanzasSession();
+      clearUnlockLocal();
       [TOKEN_KEY, ROLE_KEY, SUCURSAL_ID_KEY, SUCURSAL_NOMBRE_KEY, FOTO_PERFIL_KEY, PLANIFICACION_KEY].forEach((k) =>
         localStorage.removeItem(k)
       );

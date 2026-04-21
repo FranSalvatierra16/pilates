@@ -348,6 +348,48 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+const FINANZAS_JWT_TYPE = 'finanzas';
+
+function finanzasTokenFromRequest(req) {
+  const raw = req.headers['x-finanzas-token'];
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  return s || null;
+}
+
+function parseFinanzasSucursalToken(req, sucursalId) {
+  const tok = finanzasTokenFromRequest(req);
+  if (!tok) return null;
+  try {
+    const p = jwt.verify(tok, JWT_SECRET);
+    if (p.type !== FINANZAS_JWT_TYPE || p.sucursalId !== sucursalId) return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+function finanzasDesbloqueada(req, sucursalId, pinHash) {
+  if (!pinHash) return true;
+  return !!parseFinanzasSucursalToken(req, sucursalId);
+}
+
+async function sucursalFinanzasRow(db, sucursalId) {
+  const { rows } = await db.query(
+    'SELECT finanzas_pin_hash, finanzas_auto_bloqueo_minutos FROM sucursales WHERE id = $1',
+    [sucursalId]
+  );
+  if (rows.length === 0) return { pinHash: null, autoMin: 15 };
+  const r = rows[0];
+  const autoRaw = r.finanzas_auto_bloqueo_minutos;
+  const autoMin = Math.max(1, Math.min(480, Number(autoRaw == null ? 15 : autoRaw) || 15));
+  return { pinHash: r.finanzas_pin_hash || null, autoMin };
+}
+
+function clampFinanzasAutoMinutos(n) {
+  return Math.max(1, Math.min(480, Number(n) || 15));
+}
+
 // --- Alumnos (por sucursal) ---
 // "clases este mes" = cantidad de asistencias con estado 'asistio' en el mes actual (desde el calendario)
 app.get('/api/alumnos', async (req, res) => {
@@ -727,13 +769,31 @@ app.get('/api/pagos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query(
-      `SELECT p.* FROM pagos p
-       LEFT JOIN alumnos a ON p.alumno_id = a.id
-       WHERE a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1)
-       ORDER BY p.created_at DESC`,
-      [req.user.sucursalId]
-    );
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    const full = finanzasDesbloqueada(req, sid, pinHash);
+    let rows;
+    if (full || !pinHash) {
+      const q = await db.query(
+        `SELECT p.* FROM pagos p
+         LEFT JOIN alumnos a ON p.alumno_id = a.id
+         WHERE a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1)
+         ORDER BY p.created_at DESC`,
+        [sid]
+      );
+      rows = q.rows;
+    } else {
+      res.set('X-Finanzas-Restringido', '1');
+      const q = await db.query(
+        `SELECT p.* FROM pagos p
+         LEFT JOIN alumnos a ON p.alumno_id = a.id
+         WHERE (a.sucursal_id = $1 OR (p.alumno_id IS NULL AND p.sucursal_id = $1))
+           AND p.fecha = (timezone('America/Argentina/Buenos_Aires', now()))::date
+         ORDER BY p.created_at DESC`,
+        [sid]
+      );
+      rows = q.rows;
+    }
     res.json(rows.map(mapPagoRow));
   } catch (e) {
     console.error(e);
@@ -745,10 +805,27 @@ app.get('/api/pagos/by-alumno/:alumnoId', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query(
-      'SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id WHERE p.alumno_id = $1 AND a.sucursal_id = $2 ORDER BY p.created_at DESC',
-      [req.params.alumnoId, req.user.sucursalId]
-    );
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    const full = finanzasDesbloqueada(req, sid, pinHash);
+    let rows;
+    if (full || !pinHash) {
+      const q = await db.query(
+        'SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id WHERE p.alumno_id = $1 AND a.sucursal_id = $2 ORDER BY p.created_at DESC',
+        [req.params.alumnoId, sid]
+      );
+      rows = q.rows;
+    } else {
+      res.set('X-Finanzas-Restringido', '1');
+      const q = await db.query(
+        `SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id
+         WHERE p.alumno_id = $1 AND a.sucursal_id = $2
+           AND p.fecha = (timezone('America/Argentina/Buenos_Aires', now()))::date
+         ORDER BY p.created_at DESC`,
+        [req.params.alumnoId, sid]
+      );
+      rows = q.rows;
+    }
     res.json(rows.map(mapPagoRow));
   } catch (e) {
     console.error(e);
@@ -777,13 +854,18 @@ app.delete('/api/pagos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    if (pinHash && !finanzasDesbloqueada(req, sid, pinHash)) {
+      return res.status(403).json({ error: 'Desbloqueá finanzas con el PIN para eliminar pagos' });
+    }
     const { id } = req.params;
     const { rowCount } = await db.query(
       `DELETE FROM pagos WHERE id = $1 AND (
         alumno_id IN (SELECT id FROM alumnos WHERE sucursal_id = $2) OR
         (alumno_id IS NULL AND sucursal_id = $2)
       )`,
-      [id, req.user.sucursalId]
+      [id, sid]
     );
     if (rowCount === 0) return res.status(404).json({ error: 'Pago no encontrado' });
     res.status(200).json({ ok: true });
@@ -798,7 +880,14 @@ app.get('/api/gastos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM gastos WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]);
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    const full = finanzasDesbloqueada(req, sid, pinHash);
+    if (!full && pinHash) {
+      res.set('X-Finanzas-Restringido', '1');
+      return res.json([]);
+    }
+    const { rows } = await db.query('SELECT * FROM gastos WHERE sucursal_id = $1 ORDER BY created_at DESC', [sid]);
     res.json(rows.map(mapGastoRow));
   } catch (e) {
     console.error(e);
@@ -810,10 +899,15 @@ app.post('/api/gastos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    if (pinHash && !finanzasDesbloqueada(req, sid, pinHash)) {
+      return res.status(403).json({ error: 'Desbloqueá finanzas con el PIN para registrar gastos' });
+    }
     const b = req.body;
     await db.query(
       'INSERT INTO gastos (id, sucursal_id, descripcion, monto, metodo_pago, fecha, created_at, hora, profesor_id, contabilizar_en_fecha) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      [b.id, req.user.sucursalId, b.descripcion, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString(), b.hora || null, b.profesorId || null, b.contabilizarEnFecha || null]
+      [b.id, sid, b.descripcion, b.monto, b.metodoPago, b.fecha, b.createdAt || new Date().toISOString(), b.hora || null, b.profesorId || null, b.contabilizarEnFecha || null]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -826,6 +920,11 @@ app.patch('/api/gastos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    if (pinHash && !finanzasDesbloqueada(req, sid, pinHash)) {
+      return res.status(403).json({ error: 'Desbloqueá finanzas con el PIN para editar gastos' });
+    }
     const b = req.body;
     const updates = [];
     const values = [];
@@ -838,7 +937,7 @@ app.patch('/api/gastos/:id', async (req, res) => {
     if (b.profesorId !== undefined) { updates.push(`profesor_id = $${i++}`); values.push(b.profesorId || null); }
     if (b.contabilizarEnFecha !== undefined) { updates.push(`contabilizar_en_fecha = $${i++}`); values.push(b.contabilizarEnFecha || null); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
-    values.push(req.params.id, req.user.sucursalId);
+    values.push(req.params.id, sid);
     await db.query(`UPDATE gastos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
     res.json({ ok: true });
   } catch (e) {
@@ -851,7 +950,12 @@ app.delete('/api/gastos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('DELETE FROM gastos WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    if (pinHash && !finanzasDesbloqueada(req, sid, pinHash)) {
+      return res.status(403).json({ error: 'Desbloqueá finanzas con el PIN para eliminar gastos' });
+    }
+    await db.query('DELETE FROM gastos WHERE id = $1 AND sucursal_id = $2', [req.params.id, sid]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -864,12 +968,19 @@ app.get('/api/cierres-caja', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    const full = finanzasDesbloqueada(req, sid, pinHash);
+    if (!full && pinHash) {
+      res.set('X-Finanzas-Restringido', '1');
+      return res.json([]);
+    }
     const { rows } = await db.query(
       `SELECT *
          FROM cierres_caja
         WHERE sucursal_id = $1
         ORDER BY COALESCE(cerrado_en, created_at) DESC, created_at DESC`,
-      [req.user.sucursalId]
+      [sid]
     );
     res.json(rows.map(mapCierreCajaRow));
   } catch (e) {
@@ -882,9 +993,14 @@ app.get('/api/cierres-caja/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    if (pinHash && !finanzasDesbloqueada(req, sid, pinHash)) {
+      return res.status(404).json({ error: 'No encontrado' });
+    }
     const { rows } = await db.query(
       'SELECT * FROM cierres_caja WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
-      [req.params.id, req.user.sucursalId]
+      [req.params.id, sid]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Cierre no encontrado' });
     res.json(mapCierreCajaRow(rows[0]));
@@ -898,6 +1014,11 @@ app.post('/api/cierres-caja', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    if (pinHash && !finanzasDesbloqueada(req, sid, pinHash)) {
+      return res.status(403).json({ error: 'Desbloqueá finanzas con el PIN para cerrar caja' });
+    }
     const b = req.body || {};
     const descripcion = String(b.descripcion || '').trim();
     const fechaCierre = formatDateOnly(b.fecha);
@@ -1410,6 +1531,139 @@ app.get('/api/sucursal/features', async (req, res) => {
     const { rows } = await db.query('SELECT COALESCE(planificacion_habilitada, false) AS ph FROM sucursales WHERE id = $1', [sid]);
     if (rows.length === 0) return res.status(404).json({ error: 'No encontrado' });
     res.json({ planificacionHabilitada: rows[0].ph === true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Seguridad finanzas (PIN por sucursal: Caja + Pagos) ---
+app.get('/api/sucursal/finanzas/estado', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const { pinHash, autoMin } = await sucursalFinanzasRow(db, sid);
+    const pinConfigurado = !!pinHash;
+    const desbloqueado = finanzasDesbloqueada(req, sid, pinHash);
+    res.json({ pinConfigurado, autoBloqueoMinutos: autoMin, desbloqueado });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sucursal/finanzas/desbloquear', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const pin = String((req.body || {}).pin || '');
+    if (pin.length < 4) return res.status(400).json({ error: 'PIN inválido' });
+    const { pinHash, autoMin } = await sucursalFinanzasRow(db, sid);
+    if (!pinHash) return res.status(400).json({ error: 'No hay PIN de finanzas configurado' });
+    const ok = await bcrypt.compare(pin, pinHash);
+    if (!ok) return res.status(401).json({ error: 'PIN incorrecto' });
+    const token = jwt.sign(
+      { type: FINANZAS_JWT_TYPE, sucursalId: sid, role: 'sucursal' },
+      JWT_SECRET,
+      { expiresIn: `${autoMin}m` }
+    );
+    const decoded = jwt.decode(token);
+    const expiresAt = decoded?.exp ? decoded.exp * 1000 : Date.now() + autoMin * 60 * 1000;
+    res.json({ token, expiresAt });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/sucursal/finanzas/pin', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const b = req.body || {};
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    if (pinHash) return res.status(400).json({ error: 'Ya hay un PIN configurado. Usá cambiar PIN.' });
+    const pin = String(b.pin || '');
+    const pinConfirm = String(b.pinConfirm || '');
+    if (pin.length < 4 || pin.length > 72) return res.status(400).json({ error: 'El PIN debe tener entre 4 y 72 caracteres' });
+    if (pin !== pinConfirm) return res.status(400).json({ error: 'Los PIN no coinciden' });
+    const autoMin = clampFinanzasAutoMinutos(b.autoBloqueoMinutos);
+    const hash = await bcrypt.hash(pin, 10);
+    await db.query(
+      'UPDATE sucursales SET finanzas_pin_hash = $1, finanzas_auto_bloqueo_minutos = $2 WHERE id = $3',
+      [hash, autoMin, sid]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.patch('/api/sucursal/finanzas/pin', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const b = req.body || {};
+    const { pinHash, autoMin } = await sucursalFinanzasRow(db, sid);
+    if (!pinHash) return res.status(400).json({ error: 'No hay PIN configurado' });
+    const unlocked = finanzasDesbloqueada(req, sid, pinHash);
+    const pinActual = String(b.pinActual || '');
+    const onlyAuto =
+      b.autoBloqueoMinutos !== undefined && b.pin === undefined && b.pinConfirm === undefined;
+    if (onlyAuto) {
+      if (!unlocked) return res.status(403).json({ error: 'Desbloqueá la caja con el PIN para cambiar el tiempo de bloqueo' });
+      const nextAuto = clampFinanzasAutoMinutos(b.autoBloqueoMinutos);
+      await db.query('UPDATE sucursales SET finanzas_auto_bloqueo_minutos = $1 WHERE id = $2', [nextAuto, sid]);
+      return res.json({ ok: true });
+    }
+    if (pinActual.length < 4) return res.status(400).json({ error: 'PIN actual requerido' });
+    const okOld = await bcrypt.compare(pinActual, pinHash);
+    if (!okOld) return res.status(401).json({ error: 'PIN actual incorrecto' });
+    const pin = String(b.pin || '');
+    const pinConfirm = String(b.pinConfirm || '');
+    if (b.autoBloqueoMinutos !== undefined) {
+      const nextAuto = clampFinanzasAutoMinutos(b.autoBloqueoMinutos);
+      await db.query('UPDATE sucursales SET finanzas_auto_bloqueo_minutos = $1 WHERE id = $2', [nextAuto, sid]);
+    }
+    if (pin) {
+      if (pin.length < 4 || pin.length > 72) return res.status(400).json({ error: 'El PIN debe tener entre 4 y 72 caracteres' });
+      if (pin !== pinConfirm) return res.status(400).json({ error: 'Los PIN no coinciden' });
+      const hash = await bcrypt.hash(pin, 10);
+      await db.query('UPDATE sucursales SET finanzas_pin_hash = $1 WHERE id = $2', [hash, sid]);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/sucursal/finanzas/pin', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const pinActual = String((req.body || {}).pinActual || '');
+    if (pinActual.length < 4) return res.status(400).json({ error: 'PIN actual requerido' });
+    const { pinHash } = await sucursalFinanzasRow(db, sid);
+    if (!pinHash) return res.status(400).json({ error: 'No hay PIN configurado' });
+    const ok = await bcrypt.compare(pinActual, pinHash);
+    if (!ok) return res.status(401).json({ error: 'PIN incorrecto' });
+    await db.query(
+      'UPDATE sucursales SET finanzas_pin_hash = NULL, finanzas_auto_bloqueo_minutos = 15 WHERE id = $1',
+      [sid]
+    );
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

@@ -1,3 +1,12 @@
+/** Estado del PIN de finanzas (Caja / Pagos) para la sucursal en sesión */
+export interface FinanzasEstado {
+  pinConfigurado: boolean;
+  /** Minutos hasta el bloqueo automático tras desbloquear con el PIN */
+  autoBloqueoMinutos: number;
+  /** Si hay PIN, indica si el token de desbloqueo sigue vigente */
+  desbloqueado: boolean;
+}
+
 export interface Sucursal {
   id: string;
   nombreLugar: string;

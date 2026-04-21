@@ -23,6 +23,9 @@ ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_fin_tarde TEXT DEFAULT '21:
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horarios_no_disponibles_por_dia JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horas_antes_anotarse_clase INTEGER DEFAULT 0;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horas_antes_liberar_clase INTEGER DEFAULT 0;
+-- PIN opcional para desbloquear Caja / ver totales completos en Pagos (hash bcrypt)
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS finanzas_pin_hash TEXT;
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS finanzas_auto_bloqueo_minutos INTEGER DEFAULT 15;
 
 -- Admin (una cuenta para gestionar todas las sucursales)
 CREATE TABLE IF NOT EXISTS admin (

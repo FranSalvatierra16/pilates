@@ -2395,45 +2395,72 @@ const Calendario = () => {
       )}
 
       {modalNotaFecha && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
-            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Nota de planificación</h2>
-                <p className="text-sm text-gray-600 mt-1">{formatDate(modalNotaFecha)}</p>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/55 backdrop-blur-[2px]">
+          <div
+            className="bg-white shadow-2xl w-full max-w-5xl max-h-[96vh] sm:max-h-[92vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-2xl border border-amber-100/90 ring-1 ring-black/5"
+            role="dialog"
+            aria-labelledby="modal-nota-planif-titulo"
+            aria-modal="true"
+          >
+            <div className="flex-shrink-0 px-5 sm:px-8 pt-6 pb-5 bg-gradient-to-br from-amber-50 via-white to-violet-50/60 border-b border-amber-100/80">
+              <div className="flex justify-between items-start gap-4">
+                <div className="flex gap-4 min-w-0">
+                  <div className="hidden sm:flex h-14 w-14 shrink-0 rounded-2xl bg-amber-100/90 border border-amber-200/80 items-center justify-center text-amber-900 shadow-sm">
+                    <StickyNote className="w-7 h-7" strokeWidth={1.75} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-800/90 mb-1">
+                      Planificación del día
+                    </p>
+                    <h2 id="modal-nota-planif-titulo" className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+                      {formatDate(modalNotaFecha)}
+                    </h2>
+                    <p className="text-sm text-gray-600 mt-2 leading-relaxed max-w-2xl">
+                      Escribí series, máquinas y abreviaturas como quieras. Guardá vacío para borrar la nota de este día.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={cerrarModalNotaPlanif}
+                  className="shrink-0 p-2.5 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-white/80 border border-transparent hover:border-amber-200/60 transition-colors"
+                  aria-label="Cerrar"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
+            </div>
+
+            <div className="flex-1 min-h-0 flex flex-col px-5 sm:px-8 py-5 sm:py-6 bg-slate-50/40">
+              <label htmlFor="nota-planif-textarea" className="sr-only">
+                Contenido de la nota de planificación
+              </label>
+              <textarea
+                id="nota-planif-textarea"
+                className="w-full flex-1 min-h-[min(52vh,420px)] sm:min-h-[min(58vh,520px)] rounded-xl border-2 border-gray-200 bg-white px-4 py-4 sm:px-5 sm:py-5 text-[15px] sm:text-base font-mono leading-relaxed text-gray-900 placeholder:text-gray-400 whitespace-pre-wrap shadow-inner focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100/80 transition-shadow resize-y"
+                value={draftNotaTexto}
+                onChange={(e) => setDraftNotaTexto(e.target.value)}
+                placeholder="Ej. oso atrás, plancha, R- estocada, T- abs, TRX escalador… (podés pegar listas largas)"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="flex-shrink-0 px-5 sm:px-8 py-4 sm:py-5 bg-white border-t border-gray-200/90 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
               <button
                 type="button"
                 onClick={cerrarModalNotaPlanif}
-                className="p-2 -m-2 text-gray-400 hover:text-gray-600"
-                aria-label="Cerrar"
+                className="btn-secondary min-h-[48px] px-6 w-full sm:w-auto text-base"
               >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
-              <p className="text-xs text-gray-500 mb-2">
-                Texto libre: series, máquinas, abreviaturas. Dejá vacío y guardá para borrar la nota.
-              </p>
-              <textarea
-                className="input-field w-full min-h-[220px] text-sm font-mono whitespace-pre-wrap"
-                value={draftNotaTexto}
-                onChange={(e) => setDraftNotaTexto(e.target.value)}
-                placeholder="Ej. oso atrás, plancha, R- estocada, T- abs..."
-                spellCheck={false}
-              />
-            </div>
-            <div className="p-4 sm:p-6 border-t border-gray-200 flex flex-col-reverse sm:flex-row justify-end gap-2 flex-shrink-0">
-              <button type="button" onClick={cerrarModalNotaPlanif} className="btn-secondary min-h-[44px] w-full sm:w-auto">
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={() => void guardarNotaPlanif()}
                 disabled={guardandoNotaPlanif}
-                className="btn-primary min-h-[44px] w-full sm:w-auto disabled:opacity-60"
+                className="btn-primary min-h-[48px] px-8 w-full sm:w-auto text-base font-semibold disabled:opacity-60 shadow-md shadow-primary-600/15"
               >
-                {guardandoNotaPlanif ? 'Guardando...' : 'Guardar'}
+                {guardandoNotaPlanif ? 'Guardando…' : 'Guardar nota'}
               </button>
             </div>
           </div>

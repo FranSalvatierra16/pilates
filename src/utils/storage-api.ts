@@ -279,6 +279,15 @@ export const storageApi = {
         method: 'PUT',
         body: JSON.stringify({ items }),
       }),
+    getCalendarioNotasRango: (desde: string, hasta: string): Promise<Record<string, string>> =>
+      request<{ notas: Record<string, string> }>(
+        `/api/planificacion/calendario-notas?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`
+      ).then((r) => r.notas || {}),
+    putCalendarioNota: (fecha: string, texto: string): Promise<void> =>
+      request(`/api/planificacion/calendario-notas/${encodeURIComponent(fecha)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ texto }),
+      }),
   },
   admin: {
     getSucursales: (): Promise<Sucursal[]> => request<Sucursal[]>('/api/admin/sucursales'),

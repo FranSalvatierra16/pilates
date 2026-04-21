@@ -577,5 +577,28 @@ export const storageHybrid = {
       storage.planificacion.saveDiaItemsMap(m);
       return { items: out };
     },
+    getCalendarioNotasRango: async (desde: string, hasta: string): Promise<Record<string, string>> => {
+      if (useApi()) return storageApi.planificacion.getCalendarioNotasRango(desde, hasta);
+      const all = storage.planificacion.getCalendarioNotasMap();
+      const out: Record<string, string> = {};
+      const [y1, m1, d1] = desde.split('-').map(Number);
+      const [y2, m2, d2] = hasta.split('-').map(Number);
+      const cur = new Date(y1, m1 - 1, d1);
+      const end = new Date(y2, m2 - 1, d2);
+      while (cur <= end) {
+        const k = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+        if (all[k]) out[k] = all[k];
+        cur.setDate(cur.getDate() + 1);
+      }
+      return out;
+    },
+    putCalendarioNota: async (fecha: string, texto: string): Promise<void> => {
+      if (useApi()) return storageApi.planificacion.putCalendarioNota(fecha, texto);
+      const all = { ...storage.planificacion.getCalendarioNotasMap() };
+      const t = texto.trim();
+      if (!t) delete all[fecha];
+      else all[fecha] = texto;
+      storage.planificacion.saveCalendarioNotasMap(all);
+    },
   },
 };

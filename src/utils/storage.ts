@@ -40,6 +40,7 @@ const STORAGE_KEYS = {
   planifPlanes: 'savia_planif_planes',
   planifPlanItems: 'savia_planif_plan_items',
   planifDiaItems: 'savia_planif_dia_items',
+  planifCalNotas: 'savia_planif_cal_notas',
 } as const;
 
 export const storage = {
@@ -441,6 +442,24 @@ export const storage = {
     },
     saveDiaItemsMap: (m: Record<string, PlanificacionDiaItem[]>): void => {
       localStorage.setItem(STORAGE_KEYS.planifDiaItems, JSON.stringify(m));
+    },
+    /** Notas por fecha YYYY-MM-DD (solo modo local / sin API). */
+    getCalendarioNotasMap: (): Record<string, string> => {
+      const data = localStorage.getItem(STORAGE_KEYS.planifCalNotas);
+      if (!data) return {};
+      try {
+        const raw = JSON.parse(data) as Record<string, string>;
+        const out: Record<string, string> = {};
+        for (const [k, v] of Object.entries(raw)) {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(k) && typeof v === 'string') out[k] = v;
+        }
+        return out;
+      } catch {
+        return {};
+      }
+    },
+    saveCalendarioNotasMap: (m: Record<string, string>): void => {
+      localStorage.setItem(STORAGE_KEYS.planifCalNotas, JSON.stringify(m));
     },
   },
 };

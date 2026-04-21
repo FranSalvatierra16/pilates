@@ -17,7 +17,6 @@ import {
   Menu,
   X,
   Bell,
-  ClipboardList,
 } from 'lucide-react';
 import type { NotificacionItem } from '../pages/Notificaciones';
 
@@ -46,7 +45,7 @@ function formatNotifFecha(iso: string) {
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
-  const { logout, sucursalNombre, fotoPerfil, planificacionHabilitada, refreshPlanificacionFlag } = useAuth();
+  const { logout, sucursalNombre, fotoPerfil, refreshPlanificacionFlag } = useAuth();
 
   useEffect(() => {
     void refreshPlanificacionFlag();
@@ -156,9 +155,6 @@ const Layout = ({ children }: LayoutProps) => {
       { path: '/profesores', label: 'Profesores', icon: GraduationCap },
       { path: '/actividades', label: 'Actividades', icon: Activity },
     ];
-    if (planificacionHabilitada) {
-      base.push({ path: '/planificacion', label: 'Planificación', icon: ClipboardList });
-    }
     base.push(
       { path: '/acceso', label: 'Acceso', icon: DoorOpen },
       { path: '/pagos', label: 'Pagos', icon: CreditCard },
@@ -167,7 +163,7 @@ const Layout = ({ children }: LayoutProps) => {
       { path: '/notificaciones', label: 'Notif.', icon: Bell }
     );
     return base;
-  }, [planificacionHabilitada]);
+  }, []);
 
   return (
     <div className="min-h-screen min-h-dvh flex flex-col">

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2 } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
 import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
+import { useAuth } from '../contexts/AuthContext';
 
 // Horarios por defecto (modo local); en API se cargan desde la sucursal
 const horariosManana_DEFAULT = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00'];
@@ -233,6 +234,12 @@ const Calendario = () => {
   const [generandoVistaReporte, setGenerandoVistaReporte] = useState(false);
   const [reportePreview, setReportePreview] = useState<ReporteVistaPrevia | null>(null);
 
+  const { planificacionHabilitada } = useAuth();
+  const [notasPlanifPorFecha, setNotasPlanifPorFecha] = useState<Record<string, string>>({});
+  const [modalNotaFecha, setModalNotaFecha] = useState<string | null>(null);
+  const [draftNotaTexto, setDraftNotaTexto] = useState('');
+  const [guardandoNotaPlanif, setGuardandoNotaPlanif] = useState(false);
+
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [selectedDiaMobile, setSelectedDiaMobile] = useState<number | null>(null);
   const [selectedBloqueMobile, setSelectedBloqueMobile] = useState<'todos' | 'manana' | 'tarde'>('todos');
@@ -281,6 +288,27 @@ const Calendario = () => {
       await loadInscripciones();
     })();
   }, [semanaVista]);
+
+  useEffect(() => {
+    if (!planificacionHabilitada) {
+      setNotasPlanifPorFecha({});
+      return;
+    }
+    const desde = getFechaFromSemanaYDia(semanaVista, 0);
+    const hasta = getFechaFromSemanaYDia(semanaVista, 5);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const notas = await storageHybrid.planificacion.getCalendarioNotasRango(desde, hasta);
+        if (!cancelled) setNotasPlanifPorFecha(notas);
+      } catch {
+        if (!cancelled) setNotasPlanifPorFecha({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [planificacionHabilitada, semanaVista]);
 
   useEffect(() => {
     if (showModalHorarios && useApi()) {
@@ -368,6 +396,34 @@ const Calendario = () => {
 
   // Días de la semana: 0 = Lunes, 1 = Martes, ..., 5 = Sábado (sin domingo)
   const diasSemana = [0, 1, 2, 3, 4, 5];
+
+  const abrirModalNotaPlanif = (fecha: string) => {
+    setModalNotaFecha(fecha);
+    setDraftNotaTexto(notasPlanifPorFecha[fecha] || '');
+  };
+  const cerrarModalNotaPlanif = () => {
+    setModalNotaFecha(null);
+    setDraftNotaTexto('');
+  };
+  const guardarNotaPlanif = async () => {
+    if (!modalNotaFecha) return;
+    setGuardandoNotaPlanif(true);
+    try {
+      await storageHybrid.planificacion.putCalendarioNota(modalNotaFecha, draftNotaTexto);
+      setNotasPlanifPorFecha((prev) => {
+        const next = { ...prev };
+        if (!draftNotaTexto.trim()) delete next[modalNotaFecha];
+        else next[modalNotaFecha] = draftNotaTexto;
+        return next;
+      });
+      toast.success('Nota guardada');
+      cerrarModalNotaPlanif();
+    } catch {
+      toast.error('No se pudo guardar la nota');
+    } finally {
+      setGuardandoNotaPlanif(false);
+    }
+  };
 
   // Etiquetas dinámicas según horarios de la sucursal (ej. Nes 9–13h, Savia 7–12h)
   const labelManana = horariosManana.length ? `${horariosManana[0]} - ${horariosManana[horariosManana.length - 1]}` : 'Mañana';
@@ -1513,6 +1569,12 @@ const Calendario = () => {
             <span className="page-title-accent" aria-hidden />
             <h1 className="page-title">Calendario de Turnos</h1>
           </div>
+          {planificacionHabilitada && (
+            <p className="text-sm text-gray-600 max-w-xl">
+              Podés guardar una <strong className="font-medium">nota de planificación</strong> por día (botón Nota en cada
+              columna o en la vista móvil).
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -1614,6 +1676,30 @@ const Calendario = () => {
                 </button>
               ))}
             </div>
+            {planificacionHabilitada && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs font-medium text-gray-500 mb-2">Nota de planificación (por día)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {diasSemana.map((diaIndex) => {
+                    const f = getFechaFromSemanaYDia(semanaVista, diaIndex);
+                    const mark = !!notasPlanifPorFecha[f]?.trim();
+                    return (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => abrirModalNotaPlanif(f)}
+                        className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium touch-manipulation ${
+                          mark ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-gray-100 text-gray-700 border border-gray-200'
+                        }`}
+                      >
+                        <StickyNote className="w-3.5 h-3.5" />
+                        {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][diaIndex]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <p className="text-xs font-medium text-gray-500 mb-2">Ver horario</p>
             <div className="flex flex-wrap gap-1.5">
               <button
@@ -1835,14 +1921,34 @@ const Calendario = () => {
             <div className="min-w-[720px] pr-4 sm:pr-0">
               <div className="grid grid-cols-8 border-b border-gray-200 bg-primary-50">
                 <div className="sticky left-0 z-20 p-2 sm:p-3 font-semibold text-gray-700 border-r border-gray-200 bg-primary-50 shadow-[2px_0_4px_rgba(0,0,0,0.06)]">Hora</div>
-                {diasSemana.map((diaIndex) => (
-                  <div
-                    key={diaIndex}
-                    className="p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700 min-w-[72px]"
-                  >
-                    <div className="text-xs sm:text-sm uppercase">{DIAS_SEMANA[diaIndex]}</div>
-                  </div>
-                ))}
+                {diasSemana.map((diaIndex) => {
+                  const fechaCol = getFechaFromSemanaYDia(semanaVista, diaIndex);
+                  const tieneNota = !!notasPlanifPorFecha[fechaCol]?.trim();
+                  return (
+                    <div
+                      key={diaIndex}
+                      className="p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700 min-w-[72px]"
+                    >
+                      <div className="text-xs sm:text-sm uppercase">{DIAS_SEMANA[diaIndex]}</div>
+                      <div className="text-[10px] text-gray-500 font-normal mt-0.5">{formatDate(fechaCol)}</div>
+                      {planificacionHabilitada && (
+                        <button
+                          type="button"
+                          onClick={() => abrirModalNotaPlanif(fechaCol)}
+                          className={`mt-1 inline-flex items-center justify-center gap-0.5 rounded-lg px-1.5 py-1 text-[10px] sm:text-[11px] font-medium w-full max-w-[104px] mx-auto leading-tight ${
+                            tieneNota
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-transparent'
+                          }`}
+                          title="Nota de planificación del día"
+                        >
+                          <StickyNote className="w-3 h-3 shrink-0" />
+                          {tieneNota ? 'Ver nota' : 'Nota'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <div className="border-b border-gray-300">
                 <div className="bg-gray-50 px-2 sm:px-3 py-2 font-semibold text-gray-700 text-xs sm:text-sm">
@@ -2283,6 +2389,52 @@ const Calendario = () => {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalNotaFecha && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Nota de planificación</h2>
+                <p className="text-sm text-gray-600 mt-1">{formatDate(modalNotaFecha)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={cerrarModalNotaPlanif}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-4 sm:p-6 flex-1 overflow-y-auto">
+              <p className="text-xs text-gray-500 mb-2">
+                Texto libre: series, máquinas, abreviaturas. Dejá vacío y guardá para borrar la nota.
+              </p>
+              <textarea
+                className="input-field w-full min-h-[220px] text-sm font-mono whitespace-pre-wrap"
+                value={draftNotaTexto}
+                onChange={(e) => setDraftNotaTexto(e.target.value)}
+                placeholder="Ej. oso atrás, plancha, R- estocada, T- abs..."
+                spellCheck={false}
+              />
+            </div>
+            <div className="p-4 sm:p-6 border-t border-gray-200 flex flex-col-reverse sm:flex-row justify-end gap-2 flex-shrink-0">
+              <button type="button" onClick={cerrarModalNotaPlanif} className="btn-secondary min-h-[44px] w-full sm:w-auto">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void guardarNotaPlanif()}
+                disabled={guardandoNotaPlanif}
+                className="btn-primary min-h-[44px] w-full sm:w-auto disabled:opacity-60"
+              >
+                {guardandoNotaPlanif ? 'Guardando...' : 'Guardar'}
+              </button>
             </div>
           </div>
         </div>

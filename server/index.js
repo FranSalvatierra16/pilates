@@ -1886,6 +1886,73 @@ app.put('/api/planificacion/fechas/:fecha/items', async (req, res) => {
   }
 });
 
+/** Notas de planificación por fecha (texto libre; mismo período que el calendario de clases). */
+app.get('/api/planificacion/calendario-notas', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const desde = parseFechaPlanifParam(req.query.desde);
+    const hasta = parseFechaPlanifParam(req.query.hasta);
+    if (!desde || !hasta) return res.status(400).json({ error: 'Parámetros desde y hasta requeridos (YYYY-MM-DD)' });
+    const { rows } = await db.query(
+      `SELECT fecha::text AS fecha, texto FROM planificacion_calendario_nota
+       WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
+      [sid, desde, hasta]
+    );
+    const notas = {};
+    for (const r of rows) {
+      notas[r.fecha] = r.texto || '';
+    }
+    res.json({ notas });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/planificacion/calendario-notas/:fecha', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    if (!(await sucursalPlanificacionHabilitada(db, sid))) {
+      return res.status(403).json({ error: 'Planificación no habilitada para esta sucursal' });
+    }
+    const fecha = parseFechaPlanifParam(req.params.fecha);
+    if (!fecha) return res.status(400).json({ error: 'Fecha inválida (usar YYYY-MM-DD)' });
+    const texto = String((req.body || {}).texto ?? '').trim();
+    if (!texto) {
+      await db.query(
+        'DELETE FROM planificacion_calendario_nota WHERE sucursal_id = $1 AND fecha = $2::date',
+        [sid, fecha]
+      );
+      return res.json({ ok: true, fecha, texto: '' });
+    }
+    const up = await db.query(
+      `UPDATE planificacion_calendario_nota SET texto = $3, updated_at = NOW()
+       WHERE sucursal_id = $1 AND fecha = $2::date`,
+      [sid, fecha, texto]
+    );
+    if (up.rowCount === 0) {
+      await db.query(
+        `INSERT INTO planificacion_calendario_nota (id, sucursal_id, fecha, texto, updated_at)
+         VALUES ($1, $2, $3::date, $4, NOW())`,
+        [crypto.randomUUID(), sid, fecha, texto]
+      );
+    }
+    res.json({ ok: true, fecha, texto });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/planificacion/planes', async (req, res) => {
   try {
     const db = await getPool();

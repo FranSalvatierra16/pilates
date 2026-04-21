@@ -337,3 +337,14 @@ END $$;
 ALTER TABLE planificacion_dia_item ALTER COLUMN fecha SET NOT NULL;
 DROP INDEX IF EXISTS idx_planif_dia_suc_dia;
 CREATE INDEX IF NOT EXISTS idx_planif_dia_suc_fecha ON planificacion_dia_item(sucursal_id, fecha);
+
+-- Nota libre de planificación por día (calendario); sin ejercicios ni plantillas
+CREATE TABLE IF NOT EXISTS planificacion_calendario_nota (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  fecha DATE NOT NULL,
+  texto TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (sucursal_id, fecha)
+);
+CREATE INDEX IF NOT EXISTS idx_planif_cal_nota_suc_fecha ON planificacion_calendario_nota(sucursal_id, fecha);

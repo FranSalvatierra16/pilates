@@ -255,11 +255,11 @@ export default function AdminSucursalEditar() {
             />
             <div>
               <label htmlFor="planificacion" className="text-sm font-medium text-gray-800">
-                Planificación de entrenamientos
+                Notas de planificación en el calendario
               </label>
               <p className="text-xs text-gray-600 mt-0.5">
-                Por defecto está desactivada. Si la activás, esta sede verá el menú Planificación para cargar ejercicios,
-                tipos, máquinas y planes de clase.
+                Si está activada, en Calendario podés escribir y guardar una nota de texto por día (series, máquinas,
+                abreviaturas, etc.).
               </p>
             </div>
           </div>

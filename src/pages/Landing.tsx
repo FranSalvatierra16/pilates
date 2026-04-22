@@ -100,7 +100,7 @@ function BrowserChrome({ children, className = '' }: { children: ReactNode; clas
 function PhoneFrame({ src, alt, label }: { src: string; alt: string; label: string }) {
   return (
     <figure className="w-full max-w-[min(100%,280px)] shrink-0 mx-auto sm:mx-0">
-      <div className="rounded-[1.85rem] sm:rounded-[2.25rem] p-1.5 sm:p-2 bg-gradient-to-b from-primary-800/90 to-slate-950 shadow-2xl ring-1 ring-white/10">
+      <div className="rounded-[1.85rem] sm:rounded-[2.25rem] p-1.5 sm:p-2 bg-gradient-to-b from-brand-800/90 to-slate-950 shadow-2xl ring-1 ring-white/10">
         <div className="rounded-[1.5rem] sm:rounded-[1.85rem] overflow-hidden border border-black/50 bg-black">
           <img
             src={src}
@@ -308,11 +308,11 @@ function EscritorioCarousel() {
               el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
               setActive(i);
             }}
-            className="p-2 -m-0.5 touch-manipulation rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/60"
+            className="p-2 -m-0.5 touch-manipulation rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60"
           >
             <span
               className={`block h-2 rounded-full transition-all ${
-                i === active ? 'w-7 bg-primary-400' : 'w-2 bg-white/25'
+                i === active ? 'w-7 bg-brand-400' : 'w-2 bg-white/25'
               }`}
             />
           </button>
@@ -395,7 +395,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <Link to="/" className="flex items-center gap-2.5 sm:gap-3 min-w-0 group shrink-0">
-              <BrandMark size={38} className="shadow-lg shadow-black/30 ring-white/20 group-hover:ring-primary-400/40 transition" />
+              <BrandMark size={38} className="shadow-lg shadow-black/30 ring-white/20 group-hover:ring-brand-400/40 transition" />
               <span className="font-semibold text-base sm:text-lg tracking-tight truncate text-white">
                 {APP_NAME}
               </span>
@@ -416,7 +416,7 @@ export default function Landing() {
               </Link>
               <Link
                 to="/entrada"
-                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-primary-600 hover:bg-primary-500 active:bg-primary-700 text-white text-xs sm:text-sm font-semibold px-3 sm:px-4 shadow-lg shadow-primary-900/40 transition touch-manipulation"
+                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white text-xs sm:text-sm font-semibold px-3 sm:px-4 shadow-lg shadow-brand-900/40 transition touch-manipulation"
               >
                 Entrar
                 <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" aria-hidden />
@@ -428,8 +428,8 @@ export default function Landing() {
 
       <main className="relative z-10">
         <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 pb-10 sm:pt-20 sm:pb-16">
-          <p className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-primary-500/35 bg-primary-900/50 text-primary-100 text-[11px] sm:text-xs font-medium px-3 py-1.5 mb-4 sm:mb-5 sm:justify-start">
-            <BrandMark size={22} className="ring-primary-400/40" />
+          <p className="inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-brand-500/35 bg-brand-900/50 text-brand-100 text-[11px] sm:text-xs font-medium px-3 py-1.5 mb-4 sm:mb-5 sm:justify-start">
+            <BrandMark size={22} className="ring-brand-400/40" />
             <span className="text-left leading-snug">Gestión para estudios de Pilates y fitness</span>
           </p>
           <h1 className="text-[1.65rem] leading-[1.12] sm:text-4xl sm:leading-tight lg:text-[3.25rem] font-bold tracking-tight text-white max-w-3xl text-balance">
@@ -442,7 +442,7 @@ export default function Landing() {
           <div className="mt-6 sm:mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
             <Link
               to="/entrada"
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-600 hover:bg-primary-500 active:bg-primary-700 text-white font-semibold px-5 sm:px-6 py-3.5 text-[15px] sm:text-base shadow-xl shadow-primary-900/50 transition touch-manipulation"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-semibold px-5 sm:px-6 py-3.5 text-[15px] sm:text-base shadow-xl shadow-brand-900/50 transition touch-manipulation"
             >
               Entrar al sistema
               <ArrowRight className="w-5 h-5 shrink-0" aria-hidden />
@@ -462,7 +462,7 @@ export default function Landing() {
         >
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-20">
             <div className="max-w-2xl mb-8 sm:mb-12">
-              <p className="text-primary-300 text-[11px] sm:text-xs font-semibold uppercase tracking-widest mb-1.5 sm:mb-2">
+              <p className="text-brand-300 text-[11px] sm:text-xs font-semibold uppercase tracking-widest mb-1.5 sm:mb-2">
                 Producto real
               </p>
               <h2 className="text-2xl sm:text-4xl font-bold text-white tracking-tight text-balance leading-tight">
@@ -523,19 +523,19 @@ export default function Landing() {
               </p>
               <ul className="mt-6 space-y-3 text-sm text-slate-300">
                 <li className="flex gap-2">
-                  <span className="text-primary-400 font-bold">·</span>
+                  <span className="text-brand-400 font-bold">·</span>
                   <span>
                     <strong className="text-white">Actividades</strong> con precios y frecuencia (1x, 2x, 3x por semana, prueba, etc.) para que cada alumno refleje su plan.
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-primary-400 font-bold">·</span>
+                  <span className="text-brand-400 font-bold">·</span>
                   <span>
                     <strong className="text-white">Pagos y Caja</strong> con efectivo y transferencia, resúmenes del período abierto y cierres guardados por fecha.
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="text-primary-400 font-bold">·</span>
+                  <span className="text-brand-400 font-bold">·</span>
                   <span>
                     <strong className="text-white">Agenda</strong> con notas por día (importantes o no) y sección de notas sin fecha para lo operativo del estudio.
                   </span>
@@ -543,12 +543,12 @@ export default function Landing() {
               </ul>
             </div>
             <div className="rounded-xl sm:rounded-2xl border border-white/10 bg-slate-900/60 p-5 sm:p-8">
-              <h3 className="text-xs sm:text-sm font-semibold text-primary-200 uppercase tracking-wide">
+              <h3 className="text-xs sm:text-sm font-semibold text-brand-200 uppercase tracking-wide">
                 Flujo típico
               </h3>
               <ol className="mt-4 space-y-4 text-sm text-slate-300">
                 <li className="flex gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-500/20 text-primary-300 font-bold text-xs">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/20 text-brand-300 font-bold text-xs">
                     1
                   </span>
                   <span>
@@ -556,7 +556,7 @@ export default function Landing() {
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-500/20 text-primary-300 font-bold text-xs">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/20 text-brand-300 font-bold text-xs">
                     2
                   </span>
                   <span>
@@ -564,7 +564,7 @@ export default function Landing() {
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-500/20 text-primary-300 font-bold text-xs">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500/20 text-brand-300 font-bold text-xs">
                     3
                   </span>
                   <span>
@@ -588,9 +588,9 @@ export default function Landing() {
               {highlights.map(({ icon: Icon, title, text }) => (
                 <li
                   key={title}
-                  className="rounded-xl sm:rounded-2xl border border-white/10 bg-slate-950/55 p-4 sm:p-6 hover:border-primary-500/25 hover:bg-slate-900/70 transition duration-300"
+                  className="rounded-xl sm:rounded-2xl border border-white/10 bg-slate-950/55 p-4 sm:p-6 hover:border-brand-500/25 hover:bg-slate-900/70 transition duration-300"
                 >
-                  <div className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-xl bg-primary-500/15 text-primary-300 mb-2.5 sm:mb-3">
+                  <div className="inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-lg sm:rounded-xl bg-brand-500/15 text-brand-300 mb-2.5 sm:mb-3">
                     <Icon className="w-[18px] h-[18px] sm:w-5 sm:h-5" aria-hidden />
                   </div>
                   <h3 className="text-[15px] sm:text-base font-semibold text-white leading-snug">{title}</h3>
@@ -605,7 +605,7 @@ export default function Landing() {
           id="prueba-gratis"
           className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-18 scroll-mt-[calc(5.5rem+env(safe-area-inset-top))] sm:scroll-mt-24"
         >
-          <div className="rounded-2xl sm:rounded-3xl border border-primary-500/30 bg-gradient-to-br from-primary-900/50 via-slate-900/80 to-indigo-950/40 p-5 sm:p-12">
+          <div className="rounded-2xl sm:rounded-3xl border border-brand-500/30 bg-gradient-to-br from-brand-900/50 via-slate-900/80 to-indigo-950/40 p-5 sm:p-12">
             <div className="max-w-xl mx-auto text-center px-1">
               <h2 className="text-xl sm:text-3xl font-bold text-white text-balance leading-tight">
                 Tu prueba gratis y más info
@@ -632,7 +632,7 @@ export default function Landing() {
             <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row sm:flex-wrap items-center justify-center gap-2 sm:gap-4 text-sm px-2">
               <Link
                 to="/entrada"
-                className="text-primary-300 hover:text-primary-200 font-medium hover:underline py-2.5 touch-manipulation text-center max-w-[20rem] leading-snug"
+                className="text-brand-300 hover:text-brand-200 font-medium hover:underline py-2.5 touch-manipulation text-center max-w-[20rem] leading-snug"
               >
                 Ya tengo cuenta — ir al acceso
               </Link>

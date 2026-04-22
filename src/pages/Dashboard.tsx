@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Activity, DollarSign, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import DashboardGuiaUso from '../components/DashboardGuiaUso';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { isCuotaVencida } from '../utils/date';
@@ -189,16 +190,24 @@ const Dashboard = () => {
         <div className="card">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Bienvenido</h2>
           <p className="text-gray-600 mb-4">
-            Sistema de gestión para {nombreSucursal}. Desde aquí puedes gestionar alumnos,
-            actividades, controlar accesos, registrar pagos, ver el estado de la caja y gestionar turnos.
+            Sistema de gestión para {nombreSucursal}. Desde aquí podés gestionar alumnos,
+            actividades, controlar accesos, registrar pagos, ver el estado de la caja y los turnos.
           </p>
-          <div className="bg-primary-50 p-4 rounded-lg">
+          <div className="bg-primary-50 p-4 rounded-lg space-y-2">
             <p className="text-sm text-primary-800">
-              💡 <strong>Tip:</strong> Usa el menú superior para navegar entre las diferentes secciones del sistema.
+              💡 <strong>Tip:</strong> usá el menú superior para moverte entre módulos.
+            </p>
+            <p className="text-sm text-primary-800">
+              <a href="#guia-uso" className="font-semibold underline decoration-primary-400/60 hover:decoration-primary-600">
+                Guía del estudio abajo
+              </a>{' '}
+              — explicación clara de cada pantalla para vender el uso interno y capacitar al equipo.
             </p>
           </div>
         </div>
       </div>
+
+      <DashboardGuiaUso />
     </div>
   );
 };

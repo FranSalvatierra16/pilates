@@ -4357,6 +4357,17 @@ app.post('/api/public/solicitud-prueba', async (req, res) => {
 // Servir frontend estático (después de build)
 const distPath = join(__dirname, '..', 'dist');
 if (existsSync(distPath)) {
+  const manualPath = join(distPath, 'docs', 'MANUAL-USO-APP.md');
+  app.get('/docs/MANUAL-USO-APP.md', (req, res) => {
+    if (!existsSync(manualPath)) {
+      res.status(404).type('text/plain; charset=utf-8').send('Manual no encontrado en el deploy. Verificá que exista public/docs/MANUAL-USO-APP.md y que npm run build se ejecute en Railway.');
+      return;
+    }
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.sendFile(manualPath);
+  });
   app.use(express.static(distPath, { index: false }));
   app.get('*', async (req, res) => {
     try {

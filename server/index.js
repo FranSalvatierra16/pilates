@@ -6,6 +6,7 @@ import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import webpush from 'web-push';
+import nodemailer from 'nodemailer';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -4290,6 +4291,66 @@ app.get('/api/public/sucursal-logo/:id', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.redirect('/fitgest.png');
+  }
+});
+
+/** Transporter reutilizable para avisos de leads (landing prueba gratis). */
+let leadMailTransporter = null;
+function getLeadMailTransporter() {
+  if (leadMailTransporter) return leadMailTransporter;
+  if (process.env.SMTP_URL) {
+    leadMailTransporter = nodemailer.createTransport(process.env.SMTP_URL);
+    return leadMailTransporter;
+  }
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  if (user && pass) {
+    leadMailTransporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass },
+    });
+    return leadMailTransporter;
+  }
+  return null;
+}
+
+/** Solicitud pública desde la landing: envía un mail (p. ej. a fransalvatierra16@gmail.com). Requiere SMTP en el servidor. */
+app.post('/api/public/solicitud-prueba', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim();
+    const telefono = String(req.body?.telefono || '').trim();
+    if (!email || !telefono) {
+      return res.status(400).json({ error: 'Completá email y teléfono.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Email inválido.' });
+    }
+    const to = (process.env.LEADS_NOTIFY_EMAIL || 'fransalvatierra16@gmail.com').trim();
+    const transport = getLeadMailTransporter();
+    if (!transport) {
+      console.warn('[solicitud-prueba] Sin SMTP configurado:', { email, telefono, to });
+      return res.status(503).json({
+        error:
+          'El envío de correo no está configurado. En Railway agregá GMAIL_USER y GMAIL_APP_PASSWORD (contraseña de aplicación de Gmail) o SMTP_URL.',
+      });
+    }
+    const fromAddr = (process.env.SMTP_FROM || process.env.GMAIL_USER || '').trim();
+    if (!fromAddr) {
+      return res.status(503).json({ error: 'Falta GMAIL_USER o SMTP_FROM para enviar.' });
+    }
+    const brand = (process.env.APP_BRAND || process.env.VITE_APP_NAME || 'FitGest').toString().trim() || 'FitGest';
+    await transport.sendMail({
+      from: `"${brand} — prueba gratis" <${fromAddr}>`,
+      to,
+      replyTo: email,
+      subject: `Prueba gratis — ${email}`,
+      text: `Nueva solicitud de prueba gratis (${brand})\n\nEmail: ${email}\nTeléfono: ${telefono}\n\nPodés responder a este correo para escribirle al interesado (Reply-To: ${email}).`,
+      html: `<p>Nueva solicitud de <strong>prueba gratis</strong> (${escapeHtml(brand)})</p><p><b>Email:</b> ${escapeHtml(email)}<br/><b>Teléfono:</b> ${escapeHtml(telefono)}</p><p><small>Reply-To: el interesado.</small></p>`,
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[solicitud-prueba]', e);
+    res.status(500).json({ error: e.message || 'No se pudo enviar el correo.' });
   }
 });
 

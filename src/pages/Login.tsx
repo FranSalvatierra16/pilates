@@ -29,7 +29,7 @@ const Login = () => {
       <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-8 w-full max-w-md">
         <button
           type="button"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/entrada')}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 mb-5"
         >
           <ArrowLeft className="w-4 h-4" />

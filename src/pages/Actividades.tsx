@@ -167,7 +167,7 @@ const Actividades = () => {
                   </p>
                   <p className="text-sm text-gray-500 mt-1">
                     {actividad.clasesPorSemana != null
-                      ? `${actividad.clasesPorSemana} vez${actividad.clasesPorSemana === 1 ? '' : 'es'} por semana`
+                      ? `${actividad.clasesPorSemana} ${actividad.clasesPorSemana === 1 ? 'vez' : 'veces'} por semana`
                       : 'Sin límite semanal definido'}
                   </p>
                 </div>

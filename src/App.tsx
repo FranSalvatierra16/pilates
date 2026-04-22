@@ -50,6 +50,7 @@ function ShareBrandQuerySync() {
 
   return null;
 }
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import RegistroLink from './pages/RegistroLink';
 import MiClase from './pages/MiClase';
@@ -96,7 +97,14 @@ function EntrySelector() {
   if (isAuthenticated) return <RootRedirect />;
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+      <button
+        type="button"
+        onClick={() => navigate('/')}
+        className="mb-6 text-sm font-medium text-gray-600 hover:text-gray-900"
+      >
+        ← Volver al inicio
+      </button>
       <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 sm:p-8 w-full max-w-lg">
         <div className="text-center mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Elegí cómo querés entrar</h1>
@@ -156,7 +164,8 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroLink />} />
           <Route path="/mi-clase" element={<MiClase />} />
-          <Route path="/" element={<EntrySelector />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/entrada" element={<EntrySelector />} />
           <Route
             path="/admin"
             element={

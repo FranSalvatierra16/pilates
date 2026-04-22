@@ -12,7 +12,12 @@
     "seed:planif-cleanup": "node server/cleanup-planif-seed.js",
     "db:schema": "node server/run-schema.js",
     "admin:update": "node server/update-admin.js",
-    "sucursal:clone": "node server/clone-sucursal.js"
+    "sucursal:clone": "node server/clone-sucursal.js",
+    "fix:savia3-cuotas": "node server/fix-savia3-cuotas-vencidas.js",
+    "seed:savia3-alumnos-cupos": "node server/seed-savia3-alumnos-cupos.js",
+    "seed:savia3-foto-demo": "node server/seed-savia3-foto-demo.js",
+    "fix:foto-demo-pagos": "node server/fix-foto-demo-pagos.js",
+    "seed:savia3-agenda-notas": "node server/seed-savia3-agenda-notas.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.90.0",
@@ -24,6 +29,7 @@
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.294.0",
+    "nodemailer": "^8.0.5",
     "pg": "^8.11.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

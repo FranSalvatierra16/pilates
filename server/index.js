@@ -2498,7 +2498,7 @@ async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
  * excludeLiberacionIds simula filas ya borradas (p. ej. al cancelar una liberación).
  */
 async function ocupacionEfectivaTurnoSemana(db, turnoId, semana, sucursalId, excludeLiberacionIds = []) {
-  const exclude = new Set((excludeLiberacionIds || []).filter(Boolean));
+  const exclude = new Set((excludeLiberacionIds || []).map((x) => String(x)));
   const { rows } = await db.query(
     'SELECT alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2',
     [turnoId, sucursalId]
@@ -2510,28 +2510,41 @@ async function ocupacionEfectivaTurnoSemana(db, turnoId, semana, sucursalId, exc
     'SELECT alumno_id, semana_desde FROM inscripciones_turno WHERE turno_id = $1',
     [turnoId]
   );
-  const insMap = new Map(insRows.map((r) => [r.alumno_id, r.semana_desde]));
+  const insMap = new Map(insRows.map((r) => [String(r.alumno_id), r.semana_desde]));
   const { rows: libRows } = await db.query(
     'SELECT id, alumno_id FROM liberaciones_semana WHERE turno_id = $1 AND semana = $2',
     [turnoId, semana]
   );
   const libAlumnos = new Set();
   for (const row of libRows) {
-    if (exclude.has(row.id)) continue;
-    libAlumnos.add(row.alumno_id);
+    if (exclude.has(String(row.id))) continue;
+    libAlumnos.add(String(row.alumno_id));
   }
   const { rows: recRows } = await db.query(
     'SELECT alumno_id FROM recuperaciones WHERE turno_id = $1 AND semana = $2',
     [turnoId, semana]
   );
+  const candidateIds = [...new Set([...ids.map((id) => String(id)), ...recRows.map((r) => String(r.alumno_id))])];
+  let validAlumnoSet = new Set();
+  if (candidateIds.length > 0) {
+    const { rows: existRows } = await db.query(
+      `SELECT id FROM alumnos
+        WHERE sucursal_id = $1 AND id = ANY($2::text[]) AND activo IS DISTINCT FROM false`,
+      [sucursalId, candidateIds]
+    );
+    validAlumnoSet = new Set(existRows.map((r) => String(r.id)));
+  }
   const ocupados = new Set();
-  for (const aid of ids) {
+  for (const raw of ids) {
+    const aid = String(raw);
+    if (!validAlumnoSet.has(aid)) continue;
     const desde = insMap.get(aid);
     if (desde && desde > semana) continue;
     if (!libAlumnos.has(aid)) ocupados.add(aid);
   }
   for (const r of recRows) {
-    ocupados.add(r.alumno_id);
+    const aid = String(r.alumno_id);
+    if (validAlumnoSet.has(aid)) ocupados.add(aid);
   }
   return { ocupacion: ocupados.size, cupo };
 }
@@ -3710,9 +3723,7 @@ app.delete('/api/liberaciones-semana/:id', async (req, res) => {
     const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
     const recuperacionesConCreditoPorLiberacion = ctx.recuperacionesSemana.filter((r) => r.origen_credito === 'liberacion').length;
     const hayCreditoDeLiberacionSinUsar = ctx.liberacionesSemana.length > recuperacionesConCreditoPorLiberacion;
-    if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
-      return res.status(400).json({ error: 'Ya usó esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
-    }
+    // Desde el estudio se cancela la liberación: no aplicar el tope de pack semanal del portal (solo cupo del turno).
     const oCup = await ocupacionEfectivaTurnoSemana(db, lib.turno_id, semanaVista, sid, [req.params.id]);
     if (!oCup) return res.status(404).json({ error: 'Turno no encontrado' });
     if (oCup.ocupacion > oCup.cupo) {

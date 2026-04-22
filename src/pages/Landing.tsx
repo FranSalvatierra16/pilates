@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Shield,
   Smartphone,
-  Sparkles,
   Users,
   Wallet,
 } from 'lucide-react';
@@ -55,6 +54,31 @@ const LANDING_IMG = {
   panelCel: '/landing/panelCel.png',
 } as const;
 
+/** Logo de marca (también PWA / favicon en `public/fitgest.png`). */
+const BRAND_LOGO_SRC = '/fitgest.png';
+
+function BrandMark({
+  className = '',
+  size = 40,
+  alt = '',
+}: {
+  className?: string;
+  size?: number;
+  /** Vacío cuando el nombre de marca va al lado (accesibilidad). */
+  alt?: string;
+}) {
+  return (
+    <img
+      src={BRAND_LOGO_SRC}
+      alt={alt}
+      width={size}
+      height={size}
+      decoding="async"
+      className={`shrink-0 rounded-full object-cover ring-1 ring-white/15 ${className}`}
+    />
+  );
+}
+
 function BrowserChrome({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <div
@@ -76,7 +100,7 @@ function BrowserChrome({ children, className = '' }: { children: ReactNode; clas
 function PhoneFrame({ src, alt, label }: { src: string; alt: string; label: string }) {
   return (
     <figure className="w-[min(100%,260px)] shrink-0 mx-auto sm:mx-0">
-      <div className="rounded-[2.25rem] p-2 bg-gradient-to-b from-slate-600 to-slate-900 shadow-2xl ring-1 ring-white/10">
+      <div className="rounded-[2.25rem] p-2 bg-gradient-to-b from-primary-800/90 to-slate-950 shadow-2xl ring-1 ring-white/10">
         <div className="rounded-[1.85rem] overflow-hidden border border-black/50 bg-black">
           <img
             src={src}
@@ -325,15 +349,16 @@ export default function Landing() {
         className="absolute inset-0 bg-[url('/saviaFondo.png')] bg-cover bg-center opacity-[0.12] pointer-events-none"
         aria-hidden
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-950/95 to-slate-900 pointer-events-none" aria-hidden />
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-slate-950 via-emerald-950/35 to-slate-900 pointer-events-none"
+        aria-hidden
+      />
 
-      <header className="relative z-10 border-b border-white/10 backdrop-blur-md bg-slate-950/70">
+      <header className="relative z-10 border-b border-white/10 backdrop-blur-md bg-slate-950/75">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-2 min-w-0">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-500/20 text-primary-300 ring-1 ring-primary-400/30">
-              <Sparkles className="w-5 h-5" aria-hidden />
-            </span>
-            <span className="font-semibold text-lg tracking-tight truncate">{APP_NAME}</span>
+          <Link to="/" className="flex items-center gap-3 min-w-0 group">
+            <BrandMark size={40} className="shadow-lg shadow-black/30 group-hover:ring-primary-400/40 transition" />
+            <span className="font-semibold text-lg tracking-tight truncate text-white">{APP_NAME}</span>
           </Link>
           <nav className="flex items-center gap-2 sm:gap-3 shrink-0">
             <a
@@ -361,8 +386,8 @@ export default function Landing() {
 
       <main className="relative z-10">
         <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-14 sm:pt-20 pb-12 sm:pb-16">
-          <p className="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-primary-500/10 text-primary-200 text-xs font-medium px-3 py-1 mb-5">
-            <Sparkles className="w-3.5 h-3.5" aria-hidden />
+          <p className="inline-flex items-center gap-2 rounded-full border border-primary-500/35 bg-primary-900/50 text-primary-100 text-xs font-medium px-3 py-1.5 mb-5">
+            <BrandMark size={22} className="ring-primary-400/40" />
             Gestión para estudios de Pilates y fitness
           </p>
           <h1 className="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold tracking-tight text-white max-w-3xl leading-[1.08]">
@@ -382,7 +407,7 @@ export default function Landing() {
             </Link>
             <a
               href="#prueba-gratis"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 text-white font-medium px-6 py-3.5 text-base transition"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-accent-500/40 bg-accent-600/15 hover:bg-accent-600/25 text-accent-100 font-medium px-6 py-3.5 text-base transition"
             >
               Prueba gratis por WhatsApp
             </a>
@@ -522,7 +547,7 @@ export default function Landing() {
         </section>
 
         <section id="prueba-gratis" className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-18 scroll-mt-24">
-          <div className="rounded-3xl border border-primary-500/25 bg-gradient-to-br from-primary-900/40 to-slate-900/80 p-8 sm:p-12">
+          <div className="rounded-3xl border border-primary-500/30 bg-gradient-to-br from-primary-900/50 via-slate-900/80 to-indigo-950/40 p-8 sm:p-12">
             <div className="max-w-xl mx-auto text-center">
               <h2 className="text-2xl sm:text-3xl font-bold text-white">Tu prueba gratis y más info</h2>
               <p className="mt-3 text-slate-400 text-sm sm:text-base leading-relaxed">
@@ -534,7 +559,7 @@ export default function Landing() {
               <button
                 type="button"
                 onClick={handleWhatsAppPrueba}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6 py-4 text-base shadow-lg shadow-emerald-950/40 transition"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-accent-500 to-orange-600 hover:from-amber-300 hover:via-accent-400 hover:to-orange-500 text-white font-semibold px-6 py-4 text-base shadow-lg shadow-orange-950/45 transition"
               >
                 <MessageCircle className="w-5 h-5 shrink-0" aria-hidden />
                 Hablar por WhatsApp
@@ -559,10 +584,13 @@ export default function Landing() {
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-white/10 py-8 text-center text-xs text-slate-500">
-        <p>
-          © {new Date().getFullYear()} {APP_NAME}. Gestión para estudios de Pilates y fitness.
-        </p>
+      <footer className="relative z-10 border-t border-white/10 py-10 text-center text-xs text-slate-500">
+        <div className="flex flex-col items-center gap-3">
+          <BrandMark size={48} alt={`Logo ${APP_NAME}`} className="opacity-90" />
+          <p>
+            © {new Date().getFullYear()} {APP_NAME}. Gestión para estudios de Pilates y fitness.
+          </p>
+        </div>
       </footer>
     </div>
   );

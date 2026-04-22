@@ -2493,6 +2493,49 @@ async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
   return { error: 400, sucursales, message: 'Hay varias sedes con ese DNI. Elegí tu sede.' };
 }
 
+/**
+ * Cuerpos que ocupan cupo en un turno/semana, igual que Calendario (getAlumnosDelTurno + contarOcupacionTurno).
+ * excludeLiberacionIds simula filas ya borradas (p. ej. al cancelar una liberación).
+ */
+async function ocupacionEfectivaTurnoSemana(db, turnoId, semana, sucursalId, excludeLiberacionIds = []) {
+  const exclude = new Set((excludeLiberacionIds || []).filter(Boolean));
+  const { rows } = await db.query(
+    'SELECT alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2',
+    [turnoId, sucursalId]
+  );
+  if (rows.length === 0) return null;
+  const cupo = Number(rows[0].cupo ?? 6);
+  const ids = rows[0].alumno_ids || [];
+  const { rows: insRows } = await db.query(
+    'SELECT alumno_id, semana_desde FROM inscripciones_turno WHERE turno_id = $1',
+    [turnoId]
+  );
+  const insMap = new Map(insRows.map((r) => [r.alumno_id, r.semana_desde]));
+  const { rows: libRows } = await db.query(
+    'SELECT id, alumno_id FROM liberaciones_semana WHERE turno_id = $1 AND semana = $2',
+    [turnoId, semana]
+  );
+  const libAlumnos = new Set();
+  for (const row of libRows) {
+    if (exclude.has(row.id)) continue;
+    libAlumnos.add(row.alumno_id);
+  }
+  const { rows: recRows } = await db.query(
+    'SELECT alumno_id FROM recuperaciones WHERE turno_id = $1 AND semana = $2',
+    [turnoId, semana]
+  );
+  const ocupados = new Set();
+  for (const aid of ids) {
+    const desde = insMap.get(aid);
+    if (desde && desde > semana) continue;
+    if (!libAlumnos.has(aid)) ocupados.add(aid);
+  }
+  for (const r of recRows) {
+    ocupados.add(r.alumno_id);
+  }
+  return { ocupacion: ocupados.size, cupo };
+}
+
 async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) {
   const actividadId = alumno.actividad_id || null;
   let clasesPorSemana = null;
@@ -3087,18 +3130,15 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
         return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
       }
       const { rows: turnoRows } = await db.query(
-        `SELECT t.id, t.alumno_ids, t.cupo, t.dia_semana, t.hora,
-                COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,
-                COALESCE((SELECT COUNT(*)::int FROM liberaciones_semana l WHERE l.turno_id = t.id AND l.semana = $2), 0) AS libs
-           FROM turnos t
-          WHERE t.id = $1 AND t.sucursal_id = $3`,
-        [turnoIdRestaurado, semanaVista, alumno.sucursal_id]
+        'SELECT t.id, t.alumno_ids, t.cupo, t.dia_semana, t.hora FROM turnos t WHERE t.id = $1 AND t.sucursal_id = $2',
+        [turnoIdRestaurado, alumno.sucursal_id]
       );
       if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
       const t = turnoRows[0];
       await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: t });
-      const ocupacionActual = Math.max(0, (t.alumno_ids || []).length - Number(t.libs || 0) + Number(t.recs || 0));
-      if (ocupacionActual >= Number(t.cupo ?? 6)) {
+      const oCup = await ocupacionEfectivaTurnoSemana(db, turnoIdRestaurado, semanaVista, alumno.sucursal_id, [liberacionId]);
+      if (!oCup) return res.status(404).json({ error: 'Turno no encontrado' });
+      if (oCup.ocupacion > oCup.cupo) {
         return res.status(400).json({ error: 'No se puede volver a tomar la clase porque ya no hay cupo.' });
       }
       ({ rowCount } = await db.query(
@@ -3111,18 +3151,20 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
         return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
       }
       const { rows: turnoRows } = await db.query(
-        `SELECT t.id, t.alumno_ids, t.cupo, t.dia_semana, t.hora,
-                COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,
-                COALESCE((SELECT COUNT(*)::int FROM liberaciones_semana l WHERE l.turno_id = t.id AND l.semana = $2), 0) AS libs
-           FROM turnos t
-          WHERE t.id = $1 AND t.sucursal_id = $3`,
-        [turnoIdTarget, semanaVista, alumno.sucursal_id]
+        'SELECT t.id, t.alumno_ids, t.cupo, t.dia_semana, t.hora FROM turnos t WHERE t.id = $1 AND t.sucursal_id = $2',
+        [turnoIdTarget, alumno.sucursal_id]
       );
       if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
       const t = turnoRows[0];
       await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: t });
-      const ocupacionActual = Math.max(0, (t.alumno_ids || []).length - Number(t.libs || 0) + Number(t.recs || 0));
-      if (ocupacionActual >= Number(t.cupo ?? 6)) {
+      const { rows: libIdsRows } = await db.query(
+        'SELECT id FROM liberaciones_semana WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3',
+        [turnoIdTarget, alumno.id, semanaVista]
+      );
+      const excludeLibIds = libIdsRows.map((r) => r.id);
+      const oCup = await ocupacionEfectivaTurnoSemana(db, turnoIdTarget, semanaVista, alumno.sucursal_id, excludeLibIds);
+      if (!oCup) return res.status(404).json({ error: 'Turno no encontrado' });
+      if (oCup.ocupacion > oCup.cupo) {
         return res.status(400).json({ error: 'No se puede volver a tomar la clase porque ya no hay cupo.' });
       }
       ({ rowCount } = await db.query(
@@ -3671,18 +3713,9 @@ app.delete('/api/liberaciones-semana/:id', async (req, res) => {
     if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
       return res.status(400).json({ error: 'Ya usó esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
     }
-    const { rows: turnoRows } = await db.query(
-      `SELECT t.id, t.alumno_ids, t.cupo,
-              COALESCE((SELECT COUNT(*)::int FROM recuperaciones r WHERE r.turno_id = t.id AND r.semana = $2), 0) AS recs,
-              COALESCE((SELECT COUNT(*)::int FROM liberaciones_semana l WHERE l.turno_id = t.id AND l.semana = $2), 0) AS libs
-         FROM turnos t
-        WHERE t.id = $1 AND t.sucursal_id = $3`,
-      [lib.turno_id, semanaVista, sid]
-    );
-    if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
-    const turno = turnoRows[0];
-    const ocupacionActual = Math.max(0, (turno.alumno_ids || []).length - Number(turno.libs || 0) + Number(turno.recs || 0));
-    if (ocupacionActual >= Number(turno.cupo ?? 6)) {
+    const oCup = await ocupacionEfectivaTurnoSemana(db, lib.turno_id, semanaVista, sid, [req.params.id]);
+    if (!oCup) return res.status(404).json({ error: 'Turno no encontrado' });
+    if (oCup.ocupacion > oCup.cupo) {
       return res.status(400).json({ error: 'No se puede cancelar la liberación porque ya no hay cupo en la clase.' });
     }
     const { rowCount } = await db.query('DELETE FROM liberaciones_semana WHERE id = $1', [req.params.id]);

@@ -57,7 +57,6 @@ import MiClase from './pages/MiClase';
 import Dashboard from './pages/Dashboard';
 import Calendario from './pages/Calendario';
 import Alumnos from './pages/Alumnos';
-import RegistrosPorLink from './pages/RegistrosPorLink';
 import Profesores from './pages/Profesores';
 import Actividades from './pages/Actividades';
 import Acceso from './pages/Acceso';
@@ -204,16 +203,6 @@ function App() {
               <ProtectedSucursalRoute>
                 <Layout>
                   <Alumnos />
-                </Layout>
-              </ProtectedSucursalRoute>
-            }
-          />
-          <Route
-            path="/registros-link"
-            element={
-              <ProtectedSucursalRoute>
-                <Layout>
-                  <RegistrosPorLink />
                 </Layout>
               </ProtectedSucursalRoute>
             }

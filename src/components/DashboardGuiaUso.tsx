@@ -8,7 +8,6 @@ import {
   DoorOpen,
   FileText,
   GraduationCap,
-  Link2,
   Sparkles,
   Users,
   Wallet,
@@ -131,15 +130,6 @@ const bloques: BloqueGuia[] = [
     bullets: ['Recordatorios por fecha y bloque “sin fecha” para pendientes generales.'],
     to: '/agenda',
     cta: 'Abrir agenda',
-  },
-  {
-    icon: Link2,
-    iconBg: 'bg-cyan-500',
-    titulo: 'Registros por link',
-    pitch: 'Compartí un enlace de inscripción y convertí interesados en alumnos sin cargar datos a mano dos veces.',
-    bullets: ['Revisá quién se anotó y pasalos a alumno formal cuando cierres la venta.'],
-    to: '/registros-link',
-    cta: 'Registros por link',
   },
   {
     icon: Smartphone,

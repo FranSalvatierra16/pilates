@@ -18,12 +18,11 @@ Guía orientada al equipo del estudio: qué hace cada pantalla, los conceptos pr
 10. [Caja](#10-caja)
 11. [Notificaciones (pantalla completa)](#11-notificaciones-pantalla-completa)
 12. [Agenda](#12-agenda)
-13. [Registros por link](#13-registros-por-link)
-14. [Portal del alumno: “Tu clase”](#14-portal-del-alumno-tu-clase)
-15. [Inscripción pública (`/registro`)](#15-inscripción-pública-registro)
-16. [Administración (`/admin`)](#16-administración-admin)
-17. [Ruta Planificación](#17-ruta-planificación)
-18. [Datos, API y modo local](#18-datos-api-y-modo-local)
+13. [Portal del alumno: “Tu clase”](#13-portal-del-alumno-tu-clase)
+14. [Inscripción pública (`/registro`)](#14-inscripción-pública-registro)
+15. [Administración (`/admin`)](#15-administración-admin)
+16. [Ruta Planificación](#16-ruta-planificación)
+17. [Datos, API y modo local](#17-datos-api-y-modo-local)
 
 ---
 
@@ -199,15 +198,7 @@ No reemplaza al calendario de turnos; complementa la gestión del día a día.
 
 ---
 
-## 13. Registros por link
-
-**Ruta:** `/registros-link`
-
-Cuando publicás un **link de inscripción**, los interesados se anotan solos. En esta pantalla ves **quién se registró** por ese medio para darlos de alta o contactarlos como alumno formal.
-
----
-
-## 14. Portal del alumno: “Tu clase”
+## 13. Portal del alumno: “Tu clase”
 
 **Ruta:** `/mi-clase` (pública, sin login del estudio)
 
@@ -222,15 +213,15 @@ Desde **Entrada → Alumno** suele abrirse con el modo adecuado para recuperaci�
 
 ---
 
-## 15. Inscripción pública (`/registro`)
+## 14. Inscripción pública (`/registro`)
 
 **Ruta:** `/registro` (con parámetros que te dé el sistema en el link)
 
-Pantalla para que una persona **complete la inscripción** desde un enlace compartido por el estudio. Al finalizar, suele mostrarse confirmación; el estudio ve el movimiento en **Registros por link** o recibe el dato según tu flujo.
+Pantalla para que una persona **complete la inscripción** desde un enlace compartido por el estudio. Al finalizar, suele mostrarse confirmación.
 
 ---
 
-## 16. Administración (`/admin`)
+## 15. Administración (`/admin`)
 
 Solo usuarios con rol **administrador** (no usuario de sucursal).
 
@@ -242,7 +233,7 @@ El usuario común del estudio **no** ve este menú: si entrás con cuenta de suc
 
 ---
 
-## 17. Ruta Planificación
+## 16. Ruta Planificación
 
 **Ruta:** `/planificacion`
 
@@ -250,7 +241,7 @@ Hoy **redirige automáticamente al Calendario**. La planificación avanzada (not
 
 ---
 
-## 18. Datos, API y modo local
+## 17. Datos, API y modo local
 
 - **Con API (`VITE_USE_API=true` en producción típica):** los datos viven en el servidor (p. ej. PostgreSQL en Railway). Varios dispositivos ven lo mismo.
 - **Sin API (modo local):** los datos se guardan en el **navegador** de esa computadora; no se comparten con otros equipos. En la interficie puede aparecer un aviso inferior.

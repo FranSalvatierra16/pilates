@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Bell,
+  BookOpen,
 } from 'lucide-react';
 import type { NotificacionItem } from '../pages/Notificaciones';
 
@@ -325,6 +326,16 @@ const Layout = ({ children }: LayoutProps) => {
                   )}
                 </div>
               )}
+              <a
+                href="/docs/MANUAL-USO-APP.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary-600 hover:text-primary-800 hover:bg-primary-50 rounded-md transition-colors"
+                title="Manual de uso (se abre en una pestaña nueva)"
+              >
+                <BookOpen className="w-4 h-4" />
+                Manual
+              </a>
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
@@ -384,7 +395,17 @@ const Layout = ({ children }: LayoutProps) => {
                 );
               })}
             </nav>
-            <div className="p-4 pt-3 border-t border-gray-200">
+            <div className="p-4 pt-3 border-t border-gray-200 space-y-1">
+              <a
+                href="/docs/MANUAL-USO-APP.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-3 w-full px-4 py-3 rounded-lg text-primary-600 hover:bg-primary-50 font-medium touch-manipulation"
+              >
+                <BookOpen className="w-5 h-5" />
+                Manual de uso
+              </a>
               <button
                 onClick={() => {
                   setMenuOpen(false);

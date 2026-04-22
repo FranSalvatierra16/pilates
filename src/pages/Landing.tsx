@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
+  Bell,
   BookOpen,
   CalendarDays,
   ChevronLeft,
@@ -52,6 +53,8 @@ const LANDING_IMG = {
   pagosCel: '/landing/pagosCel.jpeg',
   /** Menú lateral móvil (Dashboard, Calendario, Alumnos, etc.) */
   panelCel: '/landing/panelCel.png',
+  /** Centro de notificaciones: cupos, recuperaciones, etc. */
+  notificacionesCel: '/landing/notificaciones-cel.png',
 } as const;
 
 /** Logo de marca (también PWA / favicon en `public/fitgest.png`). */
@@ -157,7 +160,38 @@ const ESCRITORIO_SLIDES = [
   },
 ] as const;
 
+/**
+ * Solo mueve el scroll horizontal del carrusel (nunca `scrollIntoView`: sube toda la página).
+ * En auto-avance usamos `auto` porque `smooth` + snap en iOS a veces “empuja” el scroll del documento.
+ */
+function scrollCarouselSlideIntoView(
+  scroller: HTMLDivElement,
+  index: number,
+  behavior: ScrollBehavior = 'auto'
+) {
+  const slide = scroller.querySelector<HTMLElement>(`[data-slide-index="${index}"]`);
+  if (!slide) return;
+  const sRect = scroller.getBoundingClientRect();
+  const slideRect = slide.getBoundingClientRect();
+  const slideLeftInContent = scroller.scrollLeft + (slideRect.left - sRect.left);
+  const target =
+    slideLeftInContent - (scroller.clientWidth - slideRect.width) / 2;
+  const maxLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+  scroller.scrollTo({ left: Math.max(0, Math.min(target, maxLeft)), behavior });
+}
+
+function viewportHeight() {
+  if (typeof window === 'undefined') return 0;
+  return window.visualViewport?.height ?? window.innerHeight;
+}
+
+function isDesktopCarouselAutoplay() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(min-width: 640px)').matches;
+}
+
 function EscritorioCarousel() {
+  const wrapRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const resumeAfterTouchRef = useRef<number | null>(null);
   const [active, setActive] = useState(0);
@@ -190,10 +224,10 @@ function EscritorioCarousel() {
   const go = useCallback((dir: -1 | 1) => {
     const el = scrollerRef.current;
     if (!el) return;
+    const behavior: ScrollBehavior = isDesktopCarouselAutoplay() ? 'smooth' : 'auto';
     setActive((a) => {
       const next = (a + dir + n) % n;
-      const slide = el.querySelector<HTMLElement>(`[data-slide-index="${next}"]`);
-      requestAnimationFrame(() => slide?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }));
+      requestAnimationFrame(() => scrollCarouselSlideIntoView(el, next, behavior));
       return next;
     });
   }, [n]);
@@ -219,12 +253,16 @@ function EscritorioCarousel() {
   useEffect(() => {
     if (paused) return;
     const t = window.setInterval(() => {
+      if (!isDesktopCarouselAutoplay()) return;
+      const wrap = wrapRef.current;
       const el = scrollerRef.current;
-      if (!el) return;
+      if (!el || !wrap) return;
+      const r = wrap.getBoundingClientRect();
+      const vh = viewportHeight();
+      if (r.bottom < 48 || r.top > vh - 48) return;
       setActive((a) => {
         const next = (a + 1) % n;
-        const slide = el.querySelector<HTMLElement>(`[data-slide-index="${next}"]`);
-        requestAnimationFrame(() => slide?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }));
+        requestAnimationFrame(() => scrollCarouselSlideIntoView(el, next, 'auto'));
         return next;
       });
     }, 6000);
@@ -233,6 +271,7 @@ function EscritorioCarousel() {
 
   return (
     <div
+      ref={wrapRef}
       className="relative mb-12 sm:mb-16"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -264,8 +303,8 @@ function EscritorioCarousel() {
 
       <div
         ref={scrollerRef}
-        className="flex gap-4 sm:gap-6 overflow-x-auto overscroll-x-contain scroll-smooth snap-x snap-mandatory touch-pan-x pb-3 pt-1 px-4 sm:px-12 scroll-ps-4 scroll-pe-4 [-webkit-overflow-scrolling:touch] [-ms-overflow-style:none] [scrollbar-width:none] sm:[scrollbar-width:thin] [&::-webkit-scrollbar]:hidden sm:[&::-webkit-scrollbar]:block sm:[&::-webkit-scrollbar]:h-1.5 sm:[&::-webkit-scrollbar-thumb]:rounded-full sm:[&::-webkit-scrollbar-thumb]:bg-white/20"
-        tabIndex={0}
+        className="flex gap-4 sm:gap-6 overflow-x-auto overscroll-x-contain overscroll-y-contain scroll-auto sm:scroll-smooth snap-x snap-mandatory touch-pan-x pb-3 pt-1 px-4 sm:px-12 scroll-ps-4 scroll-pe-4 [-webkit-overflow-scrolling:touch] [-ms-overflow-style:none] [scrollbar-width:none] sm:[scrollbar-width:thin] [&::-webkit-scrollbar]:hidden sm:[&::-webkit-scrollbar]:block sm:[&::-webkit-scrollbar]:h-1.5 sm:[&::-webkit-scrollbar-thumb]:rounded-full sm:[&::-webkit-scrollbar-thumb]:bg-white/20"
+        tabIndex={-1}
         role="region"
         aria-roledescription="carrusel"
         aria-label="Capturas de escritorio de la aplicación"
@@ -304,8 +343,9 @@ function EscritorioCarousel() {
             aria-selected={i === active}
             aria-label={`Ver ${s.label}`}
             onClick={() => {
-              const el = scrollerRef.current?.querySelector<HTMLElement>(`[data-slide-index="${i}"]`);
-              el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+              const el = scrollerRef.current;
+              if (!el) return;
+              scrollCarouselSlideIntoView(el, i, isDesktopCarouselAutoplay() ? 'smooth' : 'auto');
               setActive(i);
             }}
             className="p-2 -m-0.5 touch-manipulation rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60"
@@ -364,6 +404,11 @@ const highlights = [
     text: 'Flujo pensado para liberar una clase fija, acumular recupero y tomar cupo en otro turno sin pisar la lógica del calendario.',
   },
   {
+    icon: Bell,
+    title: 'Notificaciones en el celular',
+    text: 'Recibí avisos de cupo liberado, nuevas recuperaciones y movimientos del estudio en el centro de notificaciones del teléfono, como cualquier app que usás a diario.',
+  },
+  {
     icon: Shield,
     title: 'Multi-sucursal y finanzas',
     text: 'Cada estudio con su propia cuenta; opciones de seguridad en caja y pagos cuando la operación lo pida.',
@@ -381,7 +426,7 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-slate-950 text-slate-100 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="min-h-screen bg-slate-950 text-slate-100 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <div
         className="absolute inset-0 bg-[url('/saviaFondo.png')] bg-cover bg-center opacity-[0.12] pointer-events-none"
         aria-hidden
@@ -506,6 +551,37 @@ export default function Landing() {
                   alt="Pagos en vista móvil"
                   label="Pagos y resumen donde haga falta"
                 />
+              </div>
+
+              <div className="mt-12 sm:mt-14 pt-10 sm:pt-12 border-t border-white/10">
+                <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+                  <div className="text-center lg:text-left order-2 lg:order-1">
+                    <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500/15 text-brand-300 mb-4 ring-1 ring-brand-500/25">
+                      <Bell className="w-5 h-5" aria-hidden />
+                    </div>
+                    <h3 className="text-lg sm:text-2xl font-bold text-white text-balance leading-tight">
+                      Recibí tus notificaciones
+                    </h3>
+                    <p className="mt-3 text-[13px] sm:text-sm text-slate-400 leading-relaxed max-w-md mx-auto lg:mx-0">
+                      Cupos liberados, recuperaciones nuevas y avisos del estudio llegan al celular como en cualquier app
+                      moderna: mirás el centro de notificaciones y seguís el turno sin entrar al calendario.
+                    </p>
+                  </div>
+                  <div className="flex justify-center order-1 lg:order-2">
+                    <figure className="w-full max-w-[min(100%,300px)]">
+                      <img
+                        src={LANDING_IMG.notificacionesCel}
+                        alt={`Ejemplos de notificaciones de ${APP_NAME}: cupo liberado y recuperaciones en el celular`}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-auto rounded-2xl shadow-2xl shadow-black/50 ring-1 ring-white/10 object-cover object-top"
+                      />
+                      <figcaption className="text-center text-[11px] sm:text-xs text-slate-500 mt-3 leading-snug px-1">
+                        Ejemplo real en el teléfono · cupos y recuperaciones
+                      </figcaption>
+                    </figure>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

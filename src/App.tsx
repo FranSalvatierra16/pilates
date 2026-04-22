@@ -70,6 +70,14 @@ import AdminSucursales from './pages/admin/AdminSucursales';
 import AdminSucursalNueva from './pages/admin/AdminSucursalNueva';
 import AdminSucursalEditar from './pages/admin/AdminSucursalEditar';
 
+/** En Railway: `VITE_PUBLIC_SITE_MODE=landing` para publicar solo la landing (sin rutas de app). */
+function isPublicLandingOnlySite() {
+  const m = String(import.meta.env.VITE_PUBLIC_SITE_MODE || '')
+    .trim()
+    .toLowerCase();
+  return m === 'landing' || m === 'marketing';
+}
+
 const ProtectedSucursalRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isAdmin } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
@@ -153,13 +161,22 @@ function EntrySelector() {
 }
 
 function App() {
+  const landingOnly = isPublicLandingOnlySite();
+
   return (
     <ToastProvider>
       <AuthProvider>
         <BrowserRouter>
           <DocumentTitle />
-      <ShareBrandQuerySync />
+          {!landingOnly && <ShareBrandQuerySync />}
           <Routes>
+            {landingOnly ? (
+              <>
+                <Route path="/" element={<Landing />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </>
+            ) : (
+              <>
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroLink />} />
           <Route path="/mi-clase" element={<MiClase />} />
@@ -287,6 +304,8 @@ function App() {
               </ProtectedSucursalRoute>
             }
           />
+              </>
+            )}
           </Routes>
         </BrowserRouter>
       </AuthProvider>

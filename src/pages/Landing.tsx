@@ -16,10 +16,15 @@ import {
   Smartphone,
   Users,
   Wallet,
+  Check,
+  Sparkles,
 } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 
 const APP_NAME = import.meta.env.VITE_APP_NAME || 'FitGest';
+
+/** Días de prueba con alcance equivalente al plan Premium (producto completo). */
+const PRUEBA_GRATIS_DIAS = 3;
 
 const WHATSAPP_DIGITS =
   String(import.meta.env.VITE_WHATSAPP_NUMBER || '5492235029881').replace(/\D/g, '') || '5492235029881';
@@ -28,16 +33,21 @@ function mensajeWhatsAppPruebaGratis() {
   return [
     'Hola 👋',
     '',
-    `Me interesa la *prueba gratis* de ${APP_NAME} y quiero *más información* para conocer cómo funciona.`,
+    `Me interesa la *prueba gratis de ${PRUEBA_GRATIS_DIAS} días* de ${APP_NAME} con el *producto completo* (como el plan Premium: estudio + portal alumno).`,
+    '',
+    'Quiero coordinar el acceso y resolver dudas.',
     '',
     '¡Gracias!',
   ].join('\n');
 }
 
-function abrirWhatsAppPruebaGratis() {
-  const text = mensajeWhatsAppPruebaGratis();
+function abrirWhatsAppConTexto(text: string) {
   const url = `https://wa.me/${WHATSAPP_DIGITS}?text=${encodeURIComponent(text)}`;
   window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function abrirWhatsAppPruebaGratis() {
+  abrirWhatsAppConTexto(mensajeWhatsAppPruebaGratis());
 }
 
 /** Capturas en `public/landing/` (no hace falta usar todas). */
@@ -119,6 +129,67 @@ function PhoneFrame({ src, alt, label }: { src: string; alt: string; label: stri
       </figcaption>
     </figure>
   );
+}
+
+function precioArsLabel(monto: number) {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    maximumFractionDigits: 0,
+  }).format(monto);
+}
+
+const PLANES = {
+  basico: {
+    nombre: 'Esencial',
+    precioArs: 30_000,
+    descripcion: 'Solo la parte del estudio: menos módulos y sin el portal web para alumnos.',
+    items: [
+      'Una sucursal',
+      'Acceso al panel del equipo (no incluye portal del alumno)',
+      'Calendario con cupos, asistencias, liberaciones y recuperaciones',
+      'Alumnos y actividades en versión reducida',
+    ],
+  },
+  premium: {
+    nombre: 'Premium',
+    precioArs: 45_000,
+    descripcion: 'Estudio + alumno: todo el flujo del estudio y el portal para que cada alumno gestione su clase.',
+    items: [
+      'Una sucursal',
+      'Panel del estudio con todas las funciones (Pagos, Caja, Agenda, notificaciones, etc.)',
+      'Portal del alumno: ver clase, liberar cupo y recuperaciones desde el celular',
+      'Incluye lo operativo del Esencial, con módulos y automatizaciones completas',
+    ],
+  },
+} as const;
+
+function mensajeWhatsAppPlanEsencial() {
+  const p = PLANES.basico;
+  const precio = precioArsLabel(p.precioArs);
+  return [
+    'Hola 👋',
+    '',
+    `Me interesa el *plan ${p.nombre}* de ${APP_NAME} (${precio} / mes, una sucursal, solo panel del estudio).`,
+    '',
+    'Quiero más información y cómo contratarlo.',
+    '',
+    '¡Gracias!',
+  ].join('\n');
+}
+
+function mensajeWhatsAppPlanPremium() {
+  const p = PLANES.premium;
+  const precio = precioArsLabel(p.precioArs);
+  return [
+    'Hola 👋',
+    '',
+    `Me interesa el *plan ${p.nombre}* de ${APP_NAME} (${precio} / mes, una sucursal: estudio + portal del alumno).`,
+    '',
+    'Quiero más información y cómo contratarlo.',
+    '',
+    '¡Gracias!',
+  ].join('\n');
 }
 
 const ESCRITORIO_SLIDES = [
@@ -410,7 +481,7 @@ const highlights = [
   },
   {
     icon: Shield,
-    title: 'Multi-sucursal y finanzas',
+    title: 'Finanzas y seguridad',
     text: 'Cada estudio con su propia cuenta; opciones de seguridad en caja y pagos cuando la operación lo pida.',
   },
 ];
@@ -418,11 +489,25 @@ const highlights = [
 export default function Landing() {
   const toast = useToast();
 
-  const handleWhatsAppPrueba = () => {
-    abrirWhatsAppPruebaGratis();
+  const toastWhatsAppAbierto = () => {
     toast.success(
       'Se abrió WhatsApp. Si no ves la pestaña, permití ventanas emergentes para este sitio.'
     );
+  };
+
+  const handleWhatsAppPrueba = () => {
+    abrirWhatsAppPruebaGratis();
+    toastWhatsAppAbierto();
+  };
+
+  const handleWhatsAppPlanEsencial = () => {
+    abrirWhatsAppConTexto(mensajeWhatsAppPlanEsencial());
+    toastWhatsAppAbierto();
+  };
+
+  const handleWhatsAppPlanPremium = () => {
+    abrirWhatsAppConTexto(mensajeWhatsAppPlanPremium());
+    toastWhatsAppAbierto();
   };
 
   return (
@@ -445,27 +530,25 @@ export default function Landing() {
                 {APP_NAME}
               </span>
             </Link>
-            <nav className="grid grid-cols-3 gap-2 w-full sm:flex sm:w-auto sm:items-center sm:justify-end sm:gap-3 sm:shrink-0">
+            <nav className="flex flex-wrap w-full sm:w-auto items-center justify-end gap-2 sm:gap-3 sm:shrink-0">
               <a
                 href="#app"
-                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xs sm:text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white px-2 transition touch-manipulation sm:border-transparent sm:bg-transparent sm:hover:bg-white/5 sm:px-3"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xs sm:text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white px-3 transition touch-manipulation sm:border-transparent sm:bg-transparent sm:hover:bg-white/5 sm:px-3"
               >
                 La app
               </a>
-              <Link
-                to="/mi-clase?modo=recuperar"
-                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xs sm:text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white px-2 transition touch-manipulation sm:border-transparent sm:bg-transparent sm:hover:bg-white/5 sm:px-3"
+              <a
+                href="#planes"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xs sm:text-sm font-medium text-slate-200 hover:bg-white/10 hover:text-white px-3 transition touch-manipulation sm:border-transparent sm:bg-transparent sm:hover:bg-white/5 sm:px-3"
               >
-                <span className="sm:hidden">Alumno</span>
-                <span className="hidden sm:inline">Soy alumno</span>
-              </Link>
-              <Link
-                to="/entrada"
-                className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white text-xs sm:text-sm font-semibold px-3 sm:px-4 shadow-lg shadow-brand-900/40 transition touch-manipulation"
+                Planes
+              </a>
+              <a
+                href="#prueba-gratis"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-accent-500/35 bg-accent-600/15 hover:bg-accent-600/25 text-accent-50 text-xs sm:text-sm font-semibold px-3 transition touch-manipulation"
               >
-                Entrar
-                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" aria-hidden />
-              </Link>
+                Prueba gratis
+              </a>
             </nav>
           </div>
         </div>
@@ -485,20 +568,25 @@ export default function Landing() {
             caja con cierres, notas del día a día y un portal para que el alumno gestione su clase y sus recuperaciones.
           </p>
           <div className="mt-6 sm:mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
-            <Link
-              to="/entrada"
+            <a
+              href="#planes"
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-semibold px-5 sm:px-6 py-3.5 text-[15px] sm:text-base shadow-xl shadow-brand-900/50 transition touch-manipulation"
             >
-              Entrar al sistema
+              Ver planes y precios
               <ArrowRight className="w-5 h-5 shrink-0" aria-hidden />
-            </Link>
+            </a>
             <a
               href="#prueba-gratis"
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-accent-500/40 bg-accent-600/15 hover:bg-accent-600/25 active:bg-accent-600/30 text-accent-50 font-medium px-5 sm:px-6 py-3.5 text-[15px] sm:text-base transition touch-manipulation"
             >
-              Prueba gratis por WhatsApp
+              Prueba gratis {PRUEBA_GRATIS_DIAS} días
             </a>
           </div>
+          <p className="mt-4 text-sm text-slate-500 max-w-2xl leading-relaxed">
+            <strong className="text-slate-400 font-medium">Prueba gratis {PRUEBA_GRATIS_DIAS} días:</strong> accedés al
+            producto completo —misma experiencia que el plan Premium (panel del estudio + portal del alumno)— para
+            evaluarlo sin compromiso. Coordinamos el alta por WhatsApp.
+          </p>
         </section>
 
         <section
@@ -652,6 +740,135 @@ export default function Landing() {
           </div>
         </section>
 
+        <section
+          id="planes"
+          className="scroll-mt-[calc(5.5rem+env(safe-area-inset-top))] sm:scroll-mt-24 border-t border-white/10 bg-gradient-to-b from-slate-900/80 via-slate-950/90 to-slate-950"
+        >
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-20">
+            <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12 px-1">
+              <p className="text-brand-300 text-[11px] sm:text-xs font-semibold uppercase tracking-widest mb-2">
+                Suscripción mensual · precios en pesos
+              </p>
+              <h2 className="text-2xl sm:text-4xl font-bold text-white text-balance leading-tight">
+                Dos planes, una sucursal
+              </h2>
+              <p className="mt-2 sm:mt-3 text-slate-400 text-sm sm:text-base leading-relaxed">
+                Ambos incluyen <strong className="text-slate-300">una sola sede</strong>. El plan{' '}
+                <strong className="text-slate-300">Esencial</strong> es solo la parte sucursal, con menos funciones y
+                sin portal para alumnos. <strong className="text-slate-300">Premium</strong> suma la experiencia
+                completa del alumno (portal) y todos los módulos del estudio.
+              </p>
+            </div>
+
+            <div className="max-w-4xl mx-auto mb-8 sm:mb-10 rounded-2xl sm:rounded-3xl border border-accent-500/35 bg-gradient-to-br from-accent-950/50 via-slate-900/70 to-brand-950/40 px-5 py-6 sm:px-8 sm:py-7 text-center shadow-lg shadow-black/25">
+              <p className="text-accent-200/95 text-[11px] sm:text-xs font-bold uppercase tracking-widest">
+                Antes de elegir plan
+              </p>
+              <h3 className="mt-2 text-lg sm:text-xl font-bold text-white text-balance">
+                Prueba gratis {PRUEBA_GRATIS_DIAS} días con el producto completo
+              </h3>
+              <p className="mt-2 text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
+                Probá todo lo que ofrece el plan <strong className="text-slate-300">Premium</strong>: módulos del
+                estudio, finanzas, agenda, notificaciones y <strong className="text-slate-300">portal del alumno</strong>.
+                Coordinamos el acceso por WhatsApp; sin tarjeta en la web.
+              </p>
+              <button
+                type="button"
+                onClick={handleWhatsAppPrueba}
+                className="mt-5 inline-flex min-h-11 w-full max-w-sm mx-auto items-center justify-center gap-2 rounded-xl bg-accent-500/90 hover:bg-accent-400 text-slate-950 text-sm font-bold px-5 py-3 shadow-md shadow-black/30 transition touch-manipulation"
+              >
+                <MessageCircle className="w-4 h-4 shrink-0" aria-hidden />
+                Quiero la prueba gratis
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-5 sm:gap-6 lg:gap-8 items-stretch max-w-4xl mx-auto">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={handleWhatsAppPlanEsencial}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  handleWhatsAppPlanEsencial();
+                }}
+                aria-label={`Contactar por WhatsApp: plan ${PLANES.basico.nombre}`}
+                className="rounded-2xl sm:rounded-3xl border border-white/10 bg-slate-900/50 p-6 sm:p-8 flex flex-col shadow-xl shadow-black/20 cursor-pointer outline-none transition hover:border-white/20 hover:bg-slate-900/65 focus-visible:ring-2 focus-visible:ring-brand-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+              >
+                <h3 className="text-lg sm:text-xl font-bold text-white">{PLANES.basico.nombre}</h3>
+                <p className="mt-2 text-sm text-slate-400 leading-relaxed">{PLANES.basico.descripcion}</p>
+                <div className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
+                    {precioArsLabel(PLANES.basico.precioArs)}
+                  </span>
+                  <span className="text-slate-500 text-sm font-medium">/ mes</span>
+                </div>
+                <ul className="mt-6 space-y-3 text-sm text-slate-300 flex-1">
+                  {PLANES.basico.items.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-emerald-400 mt-0.5">
+                        <Check className="w-3 h-3" strokeWidth={3} aria-hidden />
+                      </span>
+                      <span className="leading-snug">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-8 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 text-white text-sm font-semibold px-4 py-3">
+                  <MessageCircle className="w-4 h-4 shrink-0 text-emerald-400/90" aria-hidden />
+                  Quiero el plan Esencial
+                </div>
+              </div>
+
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={handleWhatsAppPlanPremium}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  handleWhatsAppPlanPremium();
+                }}
+                aria-label={`Contactar por WhatsApp: plan ${PLANES.premium.nombre}`}
+                className="relative rounded-2xl sm:rounded-3xl border border-brand-400/40 bg-gradient-to-b from-brand-950/80 to-slate-950 p-6 sm:p-8 flex flex-col shadow-2xl shadow-brand-950/40 ring-1 ring-brand-500/20 cursor-pointer outline-none transition hover:border-brand-300/55 focus-visible:ring-2 focus-visible:ring-brand-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+              >
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400 to-brand-500 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-950 shadow-lg pointer-events-none">
+                  <Sparkles className="w-3.5 h-3.5" aria-hidden />
+                  Recomendado
+                </span>
+                <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2 mt-2">
+                  {PLANES.premium.nombre}
+                </h3>
+                <p className="mt-2 text-sm text-brand-100/80 leading-relaxed">{PLANES.premium.descripcion}</p>
+                <div className="mt-6 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
+                    {precioArsLabel(PLANES.premium.precioArs)}
+                  </span>
+                  <span className="text-brand-200/70 text-sm font-medium">/ mes</span>
+                </div>
+                <ul className="mt-6 space-y-3 text-sm text-slate-200 flex-1">
+                  {PLANES.premium.items.map((item) => (
+                    <li key={item} className="flex gap-3">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-500/25 text-brand-200 mt-0.5">
+                        <Check className="w-3 h-3" strokeWidth={3} aria-hidden />
+                      </span>
+                      <span className="leading-snug">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-8 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-slate-950 text-sm font-bold px-4 py-3 shadow-lg shadow-black/30">
+                  <MessageCircle className="w-4 h-4 shrink-0" aria-hidden />
+                  Quiero el plan Premium
+                </div>
+              </div>
+            </div>
+
+            <p className="text-center text-xs text-slate-500 mt-8 max-w-lg mx-auto leading-relaxed px-2">
+              Precios en pesos argentinos (ARS) por mes. La prueba gratis de {PRUEBA_GRATIS_DIAS} días es con alcance
+              Premium (producto completo). Por WhatsApp acordamos el alta, la forma de pago y lo incluido en cada plan.
+            </p>
+          </div>
+        </section>
+
         <section className="border-t border-white/10 bg-slate-900/35 backdrop-blur-sm">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-18">
             <h2 className="text-xl sm:text-3xl font-bold text-white text-center max-w-2xl mx-auto text-balance leading-tight px-1">
@@ -683,12 +900,17 @@ export default function Landing() {
         >
           <div className="rounded-2xl sm:rounded-3xl border border-brand-500/30 bg-gradient-to-br from-brand-900/50 via-slate-900/80 to-indigo-950/40 p-5 sm:p-12">
             <div className="max-w-xl mx-auto text-center px-1">
+              <p className="text-brand-200 text-[11px] sm:text-xs font-semibold uppercase tracking-widest mb-2">
+                Plan Premium · sin cargo
+              </p>
               <h2 className="text-xl sm:text-3xl font-bold text-white text-balance leading-tight">
-                Tu prueba gratis y más info
+                Prueba gratis {PRUEBA_GRATIS_DIAS} días con el producto completo
               </h2>
               <p className="mt-2 sm:mt-3 text-slate-400 text-sm sm:text-base leading-relaxed">
-                Hablamos por <strong className="text-slate-300">WhatsApp</strong>: se abre el chat con un mensaje armado para pedir la prueba gratis y detalles sobre {APP_NAME}.
-                No hace falta completar formularios acá.
+                Te damos acceso a <strong className="text-slate-300">todo</strong> lo que incluye el plan Premium
+                (estudio + portal del alumno) durante <strong className="text-slate-300">{PRUEBA_GRATIS_DIAS} días</strong>{' '}
+                para que lo uses en serio. Por <strong className="text-slate-300">WhatsApp</strong> se abre el chat con
+                un mensaje ya armado; coordinamos el alta. No hace falta completar formularios acá.
               </p>
             </div>
             <div className="mt-8 sm:mt-10 max-w-md mx-auto">
@@ -704,23 +926,6 @@ export default function Landing() {
               <p className="text-center text-xs text-slate-500 leading-relaxed mt-4">
                 Si no se abre la pestaña, permití ventanas emergentes para este sitio.
               </p>
-            </div>
-            <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row sm:flex-wrap items-center justify-center gap-2 sm:gap-4 text-sm px-2">
-              <Link
-                to="/entrada"
-                className="text-brand-300 hover:text-brand-200 font-medium hover:underline py-2.5 touch-manipulation text-center max-w-[20rem] leading-snug"
-              >
-                Ya tengo cuenta — ir al acceso
-              </Link>
-              <span className="hidden sm:inline text-slate-600 select-none" aria-hidden>
-                |
-              </span>
-              <Link
-                to="/login"
-                className="text-slate-400 hover:text-slate-200 hover:underline py-2.5 touch-manipulation"
-              >
-                Iniciar sesión
-              </Link>
             </div>
           </div>
         </section>

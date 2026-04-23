@@ -37,7 +37,8 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
-        start_url: '/',
+        // Instalación PWA: primera pantalla = elegir estudio o alumno (no la landing en /)
+        start_url: '/entrada',
         icons: [
           { src: appIcon, sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: appIcon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }

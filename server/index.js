@@ -4236,7 +4236,8 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
         : 'FitGest';
     const name = sucursal?.nombre_lugar || fallbackName;
     const icon = sucursal?.id ? getPublicLogoUrl(req, sucursal.id) : '/fitgest.png';
-    const startUrl = '/';
+    // PWA: abrir en elegir estudio / alumno; la landing de marketing sigue en /
+    const startUrl = esPortalAlumno ? '/mi-clase?modo=recuperar' : '/entrada';
     const appName = esPortalAlumno ? `${name} - Tu Clase` : `${name} - Sistema de Gestión`;
     const shortName = esPortalAlumno ? 'Tu Clase' : name;
     const description = esPortalAlumno
@@ -4264,7 +4265,7 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
   } catch (e) {
     console.error(e);
     const esPortalAlumno = (req.query.portal || '').toString().trim().toLowerCase() === 'alumno';
-    const startUrl = '/';
+    const startUrl = esPortalAlumno ? '/mi-clase?modo=recuperar' : '/entrada';
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
     res.json({

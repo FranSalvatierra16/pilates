@@ -3,6 +3,24 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
+/** PWA instalada: iOS a veces ignora start_url y abre /. Mandamos a /entrada antes de montar React. */
+function bootPwaSkipMarketingLanding() {
+  const mode = String(import.meta.env.VITE_PUBLIC_SITE_MODE || '')
+    .trim()
+    .toLowerCase()
+  if (mode === 'landing' || mode === 'marketing') return
+  if (typeof window === 'undefined') return
+  const nav = window.navigator as Navigator & { standalone?: boolean }
+  const standalone =
+    window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true
+  if (!standalone) return
+  const { pathname, search, hash } = window.location
+  if (pathname !== '/' && pathname !== '') return
+  window.history.replaceState(null, '', `/entrada${search}${hash}`)
+}
+
+bootPwaSkipMarketingLanding()
+
 const TOKEN_KEY = 'savia_token'
 const SUCURSAL_ID_KEY = 'savia_sucursalId'
 const SUCURSAL_NOMBRE_KEY = 'savia_sucursalNombre'

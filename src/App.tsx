@@ -78,6 +78,19 @@ function isPublicLandingOnlySite() {
   return m === 'landing' || m === 'marketing';
 }
 
+function isPwaStandaloneClient() {
+  if (typeof window === 'undefined') return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
+}
+
+/** En navegador normal: landing en /. En PWA instalada: / solo redirige a elegir estudio o alumno. */
+function RootMarketingOrPwaEntry() {
+  if (isPublicLandingOnlySite()) return <Landing />;
+  if (isPwaStandaloneClient()) return <Navigate to="/entrada" replace />;
+  return <Landing />;
+}
+
 const ProtectedSucursalRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isAdmin } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
@@ -180,7 +193,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/registro" element={<RegistroLink />} />
           <Route path="/mi-clase" element={<MiClase />} />
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<RootMarketingOrPwaEntry />} />
           <Route path="/entrada" element={<EntrySelector />} />
           <Route
             path="/admin"

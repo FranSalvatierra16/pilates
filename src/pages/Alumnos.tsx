@@ -209,6 +209,9 @@ const Alumnos = () => {
     });
   }, [alumnosFiltrados, ordenarPorVencimientoCercano]);
 
+  const alumnoTieneAlgunPagoRegistrado = (alumno: Alumno) =>
+    alumno.tienePagosHistorial === true || alumnoIdsConPago.has(alumno.id);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -813,7 +816,7 @@ const Alumnos = () => {
         /* Vista móvil: tarjetas por alumno, todo entra en pantalla */
         <div className="space-y-3">
           {alumnosAMostrar.map((alumno) => {
-            const tienePagos = alumnoIdsConPago.has(alumno.id);
+            const tienePagos = alumnoTieneAlgunPagoRegistrado(alumno);
             const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
             const vencida = tieneFechaVencimiento ? isCuotaVencida(alumno.fechaVencimientoCuota) : false;
             const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;
@@ -949,7 +952,7 @@ const Alumnos = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {alumnosAMostrar.map((alumno) => {
-                  const tienePagos = alumnoIdsConPago.has(alumno.id);
+                  const tienePagos = alumnoTieneAlgunPagoRegistrado(alumno);
                   const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
                   const vencida = tieneFechaVencimiento ? isCuotaVencida(alumno.fechaVencimientoCuota) : false;
                   const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;

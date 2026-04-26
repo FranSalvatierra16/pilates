@@ -410,7 +410,8 @@ app.get('/api/alumnos', async (req, res) => {
               AND asi.created_at < date_trunc('month', CURRENT_DATE) + interval '1 month'
             GROUP BY asi.turno_id, asi.semana
           ) u
-        ), 0) AS clases_este_mes
+        ), 0) AS clases_este_mes,
+        EXISTS (SELECT 1 FROM pagos p WHERE p.alumno_id = a.id) AS tiene_pago_registrado
        FROM alumnos a
        WHERE a.sucursal_id = $1
          AND ($2::boolean OR a.activo IS DISTINCT FROM false)
@@ -432,6 +433,7 @@ app.get('/api/alumnos', async (req, res) => {
       linkToken: r.link_token ?? '',
       activo: r.activo !== false,
       aPrueba: r.a_prueba === true,
+      tienePagosHistorial: r.tiene_pago_registrado === true,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     }));
     res.json(data);

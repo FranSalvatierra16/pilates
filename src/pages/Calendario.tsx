@@ -186,8 +186,8 @@ const Calendario = () => {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [turnoParaEditar, setTurnoParaEditar] = useState<Turno | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
-  /** Cómo se da de alta al agregar desde el modal: fija o recuperación semanal (si el alumno es a prueba, la fija ya sale en violeta sola) */
-  const [tipoAgregarAlumno, setTipoAgregarAlumno] = useState<'fija' | 'recuperar'>('fija');
+  /** Solo si se marca: recuperación temporal; si no, alta como clase fija (comportamiento por defecto) */
+  const [marcarSoloRecuperacion, setMarcarSoloRecuperacion] = useState(false);
   const [recuperaciones, setRecuperaciones] = useState<Recuperacion[]>([]);
   const [liberacionesSemana, setLiberacionesSemana] = useState<LiberacionSemana[]>([]);
   const [inscripciones, setInscripciones] = useState<InscripcionTurno[]>([]);
@@ -667,7 +667,7 @@ const Calendario = () => {
     }
     setTurnoSeleccionado({ diaSemana, hora });
     setAlumnoSeleccionado('');
-    setTipoAgregarAlumno('fija');
+    setMarcarSoloRecuperacion(false);
     setFiltroBusqueda('');
     setAlumnosFiltrados(alumnos);
     setShowModal(true);
@@ -710,7 +710,7 @@ const Calendario = () => {
     setShowModal(false);
     setTurnoSeleccionado(null);
     setAlumnoSeleccionado('');
-    setTipoAgregarAlumno('fija');
+    setMarcarSoloRecuperacion(false);
     setFiltroBusqueda('');
   };
 
@@ -745,7 +745,7 @@ const Calendario = () => {
       const recsEnTurno = alumnosVisiblesEnTurno.filter((a) => a.isRecuperacion);
       const totalEnTurno = contarOcupacionTurno(alumnosVisiblesEnTurno);
 
-      if (tipoAgregarAlumno === 'recuperar') {
+      if (marcarSoloRecuperacion) {
         const yaRecuperacion = recsEnTurno.some((r) => r.alumno.id === alumnoSeleccionado);
         if (yaRecuperacion) {
           handleCerrarModal();
@@ -2617,35 +2617,18 @@ const Calendario = () => {
                     Mostrando {alumnosFiltrados.length} de {alumnos.length} alumnos
                   </p>
                 )}
-                <fieldset className="mt-4 space-y-2">
-                  <legend className="text-sm font-medium text-gray-700 mb-2">Tipo de alta</legend>
-                  <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-gray-200 p-3 has-[:checked]:border-primary-400 has-[:checked]:bg-primary-50/50">
-                    <input
-                      type="radio"
-                      name="tipoAgregarAlumno"
-                      checked={tipoAgregarAlumno === 'fija'}
-                      onChange={() => setTipoAgregarAlumno('fija')}
-                      className="mt-1 border-gray-300 text-primary-600 focus:ring-primary-500"
-                    />
-                    <span>
-                      <span className="text-sm font-medium text-gray-800 block">Clase fija</span>
-                      <span className="text-xs text-gray-600">Inscripción habitual al horario.</span>
-                    </span>
-                  </label>
-                  <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-gray-200 p-3 has-[:checked]:border-amber-400 has-[:checked]:bg-amber-50/60">
-                    <input
-                      type="radio"
-                      name="tipoAgregarAlumno"
-                      checked={tipoAgregarAlumno === 'recuperar'}
-                      onChange={() => setTipoAgregarAlumno('recuperar')}
-                      className="mt-1 border-gray-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    <span>
-                      <span className="text-sm font-medium text-gray-800 block">Recuperar</span>
-                      <span className="text-xs text-gray-600">Temporal para esta semana; desaparece al reiniciar semana.</span>
-                    </span>
-                  </label>
-                </fieldset>
+                <label className="flex items-start gap-2 mt-4 cursor-pointer rounded-lg border border-gray-200 p-3 has-[:checked]:border-amber-400 has-[:checked]:bg-amber-50/50">
+                  <input
+                    type="checkbox"
+                    checked={marcarSoloRecuperacion}
+                    onChange={(e) => setMarcarSoloRecuperacion(e.target.checked)}
+                    className="mt-1 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <span>
+                    <span className="text-sm font-medium text-gray-800 block">Recuperar</span>
+                    <span className="text-xs text-gray-600">Solo esta semana; desaparece al reiniciar semana. Si no marcás nada, es clase fija como siempre.</span>
+                  </span>
+                </label>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 flex-shrink-0">
                 <button

@@ -58,6 +58,8 @@ export interface Alumno {
   actividadId: string;
   /** Período a prueba sin actividad asignada; en listas y calendario se muestra en violeta */
   aPrueba?: boolean;
+  /** Si alguna vez registró un pago (viene del API; no depende del filtro de finanzas por PIN) */
+  tienePagosHistorial?: boolean;
   clasesAsistidas: number; // Contador de clases asistidas en el mes actual
   clasesParaRecuperar?: number; // Créditos disponibles para recuperar por faltas marcadas en rojo
   descripcion?: string; // Notas o info adicional del alumno (editable)

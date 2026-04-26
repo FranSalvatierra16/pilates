@@ -516,12 +516,14 @@ const Calendario = () => {
       .map((a) => {
         const liberacion = buscarLiberacionSemana(turno.id, a.id);
         const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === a.id);
+        const act = actividades.find((x) => x.id === a.actividadId);
+        const actividadNombrePrueba = act?.nombre?.trim().toLowerCase() === 'prueba';
         return {
           alumno: a,
           isRecuperacion: false,
           liberadaSemana: !!liberacion,
           liberacionId: liberacion?.id,
-          aPrueba: !!ins?.aPrueba,
+          aPrueba: !!ins?.aPrueba || actividadNombrePrueba,
         };
       });
     const recs: AlumnoEnTurno[] = recuperaciones
@@ -1277,13 +1279,15 @@ const Calendario = () => {
       .filter((a): a is Alumno => a !== undefined)
       .map((alumno) => {
         const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === alumno.id);
+        const act = actividades.find((x) => x.id === alumno.actividadId);
+        const actividadNombrePrueba = act?.nombre?.trim().toLowerCase() === 'prueba';
         return {
           alumno,
           isRecuperacion: false,
           liberadaSemana: liberacionesDeSemana.some(
             (item) => item.turnoId === turno.id && item.alumnoId === alumno.id && item.semana === semana
           ),
-          aPrueba: !!ins?.aPrueba,
+          aPrueba: !!ins?.aPrueba || actividadNombrePrueba,
         };
       });
     const recs: AlumnoEnTurno[] = recuperacionesSemana

@@ -210,7 +210,9 @@ const Alumnos = () => {
   }, [alumnosFiltrados, ordenarPorVencimientoCercano]);
 
   const alumnoTieneAlgunPagoRegistrado = (alumno: Alumno) =>
-    alumno.tienePagosHistorial === true || alumnoIdsConPago.has(alumno.id);
+    alumno.tienePagosHistorial === true ||
+    alumnoIdsConPago.has(alumno.id) ||
+    !!(alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '');
 
   const loadData = async () => {
     setLoading(true);

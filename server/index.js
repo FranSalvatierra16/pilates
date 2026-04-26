@@ -813,26 +813,10 @@ app.get('/api/pagos/by-alumno/:alumnoId', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user.sucursalId;
-    const { pinHash } = await sucursalFinanzasRow(db, sid);
-    const full = finanzasDesbloqueada(req, sid, pinHash);
-    let rows;
-    if (full || !pinHash) {
-      const q = await db.query(
-        'SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id WHERE p.alumno_id = $1 AND a.sucursal_id = $2 ORDER BY p.created_at DESC',
-        [req.params.alumnoId, sid]
-      );
-      rows = q.rows;
-    } else {
-      res.set('X-Finanzas-Restringido', '1');
-      const q = await db.query(
-        `SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id
-         WHERE p.alumno_id = $1 AND a.sucursal_id = $2
-           AND p.fecha = (timezone('America/Argentina/Buenos_Aires', now()))::date
-         ORDER BY p.created_at DESC`,
-        [req.params.alumnoId, sid]
-      );
-      rows = q.rows;
-    }
+    const { rows } = await db.query(
+      'SELECT p.* FROM pagos p JOIN alumnos a ON p.alumno_id = a.id WHERE p.alumno_id = $1 AND a.sucursal_id = $2 ORDER BY p.created_at DESC',
+      [req.params.alumnoId, sid]
+    );
     res.json(rows.map(mapPagoRow));
   } catch (e) {
     console.error(e);

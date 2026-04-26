@@ -431,6 +431,7 @@ app.get('/api/alumnos', async (req, res) => {
       descripcion: r.descripcion ?? '',
       linkToken: r.link_token ?? '',
       activo: r.activo !== false,
+      aPrueba: r.a_prueba === true,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     }));
     res.json(data);
@@ -447,8 +448,8 @@ app.post('/api/alumnos', async (req, res) => {
     const sid = req.user?.sucursalId;
     const b = req.body;
     await db.query(
-      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, clases_asistidas, clases_para_recuperar, descripcion, activo, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, a_prueba, clases_asistidas, clases_para_recuperar, descripcion, activo, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
       [
         b.id,
         sid,
@@ -459,6 +460,7 @@ app.post('/api/alumnos', async (req, res) => {
         b.email,
         b.fechaVencimientoCuota || null,
         b.actividadId || null,
+        b.aPrueba === true,
         b.clasesAsistidas ?? 0,
         b.clasesParaRecuperar ?? 0,
         b.descripcion ?? null,
@@ -491,6 +493,7 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.email !== undefined) { updates.push(`email = $${i++}`); values.push(b.email); }
     if (b.fechaVencimientoCuota !== undefined) { updates.push(`fecha_vencimiento_cuota = $${i++}`); values.push(b.fechaVencimientoCuota || null); }
     if (b.actividadId !== undefined) { updates.push(`actividad_id = $${i++}`); values.push(b.actividadId || null); }
+    if (b.aPrueba !== undefined) { updates.push(`a_prueba = $${i++}`); values.push(!!b.aPrueba); }
     if (b.clasesAsistidas !== undefined) { updates.push(`clases_asistidas = $${i++}`); values.push(b.clasesAsistidas); }
     if (b.clasesParaRecuperar !== undefined) { updates.push(`clases_para_recuperar = $${i++}`); values.push(Math.max(0, Number(b.clasesParaRecuperar) || 0)); }
     if (b.descripcion !== undefined) { updates.push(`descripcion = $${i++}`); values.push(b.descripcion || null); }
@@ -591,6 +594,7 @@ app.get('/api/alumnos/findByDni', async (req, res) => {
       clasesAsistidas: r.clases_este_mes ?? 0,
       descripcion: r.descripcion ?? '',
       activo: r.activo !== false,
+      aPrueba: r.a_prueba === true,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     });
   } catch (e) {

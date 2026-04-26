@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -94,6 +94,8 @@ const Alumnos = () => {
   const [historialAsistenciasLoading, setHistorialAsistenciasLoading] = useState(false);
   /** IDs de alumnos que tienen al menos un pago (para no mostrar "Al día" si nunca pagó) */
   const [alumnoIdsConPago, setAlumnoIdsConPago] = useState<Set<string>>(new Set());
+  /** Al asignar actividad desde la lista (a prueba → plan fijo) */
+  const [asignandoActividadAlumnoId, setAsignandoActividadAlumnoId] = useState<string | null>(null);
   const [configPortal, setConfigPortal] = useState({
     horasAntesLiberarClase: 0,
     horasAntesAnotarseClase: 0,
@@ -112,6 +114,7 @@ const Alumnos = () => {
     email: '',
     fechaVencimientoCuota: '',
     actividadId: '',
+    aPrueba: false,
     descripcion: '',
   });
   const [formDataPago, setFormDataPago] = useState({
@@ -286,6 +289,7 @@ const Alumnos = () => {
       email: '',
       fechaVencimientoCuota: '',
       actividadId: '',
+      aPrueba: false,
       descripcion: '',
     });
     setEditingAlumno(null);
@@ -301,7 +305,8 @@ const Alumnos = () => {
         telefono: alumno.telefono,
         email: alumno.email,
         fechaVencimientoCuota: alumno.fechaVencimientoCuota,
-        actividadId: alumno.actividadId,
+        actividadId: alumno.actividadId || '',
+        aPrueba: !!alumno.aPrueba,
         descripcion: alumno.descripcion ?? '',
       });
     } else {
@@ -314,6 +319,7 @@ const Alumnos = () => {
         email: '',
         fechaVencimientoCuota: '', // Sin fecha hasta que se pague
         actividadId: '',
+        aPrueba: false,
         descripcion: '',
       });
       setEditingAlumno(null);
@@ -328,22 +334,42 @@ const Alumnos = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!formData.aPrueba && !formData.actividadId?.trim()) {
+      toast.warning('Elegí una actividad o marcá "Alumna a prueba" sin actividad asignada.');
+      return;
+    }
+
+    const actividadIdFinal = formData.aPrueba ? '' : formData.actividadId.trim();
+    const aPruebaFinal = formData.aPrueba;
+
     try {
       if (editingAlumno) {
         // Si es edición, usar la fecha que se ingresó o calcularla
         const fechaVencimiento = formData.fechaVencimientoCuota || calcularFechaVencimiento(new Date().toISOString().split('T')[0]);
         await storageHybrid.alumnos.update(editingAlumno.id, {
-          ...formData,
+          nombre: formData.nombre,
+          apellido: formData.apellido,
+          dni: formData.dni,
+          telefono: formData.telefono,
+          email: formData.email,
           fechaVencimientoCuota: fechaVencimiento,
+          actividadId: actividadIdFinal,
+          aPrueba: aPruebaFinal,
           descripcion: formData.descripcion ?? '',
         });
       } else {
         // Crear nuevo alumno sin fecha de vencimiento (pendiente de pago)
         const nuevoAlumno: Alumno = {
           id: Date.now().toString(),
-          ...formData,
+          nombre: formData.nombre,
+          apellido: formData.apellido,
+          dni: formData.dni,
+          telefono: formData.telefono,
+          email: formData.email,
           fechaVencimientoCuota: '', // Sin fecha hasta que se pague
+          actividadId: actividadIdFinal,
+          aPrueba: aPruebaFinal,
           clasesAsistidas: 0, // Iniciar contador en 0
           descripcion: formData.descripcion ?? '',
           activo: true,
@@ -387,6 +413,25 @@ const Alumnos = () => {
     } catch (error) {
       console.error('Error reactivando alumno:', error);
       toast.error('Error al reactivar el alumno. Por favor intentá nuevamente.');
+    }
+  };
+
+  const handleAsignarActividadDesdeLista = async (alumnoId: string, actividadId: string) => {
+    const idAct = actividadId.trim();
+    if (!idAct) return;
+    setAsignandoActividadAlumnoId(alumnoId);
+    try {
+      await storageHybrid.alumnos.update(alumnoId, {
+        actividadId: idAct,
+        aPrueba: false,
+      });
+      await loadAlumnos();
+      toast.success('Actividad asignada. Ya no está en período a prueba.');
+    } catch (error) {
+      console.error('Error asignando actividad:', error);
+      toast.error('No se pudo asignar la actividad. Intentá de nuevo.');
+    } finally {
+      setAsignandoActividadAlumnoId(null);
     }
   };
 
@@ -460,13 +505,15 @@ const Alumnos = () => {
     }
   };
 
-  const getActividadNombre = (actividadId: string) => {
-    const actividad = actividades.find(a => a.id === actividadId);
+  const getActividadNombre = (actividadId: string | undefined, aPrueba?: boolean) => {
+    if (aPrueba && !(actividadId?.trim())) return 'A prueba';
+    const actividad = actividades.find((a) => a.id === actividadId);
     return actividad ? actividad.nombre : 'Sin actividad';
   };
 
-  const getActividadPrecio = (actividadId: string) => {
-    const actividad = actividades.find(a => a.id === actividadId);
+  const getActividadPrecio = (actividadId: string | undefined, aPrueba?: boolean) => {
+    if (aPrueba && !(actividadId?.trim())) return 0;
+    const actividad = actividades.find((a) => a.id === actividadId);
     return actividad ? actividad.precio : 0;
   };
 
@@ -772,11 +819,20 @@ const Alumnos = () => {
             const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;
             const estado = !tienePagos ? 'pendiente' : !tieneFechaVencimiento ? 'pendiente' : vencida ? 'vencida' : venceHoy ? 'venceHoy' : 'alDia';
             return (
-              <div key={alumno.id} className="card p-4 border border-gray-200">
+              <div
+                key={alumno.id}
+                className={`card p-4 border border-gray-200 ${alumno.aPrueba ? 'border-l-4 border-l-violet-600 bg-violet-50/50' : ''}`}
+              >
                 <div className="flex justify-between items-start gap-2 mb-3">
                   <div>
-                    <h3 className="font-semibold text-gray-900 text-base">
+                    <h3 className="font-semibold text-gray-900 text-base flex items-center gap-2 flex-wrap">
                       {[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}
+                      {alumno.aPrueba && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-violet-800 bg-violet-200/90 px-2 py-0.5 rounded-full">
+                          <Sparkles className="w-3 h-3" />
+                          A prueba
+                        </span>
+                      )}
                     </h3>
                     <p className="text-sm text-gray-500">DNI {alumno.dni}</p>
                   </div>
@@ -815,8 +871,10 @@ const Alumnos = () => {
                   </div>
                   <div>
                     <span className="text-gray-500">Actividad: </span>
-                    <span className="text-gray-900">{getActividadNombre(alumno.actividadId)}</span>
-                    <span className="text-gray-600"> — {formatCurrency(getActividadPrecio(alumno.actividadId))}</span>
+                    <span className={alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-violet-800 font-medium' : 'text-gray-900'}>
+                      {getActividadNombre(alumno.actividadId, alumno.aPrueba)}
+                    </span>
+                    <span className="text-gray-600"> — {formatCurrency(getActividadPrecio(alumno.actividadId, alumno.aPrueba))}</span>
                   </div>
                   <div>
                     <span className="text-gray-500">Vencimiento: </span>
@@ -868,9 +926,20 @@ const Alumnos = () => {
                   const venceHoy = tieneFechaVencimiento ? isCuotaVenceHoy(alumno.fechaVencimientoCuota) : false;
                   const estado = !tienePagos ? 'pendiente' : !tieneFechaVencimiento ? 'pendiente' : vencida ? 'vencida' : venceHoy ? 'venceHoy' : 'alDia';
                   return (
-                    <tr key={alumno.id} className="hover:bg-gray-50">
+                    <tr
+                      key={alumno.id}
+                      className={`hover:bg-gray-50 ${alumno.aPrueba ? 'bg-violet-50/70 border-l-4 border-l-violet-600' : ''}`}
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}</div>
+                        <div className="text-sm font-medium text-gray-900 flex items-center gap-2 flex-wrap">
+                          {[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}
+                          {alumno.aPrueba && (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-violet-800 bg-violet-200/90 px-2 py-0.5 rounded-full">
+                              <Sparkles className="w-3 h-3" />
+                              A prueba
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{alumno.dni}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -878,8 +947,10 @@ const Alumnos = () => {
                         <div className="text-sm text-gray-500">{alumno.email}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{getActividadNombre(alumno.actividadId)}</div>
-                        <div className="text-sm text-gray-500">{formatCurrency(getActividadPrecio(alumno.actividadId))}</div>
+                        <div className={`text-sm font-medium ${alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-violet-800' : 'text-gray-900'}`}>
+                          {getActividadNombre(alumno.actividadId, alumno.aPrueba)}
+                        </div>
+                        <div className="text-sm text-gray-500">{formatCurrency(getActividadPrecio(alumno.actividadId, alumno.aPrueba))}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {estado === 'pendiente' ? (
@@ -1020,6 +1091,29 @@ const Alumnos = () => {
                     className="input-field"
                   />
                 </div>
+                <div className="md:col-span-2">
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.aPrueba}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setFormData({
+                          ...formData,
+                          aPrueba: checked,
+                          ...(checked ? { actividadId: '' } : {}),
+                        });
+                      }}
+                      className="mt-1 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span>
+                      <span className="text-sm font-medium text-gray-800 block">Alumna a prueba (sin actividad)</span>
+                      <span className="text-xs text-gray-600">
+                        No asigna plan todavía. En la lista y en el calendario se muestra en violeta; al sumarla a un turno como clase fija queda marcada a prueba automáticamente.
+                      </span>
+                    </span>
+                  </label>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Actividad
@@ -1027,11 +1121,15 @@ const Alumnos = () => {
                   <select
                     ref={refActividad}
                     value={formData.actividadId}
-                    onChange={(e) => setFormData({ ...formData, actividadId: e.target.value })}
+                    disabled={formData.aPrueba}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setFormData({ ...formData, actividadId: v, ...(v ? { aPrueba: false } : {}) });
+                    }}
                     onKeyDown={(e) => focusNext(e, refDescripcion)}
-                    className="input-field"
+                    className="input-field disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="">Seleccionar actividad</option>
+                    <option value="">Sin actividad (elegí arriba &quot;a prueba&quot; o una actividad)</option>
                     {actividades.map((act) => (
                       <option key={act.id} value={act.id}>
                         {act.nombre} - {formatCurrency(act.precio)}

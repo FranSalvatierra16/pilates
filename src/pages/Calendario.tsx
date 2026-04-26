@@ -186,8 +186,8 @@ const Calendario = () => {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [turnoParaEditar, setTurnoParaEditar] = useState<Turno | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
-  /** Cómo se da de alta al agregar desde el modal: fija, recuperación semanal o inscripción fija a prueba (violeta) */
-  const [tipoAgregarAlumno, setTipoAgregarAlumno] = useState<'fija' | 'recuperar' | 'prueba'>('fija');
+  /** Cómo se da de alta al agregar desde el modal: fija o recuperación semanal (si el alumno es a prueba, la fija ya sale en violeta sola) */
+  const [tipoAgregarAlumno, setTipoAgregarAlumno] = useState<'fija' | 'recuperar'>('fija');
   const [recuperaciones, setRecuperaciones] = useState<Recuperacion[]>([]);
   const [liberacionesSemana, setLiberacionesSemana] = useState<LiberacionSemana[]>([]);
   const [inscripciones, setInscripciones] = useState<InscripcionTurno[]>([]);
@@ -516,14 +516,12 @@ const Calendario = () => {
       .map((a) => {
         const liberacion = buscarLiberacionSemana(turno.id, a.id);
         const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === a.id);
-        const act = actividades.find((x) => x.id === a.actividadId);
-        const actividadNombrePrueba = act?.nombre?.trim().toLowerCase() === 'prueba';
         return {
           alumno: a,
           isRecuperacion: false,
           liberadaSemana: !!liberacion,
           liberacionId: liberacion?.id,
-          aPrueba: !!ins?.aPrueba || actividadNombrePrueba,
+          aPrueba: !!ins?.aPrueba || !!a.aPrueba,
         };
       });
     const recs: AlumnoEnTurno[] = recuperaciones
@@ -808,7 +806,7 @@ const Calendario = () => {
               turnoId: turnoExistente.id,
               alumnoId: alumnoSeleccionado,
               semanaDesde: semanaVista,
-              aPrueba: tipoAgregarAlumno === 'prueba',
+              aPrueba: !!alumnoActual.aPrueba,
               createdAt: new Date().toISOString(),
             });
           }
@@ -829,7 +827,7 @@ const Calendario = () => {
             turnoId: nuevoTurno.id,
             alumnoId: alumnoSeleccionado,
             semanaDesde: semanaVista,
-            aPrueba: tipoAgregarAlumno === 'prueba',
+            aPrueba: !!alumnoActual.aPrueba,
             createdAt: new Date().toISOString(),
           });
         }
@@ -916,7 +914,7 @@ const Calendario = () => {
 
     try {
       const alumnoIdMover = showPopupAlumno.alumno.id;
-      const conservarPrueba = !!showPopupAlumno.aPrueba;
+      const conservarPrueba = !!showPopupAlumno.aPrueba || !!alumnos.find((x) => x.id === alumnoIdMover)?.aPrueba;
       // Eliminar del turno original
       await handleEliminarAlumno(showPopupAlumno.turnoId, alumnoIdMover);
       
@@ -1279,15 +1277,13 @@ const Calendario = () => {
       .filter((a): a is Alumno => a !== undefined)
       .map((alumno) => {
         const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === alumno.id);
-        const act = actividades.find((x) => x.id === alumno.actividadId);
-        const actividadNombrePrueba = act?.nombre?.trim().toLowerCase() === 'prueba';
         return {
           alumno,
           isRecuperacion: false,
           liberadaSemana: liberacionesDeSemana.some(
             (item) => item.turnoId === turno.id && item.alumnoId === alumno.id && item.semana === semana
           ),
-          aPrueba: !!ins?.aPrueba || actividadNombrePrueba,
+          aPrueba: !!ins?.aPrueba || !!alumno.aPrueba,
         };
       });
     const recs: AlumnoEnTurno[] = recuperacionesSemana
@@ -2649,20 +2645,10 @@ const Calendario = () => {
                       <span className="text-xs text-gray-600">Temporal para esta semana; desaparece al reiniciar semana.</span>
                     </span>
                   </label>
-                  <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-gray-200 p-3 has-[:checked]:border-violet-400 has-[:checked]:bg-violet-50/70">
-                    <input
-                      type="radio"
-                      name="tipoAgregarAlumno"
-                      checked={tipoAgregarAlumno === 'prueba'}
-                      onChange={() => setTipoAgregarAlumno('prueba')}
-                      className="mt-1 border-gray-300 text-violet-600 focus:ring-violet-500"
-                    />
-                    <span>
-                      <span className="text-sm font-medium text-gray-800 block">A prueba</span>
-                      <span className="text-xs text-gray-600">Misma inscripción fija; en el calendario se muestra en violeta.</span>
-                    </span>
-                  </label>
                 </fieldset>
+                <p className="text-xs text-violet-700 bg-violet-50/80 border border-violet-100 rounded-lg px-3 py-2 mt-2">
+                  Si el alumno está cargado como <strong>a prueba</strong> en Alumnos, en clase fija se verá en violeta automáticamente.
+                </p>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 flex-shrink-0">
                 <button
@@ -3134,7 +3120,7 @@ const Calendario = () => {
                   Recuperación
                 </span>
               )}
-              {!showPopupAlumno.isRecuperacion && showPopupAlumno.aPrueba && (
+              {!showPopupAlumno.isRecuperacion && (showPopupAlumno.aPrueba || showPopupAlumno.alumno.aPrueba) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-200 text-violet-900">
                   <Sparkles className="w-3 h-3" />
                   A prueba

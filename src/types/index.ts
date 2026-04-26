@@ -54,7 +54,10 @@ export interface Alumno {
   telefono: string;
   email: string;
   fechaVencimientoCuota: string; // YYYY-MM-DD
+  /** Vacío si aún no tiene plan o está solo en período a prueba */
   actividadId: string;
+  /** Período a prueba sin actividad asignada; en listas y calendario se muestra en violeta */
+  aPrueba?: boolean;
   clasesAsistidas: number; // Contador de clases asistidas en el mes actual
   clasesParaRecuperar?: number; // Créditos disponibles para recuperar por faltas marcadas en rojo
   descripcion?: string; // Notas o info adicional del alumno (editable)

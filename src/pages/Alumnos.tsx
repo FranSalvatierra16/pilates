@@ -875,6 +875,35 @@ const Alumnos = () => {
                       {getActividadNombre(alumno.actividadId, alumno.aPrueba)}
                     </span>
                     <span className="text-gray-600"> — {formatCurrency(getActividadPrecio(alumno.actividadId, alumno.aPrueba))}</span>
+                    {alumno.aPrueba && alumno.activo !== false && (
+                      <div className="mt-2 pt-2 border-t border-violet-100">
+                        <label className="block text-xs font-medium text-violet-900 mb-1">Asignar plan desde acá</label>
+                        {actividades.length === 0 ? (
+                          <p className="text-xs text-amber-700">No hay actividades cargadas. Creá al menos una en Actividades.</p>
+                        ) : (
+                          <select
+                            disabled={asignandoActividadAlumnoId === alumno.id}
+                            defaultValue=""
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (!v) return;
+                              void handleAsignarActividadDesdeLista(alumno.id, v);
+                              e.target.value = '';
+                            }}
+                            className="input-field text-sm w-full max-w-xs touch-manipulation disabled:opacity-60"
+                          >
+                            <option value="">
+                              {asignandoActividadAlumnoId === alumno.id ? 'Guardando…' : 'Elegir actividad…'}
+                            </option>
+                            {actividades.map((act) => (
+                              <option key={act.id} value={act.id}>
+                                {act.nombre} — {formatCurrency(act.precio)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <span className="text-gray-500">Vencimiento: </span>
@@ -946,11 +975,40 @@ const Alumnos = () => {
                         <div className="text-sm text-gray-900">{alumno.telefono}</div>
                         <div className="text-sm text-gray-500">{alumno.email}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4 align-top min-w-[200px]">
                         <div className={`text-sm font-medium ${alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-violet-800' : 'text-gray-900'}`}>
                           {getActividadNombre(alumno.actividadId, alumno.aPrueba)}
                         </div>
                         <div className="text-sm text-gray-500">{formatCurrency(getActividadPrecio(alumno.actividadId, alumno.aPrueba))}</div>
+                        {alumno.aPrueba && alumno.activo !== false && (
+                          <div className="mt-2 pt-2 border-t border-violet-100">
+                            <label className="block text-xs font-medium text-violet-900 mb-1">Asignar plan</label>
+                            {actividades.length === 0 ? (
+                              <p className="text-xs text-amber-700">Sin actividades en el catálogo.</p>
+                            ) : (
+                              <select
+                                disabled={asignandoActividadAlumnoId === alumno.id}
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (!v) return;
+                                  void handleAsignarActividadDesdeLista(alumno.id, v);
+                                  e.target.value = '';
+                                }}
+                                className="input-field text-sm w-full max-w-[220px] disabled:opacity-60"
+                              >
+                                <option value="">
+                                  {asignandoActividadAlumnoId === alumno.id ? 'Guardando…' : 'Elegir actividad…'}
+                                </option>
+                                {actividades.map((act) => (
+                                  <option key={act.id} value={act.id}>
+                                    {act.nombre} — {formatCurrency(act.precio)}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {estado === 'pendiente' ? (

@@ -446,9 +446,9 @@ async function main() {
       const alumnoId = alumnoMap.get(row.alumno_id);
       if (!turnoId || !alumnoId) continue;
       await client.query(
-        `INSERT INTO inscripciones_turno (id, turno_id, alumno_id, semana_desde, created_at)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [crypto.randomUUID(), turnoId, alumnoId, row.semana_desde, row.created_at]
+        `INSERT INTO inscripciones_turno (id, turno_id, alumno_id, semana_desde, a_prueba, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [crypto.randomUUID(), turnoId, alumnoId, row.semana_desde, row.a_prueba ?? false, row.created_at]
       );
       counters.inscripcionesTurno++;
     }

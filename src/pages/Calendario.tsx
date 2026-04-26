@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote } from 'lucide-react';
-import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana } from '../types';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles } from 'lucide-react';
+import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
@@ -178,6 +178,7 @@ const Calendario = () => {
     liberadaSemana?: boolean;
     liberacionId?: string;
     recuperacionId?: string;
+    aPrueba?: boolean;
     position: { x: number; y: number };
   } | null>(null);
   const [showMoverAlumno, setShowMoverAlumno] = useState(false);
@@ -185,10 +186,11 @@ const Calendario = () => {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<{ diaSemana: number; hora: string } | null>(null);
   const [turnoParaEditar, setTurnoParaEditar] = useState<Turno | null>(null);
   const [alumnoSeleccionado, setAlumnoSeleccionado] = useState('');
-  const [esRecuperacion, setEsRecuperacion] = useState(false);
+  /** Cómo se da de alta al agregar desde el modal: fija, recuperación semanal o inscripción fija a prueba (violeta) */
+  const [tipoAgregarAlumno, setTipoAgregarAlumno] = useState<'fija' | 'recuperar' | 'prueba'>('fija');
   const [recuperaciones, setRecuperaciones] = useState<Recuperacion[]>([]);
   const [liberacionesSemana, setLiberacionesSemana] = useState<LiberacionSemana[]>([]);
-  const [inscripciones, setInscripciones] = useState<{ id: string; turnoId: string; alumnoId: string; semanaDesde: string }[]>([]);
+  const [inscripciones, setInscripciones] = useState<InscripcionTurno[]>([]);
   const CUPO_DEFAULT = 6;
   const parseCupo = (value: string, fallback = CUPO_DEFAULT) => {
     const parsed = parseInt(value, 10);
@@ -493,6 +495,7 @@ const Calendario = () => {
     liberacionId?: string;
     recuperacionId?: string;
     usaCredito?: boolean;
+    aPrueba?: boolean;
   };
   const buscarLiberacionSemana = (turnoId: string, alumnoId: string, semana = semanaVista) =>
     liberacionesSemana.find((item) => item.turnoId === turnoId && item.alumnoId === alumnoId && item.semana === semana);
@@ -512,11 +515,13 @@ const Calendario = () => {
       .filter((a): a is Alumno => a !== undefined)
       .map((a) => {
         const liberacion = buscarLiberacionSemana(turno.id, a.id);
+        const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === a.id);
         return {
           alumno: a,
           isRecuperacion: false,
           liberadaSemana: !!liberacion,
           liberacionId: liberacion?.id,
+          aPrueba: !!ins?.aPrueba,
         };
       });
     const recs: AlumnoEnTurno[] = recuperaciones
@@ -662,7 +667,7 @@ const Calendario = () => {
     }
     setTurnoSeleccionado({ diaSemana, hora });
     setAlumnoSeleccionado('');
-    setEsRecuperacion(false);
+    setTipoAgregarAlumno('fija');
     setFiltroBusqueda('');
     setAlumnosFiltrados(alumnos);
     setShowModal(true);
@@ -705,7 +710,7 @@ const Calendario = () => {
     setShowModal(false);
     setTurnoSeleccionado(null);
     setAlumnoSeleccionado('');
-    setEsRecuperacion(false);
+    setTipoAgregarAlumno('fija');
     setFiltroBusqueda('');
   };
 
@@ -740,7 +745,7 @@ const Calendario = () => {
       const recsEnTurno = alumnosVisiblesEnTurno.filter((a) => a.isRecuperacion);
       const totalEnTurno = contarOcupacionTurno(alumnosVisiblesEnTurno);
 
-      if (esRecuperacion) {
+      if (tipoAgregarAlumno === 'recuperar') {
         const yaRecuperacion = recsEnTurno.some((r) => r.alumno.id === alumnoSeleccionado);
         if (yaRecuperacion) {
           handleCerrarModal();
@@ -801,6 +806,7 @@ const Calendario = () => {
               turnoId: turnoExistente.id,
               alumnoId: alumnoSeleccionado,
               semanaDesde: semanaVista,
+              aPrueba: tipoAgregarAlumno === 'prueba',
               createdAt: new Date().toISOString(),
             });
           }
@@ -821,6 +827,7 @@ const Calendario = () => {
             turnoId: nuevoTurno.id,
             alumnoId: alumnoSeleccionado,
             semanaDesde: semanaVista,
+            aPrueba: tipoAgregarAlumno === 'prueba',
             createdAt: new Date().toISOString(),
           });
         }
@@ -906,23 +913,26 @@ const Calendario = () => {
     if (showPopupAlumno.isRecuperacion) return; // No mover recuperaciones
 
     try {
+      const alumnoIdMover = showPopupAlumno.alumno.id;
+      const conservarPrueba = !!showPopupAlumno.aPrueba;
       // Eliminar del turno original
-      await handleEliminarAlumno(showPopupAlumno.turnoId, showPopupAlumno.alumno.id);
+      await handleEliminarAlumno(showPopupAlumno.turnoId, alumnoIdMover);
       
       // Agregar al turno destino
       const turnoDestinoExistente = getTurnoDelDia(turnoDestino.diaSemana, turnoDestino.hora);
       
       if (turnoDestinoExistente) {
         // Si el turno ya existe, agregar el alumno si no está
-        if (!turnoDestinoExistente.alumnoIds.includes(showPopupAlumno.alumno.id)) {
+        if (!turnoDestinoExistente.alumnoIds.includes(alumnoIdMover)) {
           await storageHybrid.turnos.update(turnoDestinoExistente.id, {
-            alumnoIds: [...turnoDestinoExistente.alumnoIds, showPopupAlumno.alumno.id],
+            alumnoIds: [...turnoDestinoExistente.alumnoIds, alumnoIdMover],
           });
           await storageHybrid.inscripcionesTurno.add({
             id: Date.now().toString(),
             turnoId: turnoDestinoExistente.id,
-            alumnoId: showPopupAlumno.alumno.id,
+            alumnoId: alumnoIdMover,
             semanaDesde: semanaVista,
+            aPrueba: conservarPrueba,
             createdAt: new Date().toISOString(),
           });
         }
@@ -934,15 +944,16 @@ const Calendario = () => {
           hora: turnoDestino.hora,
           titulo: '',
           profesorId: '',
-          alumnoIds: [showPopupAlumno.alumno.id],
+          alumnoIds: [alumnoIdMover],
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.turnos.add(nuevoTurno);
         await storageHybrid.inscripcionesTurno.add({
           id: (Date.now() + 1).toString(),
           turnoId: nuevoTurno.id,
-          alumnoId: showPopupAlumno.alumno.id,
+          alumnoId: alumnoIdMover,
           semanaDesde: semanaVista,
+          aPrueba: conservarPrueba,
           createdAt: new Date().toISOString(),
         });
       }
@@ -1056,6 +1067,7 @@ const Calendario = () => {
       liberadaSemana: item.liberadaSemana,
       liberacionId: item.liberacionId,
       recuperacionId: item.recuperacionId,
+      aPrueba: item.aPrueba,
       position: { x: e.clientX, y: e.clientY },
     });
     setShowMoverAlumno(false);
@@ -1263,13 +1275,17 @@ const Calendario = () => {
       })
       .map((id) => alumnos.find((a) => a.id === id))
       .filter((a): a is Alumno => a !== undefined)
-      .map((alumno) => ({
-        alumno,
-        isRecuperacion: false,
-        liberadaSemana: liberacionesDeSemana.some(
-          (item) => item.turnoId === turno.id && item.alumnoId === alumno.id && item.semana === semana
-        ),
-      }));
+      .map((alumno) => {
+        const ins = inscripciones.find((i) => i.turnoId === turno.id && i.alumnoId === alumno.id);
+        return {
+          alumno,
+          isRecuperacion: false,
+          liberadaSemana: liberacionesDeSemana.some(
+            (item) => item.turnoId === turno.id && item.alumnoId === alumno.id && item.semana === semana
+          ),
+          aPrueba: !!ins?.aPrueba,
+        };
+      });
     const recs: AlumnoEnTurno[] = recuperacionesSemana
       .filter((r) => r.turnoId === turno.id)
       .map((r) => {
@@ -1527,16 +1543,17 @@ const Calendario = () => {
 
   const renderAlumnoEnTurno = (item: AlumnoEnTurno, turno: Turno | undefined, diaSemana: number, hora: string) => {
     if (!turno) return null;
-    const { alumno, isRecuperacion, liberadaSemana } = item;
+    const { alumno, isRecuperacion, liberadaSemana, aPrueba } = item;
     
     const estadoAsistencia = getEstadoAsistencia(turno.id, alumno.id);
     const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
     const vencido = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
     const porVencer = tieneFecha && !vencido && (isCuotaVenceHoy(alumno.fechaVencimientoCuota) || isCuotaPorVencer(alumno.fechaVencimientoCuota, 3));
-    // Recuperación: amarillo + ícono; sino rojo/ámbar si vencido o por vencer; al día: primary
+    // Recuperación: amarillo; liberó: slate; a prueba: violeta; luego cuota
     let bgColor = 'bg-primary-100 text-primary-900';
     if (isRecuperacion) bgColor = 'bg-amber-200 text-amber-900 border-l-4 border-amber-500';
     else if (liberadaSemana) bgColor = 'bg-slate-200 text-slate-800 border-l-4 border-slate-500';
+    else if (aPrueba) bgColor = 'bg-violet-200 text-violet-900 border-l-4 border-violet-600';
     else if (vencido) bgColor = 'bg-red-200 text-red-900 border-l-4 border-red-600';
     else if (porVencer) bgColor = 'bg-amber-100 text-amber-900 border-l-4 border-amber-500';
     
@@ -1547,7 +1564,13 @@ const Calendario = () => {
         onClick={(e) => handleAbrirPopupAlumno(e, item, turno, diaSemana, hora)}
       >
         {isRecuperacion && <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 text-amber-700" aria-label="Recuperación" />}
-        <span className="truncate flex-1" title={`${alumno.nombre} ${alumno.apellido}${isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}>
+        {!isRecuperacion && aPrueba && (
+          <Sparkles className="w-3.5 h-3.5 flex-shrink-0 text-violet-700" aria-label="A prueba" />
+        )}
+        <span
+          className="truncate flex-1"
+          title={`${alumno.nombre} ${alumno.apellido}${isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : aPrueba ? ' (a prueba)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}
+        >
           {alumno.nombre} {alumno.apellido}
         </span>
         {liberadaSemana && !isRecuperacion && (
@@ -2594,15 +2617,48 @@ const Calendario = () => {
                     Mostrando {alumnosFiltrados.length} de {alumnos.length} alumnos
                   </p>
                 )}
-                <label className="flex items-center gap-2 mt-4 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={esRecuperacion}
-                    onChange={(e) => setEsRecuperacion(e.target.checked)}
-                    className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">Es para recuperar (temporal, desaparece al reiniciar semana)</span>
-                </label>
+                <fieldset className="mt-4 space-y-2">
+                  <legend className="text-sm font-medium text-gray-700 mb-2">Tipo de alta</legend>
+                  <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-gray-200 p-3 has-[:checked]:border-primary-400 has-[:checked]:bg-primary-50/50">
+                    <input
+                      type="radio"
+                      name="tipoAgregarAlumno"
+                      checked={tipoAgregarAlumno === 'fija'}
+                      onChange={() => setTipoAgregarAlumno('fija')}
+                      className="mt-1 border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span>
+                      <span className="text-sm font-medium text-gray-800 block">Clase fija</span>
+                      <span className="text-xs text-gray-600">Inscripción habitual al horario.</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-gray-200 p-3 has-[:checked]:border-amber-400 has-[:checked]:bg-amber-50/60">
+                    <input
+                      type="radio"
+                      name="tipoAgregarAlumno"
+                      checked={tipoAgregarAlumno === 'recuperar'}
+                      onChange={() => setTipoAgregarAlumno('recuperar')}
+                      className="mt-1 border-gray-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>
+                      <span className="text-sm font-medium text-gray-800 block">Recuperar</span>
+                      <span className="text-xs text-gray-600">Temporal para esta semana; desaparece al reiniciar semana.</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer rounded-lg border border-gray-200 p-3 has-[:checked]:border-violet-400 has-[:checked]:bg-violet-50/70">
+                    <input
+                      type="radio"
+                      name="tipoAgregarAlumno"
+                      checked={tipoAgregarAlumno === 'prueba'}
+                      onChange={() => setTipoAgregarAlumno('prueba')}
+                      className="mt-1 border-gray-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span>
+                      <span className="text-sm font-medium text-gray-800 block">A prueba</span>
+                      <span className="text-xs text-gray-600">Misma inscripción fija; en el calendario se muestra en violeta.</span>
+                    </span>
+                  </label>
+                </fieldset>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 flex-shrink-0">
                 <button
@@ -3072,6 +3128,12 @@ const Calendario = () => {
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-200 text-amber-900">
                   <RefreshCw className="w-3 h-3" />
                   Recuperación
+                </span>
+              )}
+              {!showPopupAlumno.isRecuperacion && showPopupAlumno.aPrueba && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-200 text-violet-900">
+                  <Sparkles className="w-3 h-3" />
+                  A prueba
                 </span>
               )}
               {showPopupAlumno.liberadaSemana && !showPopupAlumno.isRecuperacion && (

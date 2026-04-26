@@ -245,6 +245,7 @@ CREATE TABLE IF NOT EXISTS inscripciones_turno (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_inscripciones_turno_turno ON inscripciones_turno(turno_id);
+ALTER TABLE inscripciones_turno ADD COLUMN IF NOT EXISTS a_prueba BOOLEAN NOT NULL DEFAULT false;
 
 -- Liberaciones semanales: un alumno libera solo esa semana una clase fija
 CREATE TABLE IF NOT EXISTS liberaciones_semana (

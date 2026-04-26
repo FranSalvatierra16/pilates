@@ -171,6 +171,8 @@ export interface InscripcionTurno {
   turnoId: string;
   alumnoId: string;
   semanaDesde: string; // YYYY-WW
+  /** Inscripción fija en período de prueba (se muestra en violeta en el calendario) */
+  aPrueba?: boolean;
   createdAt: string;
 }
 

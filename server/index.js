@@ -3805,7 +3805,8 @@ app.get('/api/inscripciones-turno', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
     const { rows } = await db.query(
-      `SELECT i.id, i.turno_id AS "turnoId", i.alumno_id AS "alumnoId", i.semana_desde AS "semanaDesde", i.created_at AS "createdAt"
+      `SELECT i.id, i.turno_id AS "turnoId", i.alumno_id AS "alumnoId", i.semana_desde AS "semanaDesde",
+              COALESCE(i.a_prueba, false) AS "aPrueba", i.created_at AS "createdAt"
        FROM inscripciones_turno i
        JOIN turnos t ON i.turno_id = t.id AND t.sucursal_id = $1`,
       [sid]
@@ -3822,16 +3823,17 @@ app.post('/api/inscripciones-turno', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
-    const { turnoId, alumnoId, semanaDesde } = req.body || {};
+    const { turnoId, alumnoId, semanaDesde, aPrueba } = req.body || {};
     if (!turnoId || !alumnoId || !semanaDesde) return res.status(400).json({ error: 'Faltan turnoId, alumnoId o semanaDesde' });
     const { rows: turnoRows } = await db.query('SELECT id FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, sid]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const esPrueba = aPrueba === true;
     const id = crypto.randomUUID();
     await db.query(
-      'INSERT INTO inscripciones_turno (id, turno_id, alumno_id, semana_desde, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      [id, turnoId, alumnoId, semanaDesde]
+      'INSERT INTO inscripciones_turno (id, turno_id, alumno_id, semana_desde, a_prueba, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+      [id, turnoId, alumnoId, semanaDesde, esPrueba]
     );
-    res.status(201).json({ id, turnoId, alumnoId, semanaDesde, createdAt: new Date().toISOString() });
+    res.status(201).json({ id, turnoId, alumnoId, semanaDesde, aPrueba: esPrueba, createdAt: new Date().toISOString() });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

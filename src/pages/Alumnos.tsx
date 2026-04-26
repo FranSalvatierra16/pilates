@@ -1150,29 +1150,6 @@ const Alumnos = () => {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-violet-200 bg-violet-50/40 p-3">
-                    <input
-                      type="checkbox"
-                      checked={formData.aPrueba}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setFormData({
-                          ...formData,
-                          aPrueba: checked,
-                          ...(checked ? { actividadId: '' } : {}),
-                        });
-                      }}
-                      className="mt-1 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                    />
-                    <span>
-                      <span className="text-sm font-medium text-gray-800 block">Alumna a prueba (sin actividad)</span>
-                      <span className="text-xs text-gray-600">
-                        No asigna plan todavía. En la lista y en el calendario se muestra en violeta; al sumarla a un turno como clase fija queda marcada a prueba automáticamente.
-                      </span>
-                    </span>
-                  </label>
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Actividad
                   </label>
@@ -1187,13 +1164,31 @@ const Alumnos = () => {
                     onKeyDown={(e) => focusNext(e, refDescripcion)}
                     className="input-field disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <option value="">Sin actividad (elegí arriba &quot;a prueba&quot; o una actividad)</option>
+                    <option value="">Elegir actividad</option>
                     {actividades.map((act) => (
                       <option key={act.id} value={act.id}>
                         {act.nombre} - {formatCurrency(act.precio)}
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="flex items-center gap-3 cursor-pointer rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+                    <input
+                      type="checkbox"
+                      checked={formData.aPrueba}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setFormData({
+                          ...formData,
+                          aPrueba: checked,
+                          ...(checked ? { actividadId: '' } : {}),
+                        });
+                      }}
+                      className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <span className="text-sm font-medium text-gray-800">Alumna a prueba (sin actividad)</span>
+                  </label>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">

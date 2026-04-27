@@ -75,6 +75,8 @@ const Alumnos = () => {
   const [alumnosFiltrados, setAlumnosFiltrados] = useState<Alumno[]>([]);
   const [filtroBusqueda, setFiltroBusqueda] = useState('');
   const [filtroVencimiento, setFiltroVencimiento] = useState<'todos' | 'mes-vencido' | 'vence-hoy'>('todos');
+  const [filtroActividad, setFiltroActividad] = useState('todas');
+  const [filtroPrueba, setFiltroPrueba] = useState<'todos' | 'aprueba' | 'noaprueba'>('todos');
   const [ordenarPorVencimientoCercano, setOrdenarPorVencimientoCercano] = useState(false);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [actividades, setActividades] = useState<Actividad[]>([]);
@@ -184,8 +186,19 @@ const Alumnos = () => {
         alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '' && isCuotaVenceHoy(alumno.fechaVencimientoCuota)
       );
     }
+
+    if (filtroActividad !== 'todas') {
+      filtrados = filtrados.filter((alumno) => (alumno.actividadId || '') === filtroActividad);
+    }
+
+    if (filtroPrueba === 'aprueba') {
+      filtrados = filtrados.filter((alumno) => alumno.aPrueba === true);
+    } else if (filtroPrueba === 'noaprueba') {
+      filtrados = filtrados.filter((alumno) => alumno.aPrueba !== true);
+    }
+
     setAlumnosFiltrados(filtrados);
-  }, [filtroBusqueda, filtroVencimiento, alumnos]);
+  }, [filtroBusqueda, filtroVencimiento, filtroActividad, filtroPrueba, alumnos]);
 
   // Ordenar por apellido y luego nombre (alfabético); si "por vencimiento cercano" está activo, filtrar y ordenar por fecha
   const alumnosAMostrar = useMemo(() => {
@@ -761,6 +774,54 @@ const Alumnos = () => {
             >
               Se vencen hoy
             </button>
+            <div className="w-full h-px bg-gray-200 my-1" />
+            <span className="text-sm text-gray-500 w-full sm:w-auto">Actividad:</span>
+            <select
+              value={filtroActividad}
+              onChange={(e) => setFiltroActividad(e.target.value)}
+              className="input-field py-1.5 min-h-0 h-auto text-sm"
+            >
+              <option value="todas">Todas</option>
+              {actividades.map((act) => (
+                <option key={act.id} value={act.id}>
+                  {act.nombre}
+                </option>
+              ))}
+            </select>
+            <span className="text-sm text-gray-500">Prueba:</span>
+            <button
+              type="button"
+              onClick={() => setFiltroPrueba('todos')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroPrueba === 'todos'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroPrueba('aprueba')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroPrueba === 'aprueba'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              A prueba
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroPrueba('noaprueba')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroPrueba === 'noaprueba'
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Sin prueba
+            </button>
             <button
               type="button"
               onClick={() => setOrdenarPorVencimientoCercano((v) => !v)}
@@ -786,7 +847,7 @@ const Alumnos = () => {
               {mostrarInactivos ? 'Ocultar inactivos' : 'Ver inactivos'}
             </button>
           </div>
-          {(filtroBusqueda || filtroVencimiento !== 'todos' || ordenarPorVencimientoCercano) && (
+          {(filtroBusqueda || filtroVencimiento !== 'todos' || filtroActividad !== 'todas' || filtroPrueba !== 'todos' || ordenarPorVencimientoCercano) && (
             <p className="text-sm text-gray-500 mt-2">
               Mostrando {alumnosAMostrar.length} de {alumnos.length} alumnos
               {ordenarPorVencimientoCercano && alumnosAMostrar.length < alumnosFiltrados.length && ' (sin vencidos)'}
@@ -798,10 +859,10 @@ const Alumnos = () => {
       {alumnosAMostrar.length === 0 && alumnos.length > 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500 mb-4">
-            No hay alumnos que coincidan con el filtro{filtroVencimiento !== 'todos' ? ' de vencimiento' : ''}.
+            No hay alumnos que coincidan con los filtros aplicados.
           </p>
           <button
-            onClick={() => { setFiltroBusqueda(''); setFiltroVencimiento('todos'); setOrdenarPorVencimientoCercano(false); }}
+            onClick={() => { setFiltroBusqueda(''); setFiltroVencimiento('todos'); setFiltroActividad('todas'); setFiltroPrueba('todos'); setOrdenarPorVencimientoCercano(false); }}
             className="btn-secondary"
           >
             Ver todos

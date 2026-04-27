@@ -25,6 +25,15 @@ type BloqueGuia = {
   cta: string;
 };
 
+const entradaSalidaGuia = {
+  pitch:
+    'En recepción: DNI, estado de cuota y registro de ingreso en segundos — con asistencia del día cuando corresponde.',
+  bullets: [
+    'Ideal para mostrar en tablet o PC en la entrada.',
+    'Menos filas y más control sin depender solo del papel.',
+  ],
+} as const;
+
 const bloques: BloqueGuia[] = [
   {
     icon: Calendar,
@@ -73,18 +82,6 @@ const bloques: BloqueGuia[] = [
     ],
     to: '/actividades',
     cta: 'Actividades',
-  },
-  {
-    icon: DoorOpen,
-    iconBg: 'bg-sky-500',
-    titulo: 'Control de acceso',
-    pitch: 'En recepción: DNI, estado de cuota y registro de ingreso en segundos — con asistencia del día cuando corresponde.',
-    bullets: [
-      'Ideal para mostrar en tablet o PC en la entrada.',
-      'Menos filas y más control sin depender solo del papel.',
-    ],
-    to: '/acceso',
-    cta: 'Abrir acceso',
   },
   {
     icon: CreditCard,
@@ -176,6 +173,31 @@ export default function DashboardGuiaUso() {
               <strong className="text-white block mb-1">Tip</strong>
               Desplegá cada bloque para ver beneficios concretos. Los botones te llevan directo a la pantalla.
             </div>
+          </div>
+        </div>
+
+        <div className="bg-white border-b border-gray-200 px-4 py-5 sm:px-8 sm:py-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-md">
+                <DoorOpen className="w-5 h-5" aria-hidden />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-gray-900 sm:text-lg">Entrada y salida</h3>
+                <p className="mt-1 text-sm leading-snug text-gray-600">{entradaSalidaGuia.pitch}</p>
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-gray-700 marker:text-primary-500">
+                  {entradaSalidaGuia.bullets.map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <Link
+              to="/acceso"
+              className="inline-flex shrink-0 items-center justify-center self-start rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-sky-900/15 transition-colors hover:bg-sky-700 min-h-[44px] sm:self-center"
+            >
+              Abrir entrada y salida
+            </Link>
           </div>
         </div>
 

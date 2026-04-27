@@ -150,18 +150,16 @@ const Layout = ({ children }: LayoutProps) => {
   const navItems = useMemo(() => {
     const base: Array<{ path: string; label: string; icon: typeof LayoutDashboard }> = [
       { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/acceso', label: 'Entrada y salida', icon: DoorOpen },
       { path: '/calendario', label: 'Calendario', icon: Calendar },
       { path: '/alumnos', label: 'Alumnos', icon: Users },
       { path: '/profesores', label: 'Profesores', icon: GraduationCap },
       { path: '/actividades', label: 'Actividades', icon: Activity },
-    ];
-    base.push(
-      { path: '/acceso', label: 'Acceso', icon: DoorOpen },
       { path: '/pagos', label: 'Pagos', icon: CreditCard },
       { path: '/caja', label: 'Caja', icon: Wallet },
       { path: '/agenda', label: 'Agenda', icon: FileText },
-      { path: '/notificaciones', label: 'Notif.', icon: Bell }
-    );
+      { path: '/notificaciones', label: 'Notif.', icon: Bell },
+    ];
     return base;
   }, []);
 

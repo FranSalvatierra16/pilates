@@ -164,13 +164,6 @@ const Dashboard = () => {
               <p className="text-sm text-purple-700">Gestionar turnos y asignar alumnos a clases</p>
             </Link>
             <Link
-              to="/acceso"
-              className="block p-4 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
-            >
-              <h3 className="font-semibold text-primary-900">Control de Acceso</h3>
-              <p className="text-sm text-primary-700">Verificar acceso de alumnos por DNI</p>
-            </Link>
-            <Link
               to="/pagos"
               className="block p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
             >
@@ -191,7 +184,7 @@ const Dashboard = () => {
           <h2 className="text-xl font-bold text-gray-900 mb-4">Bienvenido</h2>
           <p className="text-gray-600 mb-4">
             Sistema de gestión para {nombreSucursal}. Desde aquí podés gestionar alumnos,
-            actividades, controlar accesos, registrar pagos, ver el estado de la caja y los turnos.
+            actividades, entrada y salida en recepción, registrar pagos, ver el estado de la caja y los turnos.
           </p>
           <div className="bg-primary-50 p-4 rounded-lg space-y-2">
             <p className="text-sm text-primary-800">

@@ -164,7 +164,7 @@ const Acceso = () => {
     <div>
       <div className="page-title-wrap mb-6 sm:mb-8 mt-1">
         <span className="page-title-accent" aria-hidden />
-        <h1 className="page-title">Control de Acceso</h1>
+        <h1 className="page-title">Entrada y salida</h1>
       </div>
 
       <div className="max-w-2xl mx-auto">

@@ -223,9 +223,7 @@ const Alumnos = () => {
   }, [alumnosFiltrados, ordenarPorVencimientoCercano]);
 
   const alumnoTieneAlgunPagoRegistrado = (alumno: Alumno) =>
-    alumno.tienePagosHistorial === true ||
-    alumnoIdsConPago.has(alumno.id) ||
-    !!(alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '');
+    alumno.tienePagosHistorial === true || alumnoIdsConPago.has(alumno.id);
 
   const loadData = async () => {
     setLoading(true);
@@ -562,11 +560,10 @@ const Alumnos = () => {
     setShowModalHistorial(true);
     setHistorialAsistencias([]);
     try {
-      const todos = await storageHybrid.pagos.getAll();
-      const delAlumno = todos
-        .filter((p) => p.alumnoId === alumno.id)
-        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-      setHistorialPagos(delAlumno);
+      const delAlumno = await storageHybrid.pagos.getByAlumnoId(alumno.id);
+      setHistorialPagos(
+        [...delAlumno].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+      );
     } catch {
       const todos = storage.pagos.getAll();
       const delAlumno = todos

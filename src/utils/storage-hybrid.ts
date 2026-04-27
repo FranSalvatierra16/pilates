@@ -124,11 +124,7 @@ export const storageHybrid = {
     getByAlumnoId: async (alumnoId: string): Promise<Pago[]> => {
       const b = backend();
       if (b) return await b.pagos.getByAlumnoId(alumnoId);
-      let list = storage.pagos.getByAlumnoId(alumnoId);
-      if (finanzasLocal.finanzasLocalRestringido()) {
-        list = finanzasLocal.filtrarPagosHoyLocal(list);
-      }
-      return list;
+      return storage.pagos.getByAlumnoId(alumnoId);
     },
     delete: async (id: string): Promise<void> => {
       const b = backend();

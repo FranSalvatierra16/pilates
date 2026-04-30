@@ -595,9 +595,10 @@ const Calendario = () => {
           .map((hora) => getTurnoDelDia(diaSemana, hora))
           .filter((turno): turno is Turno => turno !== undefined)
           .map((turno) => {
-            const alumnasFijasVisibles = getAlumnosDelTurno(turno).filter((item) => !item.isRecuperacion && !item.liberadaSemana).length;
+            // Para compartir disponibilidad "estable", los liberados semanales se consideran ocupados.
+            const alumnasFijasBase = getAlumnosDelTurno(turno).filter((item) => !item.isRecuperacion).length;
             const cupo = turno.cupo ?? CUPO_DEFAULT;
-            const disponibles = Math.max(0, cupo - alumnasFijasVisibles);
+            const disponibles = Math.max(0, cupo - alumnasFijasBase);
             return {
               hora: turno.hora,
               titulo: turno.titulo?.trim() || 'Clase',
@@ -2922,7 +2923,7 @@ const Calendario = () => {
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Compartir turnos disponibles</h2>
                 <p className="text-sm text-gray-600 mt-1">Elegí días y horario para armar un mensaje listo para WhatsApp.</p>
-                <p className="text-xs text-amber-700 mt-1">Las recuperaciones no se cuentan como ocupación en este mensaje.</p>
+                <p className="text-xs text-amber-700 mt-1">Las recuperaciones no se cuentan; los liberados semanales se consideran ocupados.</p>
               </div>
               <button
                 type="button"

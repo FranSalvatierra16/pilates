@@ -6,7 +6,7 @@ import DashboardGuiaUso from '../components/DashboardGuiaUso';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
 import { isCuotaVencida } from '../utils/date';
-import type { FinanzasEstado } from '../types';
+import type { FinanzasEstado, CierreCaja } from '../types';
 
 const Dashboard = () => {
   const { sucursalNombre } = useAuth();
@@ -19,8 +19,9 @@ const Dashboard = () => {
     ingresosCaja: 0,
     /** Suma de gastos registrados */
     gastosCaja: 0,
-    /** ingresosCaja - gastosCaja (misma lógica que la página Caja → Saldo final) */
+    /** ingresosCaja − gastosCaja − retiros de cierres (igual que Caja → saldo tras retiros) */
     totalCajaNeto: 0,
+    totalRetiros: 0,
   });
   const [finBloqueado, setFinBloqueado] = useState(false);
 
@@ -34,11 +35,12 @@ const Dashboard = () => {
       }
       const bloqueado = !!(fin?.pinConfigurado && !fin.desbloqueado);
       setFinBloqueado(bloqueado);
-      const [alumnos, actividades, pagos, gastos] = await Promise.all([
+      const [alumnos, actividades, pagos, gastos, cierres] = await Promise.all([
         storageHybrid.alumnos.getAll(),
         storageHybrid.actividades.getAll(),
         storageHybrid.pagos.getAll(),
         storageHybrid.gastos.getAll(),
+        storageHybrid.cierresCaja.getAll().catch(() => [] as CierreCaja[]),
       ]);
 
       const cuotasVencidas = alumnos.filter(a => isCuotaVencida(a.fechaVencimientoCuota));
@@ -61,7 +63,8 @@ const Dashboard = () => {
 
       const ingresosCaja = totalEfectivo + totalTransferencia;
       const gastosCaja = gastosEfectivo + gastosTransferencia;
-      const totalCajaNeto = ingresosCaja - gastosCaja;
+      const totalRetiros = cierres.reduce((s, c) => s + (c.montoRetirado ?? 0), 0);
+      const totalCajaNeto = ingresosCaja - gastosCaja - totalRetiros;
 
       setStats({
         totalAlumnos: alumnos.length,
@@ -70,6 +73,7 @@ const Dashboard = () => {
         ingresosCaja: bloqueado ? 0 : ingresosCaja,
         gastosCaja: bloqueado ? 0 : gastosCaja,
         totalCajaNeto: bloqueado ? 0 : totalCajaNeto,
+        totalRetiros: bloqueado ? 0 : totalRetiros,
       });
     })();
   }, []);
@@ -108,7 +112,9 @@ const Dashboard = () => {
       value: finBloqueado ? '••••' : formatCurrency(stats.totalCajaNeto),
       subtitle: finBloqueado
         ? 'Desbloqueá en Caja o Pagos con el PIN para ver montos'
-        : `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)}`,
+        : stats.totalRetiros > 0
+          ? `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)} − Retiros ${formatCurrency(stats.totalRetiros)}`
+          : `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)}`,
       icon: DollarSign,
       color: 'bg-yellow-500',
       link: '/caja',

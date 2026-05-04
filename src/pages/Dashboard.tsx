@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Activity, DollarSign, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,68 +15,90 @@ const Dashboard = () => {
     totalAlumnos: 0,
     totalActividades: 0,
     cuotasVencidas: 0,
-    /** Suma de pagos (ingresos) */
-    ingresosCaja: 0,
-    /** Suma de gastos registrados */
-    gastosCaja: 0,
-    /** ingresosCaja − gastosCaja − retiros de cierres (igual que Caja → saldo tras retiros) */
+    /** ingresos − gastos − retiros de cierres (como en Caja) */
     totalCajaNeto: 0,
-    totalRetiros: 0,
   });
   const [finBloqueado, setFinBloqueado] = useState(false);
+  const [cargaIncompleta, setCargaIncompleta] = useState(false);
+  const [retryToken, setRetryToken] = useState(0);
+
+  const cargarDashboard = useCallback(async () => {
+    let fin: FinanzasEstado | null = null;
+    try {
+      fin = await storageHybrid.finanzas.getEstado();
+    } catch {
+      fin = null;
+    }
+    const bloqueado = !!(fin?.pinConfigurado && !fin.desbloqueado);
+    setFinBloqueado(bloqueado);
+
+    const settled = await Promise.allSettled([
+      storageHybrid.alumnos.getAll(),
+      storageHybrid.actividades.getAll(),
+      storageHybrid.pagos.getAll(),
+      storageHybrid.gastos.getAll(),
+      storageHybrid.cierresCaja.getAll(),
+    ]);
+
+    const alumnos = settled[0].status === 'fulfilled' ? settled[0].value : [];
+    const actividades = settled[1].status === 'fulfilled' ? settled[1].value : [];
+    const pagos = settled[2].status === 'fulfilled' ? settled[2].value : [];
+    const gastos = settled[3].status === 'fulfilled' ? settled[3].value : [];
+    const cierres = settled[4].status === 'fulfilled' ? settled[4].value : ([] as CierreCaja[]);
+
+    const falloAlguno = settled.some((r) => r.status === 'rejected');
+    if (falloAlguno) {
+      settled.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          const labels = ['alumnos', 'actividades', 'pagos', 'gastos', 'cierres'];
+          console.error(`[Dashboard] Falló la carga de ${labels[i]}:`, r.reason);
+        }
+      });
+    }
+    setCargaIncompleta(falloAlguno);
+
+    const cuotasVencidas = alumnos.filter((a) => isCuotaVencida(a.fechaVencimientoCuota));
+
+    const totalEfectivo = pagos
+      .filter((p) => p.metodoPago === 'efectivo')
+      .reduce((sum, p) => sum + p.monto, 0);
+
+    const totalTransferencia = pagos
+      .filter((p) => p.metodoPago === 'transferencia')
+      .reduce((sum, p) => sum + p.monto, 0);
+
+    const gastosEfectivo = gastos
+      .filter((g) => g.metodoPago === 'efectivo')
+      .reduce((sum, g) => sum + g.monto, 0);
+
+    const gastosTransferencia = gastos
+      .filter((g) => g.metodoPago === 'transferencia')
+      .reduce((sum, g) => sum + g.monto, 0);
+
+    const ingresosCaja = totalEfectivo + totalTransferencia;
+    const gastosCaja = gastosEfectivo + gastosTransferencia;
+    const totalRetiros = cierres.reduce((s, c) => s + (c.montoRetirado ?? 0), 0);
+    const totalCajaNeto = ingresosCaja - gastosCaja - totalRetiros;
+
+    setStats({
+      totalAlumnos: alumnos.length,
+      totalActividades: actividades.length,
+      cuotasVencidas: cuotasVencidas.length,
+      totalCajaNeto: bloqueado ? 0 : totalCajaNeto,
+    });
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      let fin: FinanzasEstado | null = null;
-      try {
-        fin = await storageHybrid.finanzas.getEstado();
-      } catch {
-        fin = null;
-      }
-      const bloqueado = !!(fin?.pinConfigurado && !fin.desbloqueado);
-      setFinBloqueado(bloqueado);
-      const [alumnos, actividades, pagos, gastos, cierres] = await Promise.all([
-        storageHybrid.alumnos.getAll(),
-        storageHybrid.actividades.getAll(),
-        storageHybrid.pagos.getAll(),
-        storageHybrid.gastos.getAll(),
-        storageHybrid.cierresCaja.getAll().catch(() => [] as CierreCaja[]),
-      ]);
-
-      const cuotasVencidas = alumnos.filter(a => isCuotaVencida(a.fechaVencimientoCuota));
-
-      const totalEfectivo = pagos
-        .filter(p => p.metodoPago === 'efectivo')
-        .reduce((sum, p) => sum + p.monto, 0);
-
-      const totalTransferencia = pagos
-        .filter(p => p.metodoPago === 'transferencia')
-        .reduce((sum, p) => sum + p.monto, 0);
-
-      const gastosEfectivo = gastos
-        .filter(g => g.metodoPago === 'efectivo')
-        .reduce((sum, g) => sum + g.monto, 0);
-
-      const gastosTransferencia = gastos
-        .filter(g => g.metodoPago === 'transferencia')
-        .reduce((sum, g) => sum + g.monto, 0);
-
-      const ingresosCaja = totalEfectivo + totalTransferencia;
-      const gastosCaja = gastosEfectivo + gastosTransferencia;
-      const totalRetiros = cierres.reduce((s, c) => s + (c.montoRetirado ?? 0), 0);
-      const totalCajaNeto = ingresosCaja - gastosCaja - totalRetiros;
-
-      setStats({
-        totalAlumnos: alumnos.length,
-        totalActividades: actividades.length,
-        cuotasVencidas: cuotasVencidas.length,
-        ingresosCaja: bloqueado ? 0 : ingresosCaja,
-        gastosCaja: bloqueado ? 0 : gastosCaja,
-        totalCajaNeto: bloqueado ? 0 : totalCajaNeto,
-        totalRetiros: bloqueado ? 0 : totalRetiros,
-      });
-    })();
-  }, []);
+    void cargarDashboard();
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void cargarDashboard();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [cargarDashboard, retryToken]);
 
   const cards: Array<{
     title: string;
@@ -110,11 +132,7 @@ const Dashboard = () => {
     {
       title: 'Saldo en caja',
       value: finBloqueado ? '••••' : formatCurrency(stats.totalCajaNeto),
-      subtitle: finBloqueado
-        ? 'Desbloqueá en Caja o Pagos con el PIN para ver montos'
-        : stats.totalRetiros > 0
-          ? `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)} − Retiros ${formatCurrency(stats.totalRetiros)}`
-          : `Ingresos ${formatCurrency(stats.ingresosCaja)} − Gastos ${formatCurrency(stats.gastosCaja)}`,
+      subtitle: finBloqueado ? 'Desbloqueá en Caja o Pagos con el PIN para ver montos' : undefined,
       icon: DollarSign,
       color: 'bg-yellow-500',
       link: '/caja',
@@ -128,6 +146,21 @@ const Dashboard = () => {
         <h1 className="page-title">Dashboard</h1>
       </div>
       
+      {cargaIncompleta && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 flex flex-wrap items-center justify-between gap-3">
+          <span>
+            No se pudieron cargar todos los datos (red o servidor). Los números pueden estar incompletos.
+          </span>
+          <button
+            type="button"
+            className="shrink-0 rounded-lg bg-amber-600 px-3 py-1.5 font-medium text-white hover:bg-amber-700"
+            onClick={() => setRetryToken((t) => t + 1)}
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {cards.map((card) => {
           const Icon = card.icon;

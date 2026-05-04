@@ -2539,6 +2539,31 @@ async function ocupacionEfectivaTurnoSemana(db, turnoId, semana, sucursalId, exc
   return { ocupacion: ocupados.size, cupo };
 }
 
+/**
+ * Misma lógica que ocupacionEfectivaTurnoSemana pero con datos ya cargados (evita N queries).
+ * Libera / recuperaciones por turno: arrays de filas { alumno_id }.
+ */
+function ocupacionEfectivaMemoria(turno, semana, insDesdePorTurnoAlumno, libRowsPorTurno, recRowsPorTurno, validAlumnoSet) {
+  const ids = turno.alumno_ids || [];
+  const tid = turno.id;
+  const libRows = libRowsPorTurno.get(tid) || [];
+  const libAlumnos = new Set(libRows.map((row) => String(row.alumno_id)));
+  const recRows = recRowsPorTurno.get(tid) || [];
+  const ocupados = new Set();
+  for (const raw of ids) {
+    const aid = String(raw);
+    if (!validAlumnoSet.has(aid)) continue;
+    const desde = insDesdePorTurnoAlumno.get(`${tid}:${aid}`);
+    if (desde != null && String(desde) > String(semana)) continue;
+    if (!libAlumnos.has(aid)) ocupados.add(aid);
+  }
+  for (const r of recRows) {
+    const aid = String(r.alumno_id);
+    if (validAlumnoSet.has(aid)) ocupados.add(aid);
+  }
+  return ocupados.size;
+}
+
 async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) {
   const actividadId = alumno.actividad_id || null;
   let clasesPorSemana = null;
@@ -2692,6 +2717,12 @@ app.get('/api/alumno-portal', async (req, res) => {
       [sid]
     );
     const insByTurno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r]));
+    const insDesdePorTurnoAlumno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r.semana_desde]));
+    const { rows: validAlumnoRows } = await db.query(
+      'SELECT id FROM alumnos WHERE sucursal_id = $1 AND activo IS DISTINCT FROM false',
+      [sid]
+    );
+    const validAlumnoSet = new Set(validAlumnoRows.map((row) => String(row.id)));
     const hor = horRows[0] || {};
     const manana = generarHorasDesdeHasta(hor.hora_inicio_manana || '07:00', hor.hora_fin_manana || '12:00');
     const tarde = generarHorasDesdeHasta(hor.hora_inicio_tarde || '16:00', hor.hora_fin_tarde || '21:00');
@@ -2715,29 +2746,42 @@ app.get('/api/alumno-portal', async (req, res) => {
     if (esRecuperar && semanaVista) {
       const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows);
       const recRows = ctx.recuperacionesSemana;
-      const libRows = ctx.liberacionesSemana;
-      const { rows: recCountRows } = await db.query(
-        'SELECT turno_id, COUNT(*) AS n FROM recuperaciones WHERE turno_id = ANY($1) AND semana = $2 GROUP BY turno_id',
-        [turnoRows.map((r) => r.id), semanaVista]
+      const turnoIdsAll = turnoRows.map((row) => row.id);
+      const { rows: libAll } = await db.query(
+        'SELECT turno_id, alumno_id FROM liberaciones_semana WHERE turno_id = ANY($1) AND semana = $2',
+        [turnoIdsAll, semanaVista]
       );
-      const { rows: libCountRows } = await db.query(
-        'SELECT turno_id, COUNT(*) AS n FROM liberaciones_semana WHERE turno_id = ANY($1) AND semana = $2 GROUP BY turno_id',
-        [turnoRows.map((r) => r.id), semanaVista]
+      const { rows: recAll } = await db.query(
+        'SELECT turno_id, alumno_id FROM recuperaciones WHERE turno_id = ANY($1) AND semana = $2',
+        [turnoIdsAll, semanaVista]
       );
+      const libRowsPorTurno = new Map();
+      for (const row of libAll) {
+        const tid = row.turno_id;
+        if (!libRowsPorTurno.has(tid)) libRowsPorTurno.set(tid, []);
+        libRowsPorTurno.get(tid).push(row);
+      }
+      const recRowsPorTurno = new Map();
+      for (const row of recAll) {
+        const tid = row.turno_id;
+        if (!recRowsPorTurno.has(tid)) recRowsPorTurno.set(tid, []);
+        recRowsPorTurno.get(tid).push(row);
+      }
       const recByTurno = new Map(recRows.map((r) => [r.turno_id, r]));
-      const recCountByTurno = new Map(recCountRows.map((r) => [r.turno_id, parseInt(r.n, 10)]));
       const libByTurno = new Map(ctx.liberacionesPendientesSemana.map((r) => [r.turno_id, r]));
-      const libCountByTurno = new Map(libCountRows.map((r) => [r.turno_id, parseInt(r.n, 10)]));
       turnos = turnoRows.map((r) => {
-        const alumnoIds = r.alumno_ids || [];
         const cupo = r.cupo != null ? Number(r.cupo) : 6;
         const rec = recByTurno.get(r.id);
         const liberacion = libByTurno.get(r.id);
-        const recCount = recCountByTurno.get(r.id) || 0;
-        const libCount = libCountByTurno.get(r.id) || 0;
         const esClaseFija = alumnoActivoEnTurnoSemana(r, alumno.id, semanaVista, insByTurno);
-        const fijosActivos = getAlumnosActivosTurnoSemana(r, semanaVista, insByTurno);
-        const inscriptos = Math.max(0, fijosActivos.length - libCount + recCount);
+        const inscriptos = ocupacionEfectivaMemoria(
+          r,
+          semanaVista,
+          insDesdePorTurnoAlumno,
+          libRowsPorTurno,
+          recRowsPorTurno,
+          validAlumnoSet
+        );
         return {
           id: r.id,
           diaSemana: r.dia_semana,
@@ -2769,13 +2813,14 @@ app.get('/api/alumno-portal', async (req, res) => {
       turnos = turnoRows.map((r) => {
         const cupo = r.cupo != null ? Number(r.cupo) : 6;
         const fijosActivos = getAlumnosActivosTurnoSemana(r, semanaActual, insByTurno);
+        const inscriptos = fijosActivos.filter((id) => validAlumnoSet.has(String(id))).length;
         return {
           id: r.id,
           diaSemana: r.dia_semana,
           hora: r.hora,
           titulo: r.titulo || '',
           cupo,
-          inscriptos: fijosActivos.length,
+          inscriptos,
           yaInscripto: alumnoActivoEnTurnoSemana(r, alumno.id, semanaActual, insByTurno),
         };
       });

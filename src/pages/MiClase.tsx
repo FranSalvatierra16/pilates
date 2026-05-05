@@ -661,6 +661,7 @@ const MiClase = () => {
     );
   }
 
+  const esRecuperar = data.modo === 'recuperar';
   const horarios = data.horarios || DEFAULT_HORARIOS;
   const iniManana = horaToNum(horarios.horaInicioManana);
   const finManana = horaToNum(horarios.horaFinManana);
@@ -678,9 +679,18 @@ const MiClase = () => {
     const hh = (t.hora || '').slice(0, 5);
     return (c.horasCerradas || []).includes(hh);
   };
+  const esSemanaActualVista = (data.semanaVista || getSemanaActual()) === getSemanaActual();
+  const turnoYaPaso = (t: TurnoPortal) => {
+    if (!esRecuperar || !esSemanaActualVista) return false;
+    const fecha = getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), t.diaSemana);
+    const hh = (t.hora || '').slice(0, 5) || '00:00';
+    const inicio = new Date(`${fecha}T${hh}:00-03:00`);
+    return Number.isFinite(inicio.getTime()) && inicio.getTime() <= Date.now();
+  };
 
   const turnosFiltrados = data.turnos.filter((t) => {
     if (filtroDia !== null && t.diaSemana !== filtroDia) return false;
+    if (turnoYaPaso(t)) return false;
     if (turnoCerradoPorCalendario(t)) return false;
     if ((horariosNoDisponibles?.[t.diaSemana] || []).includes(t.hora)) return false;
     const h = horaToNum(t.hora);
@@ -715,7 +725,6 @@ const MiClase = () => {
   const mLib = horarios.minutosAntesLiberarClase ?? 0;
   const mAnot = horarios.minutosAntesAnotarseClase ?? 0;
   const hayPoliticaAnticipacion = mLib > 0 || mAnot > 0;
-  const esRecuperar = data.modo === 'recuperar';
   const clasesFijasOrdenadas = [...(data.clasesFijas || [])].sort((a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora));
   const turnosById = new Map(data.turnos.map((turno) => [turno.id, turno] as const));
   const recuperacionesOrdenadas = esRecuperar

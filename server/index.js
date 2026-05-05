@@ -212,6 +212,40 @@ function instanteCierre(cierre) {
   return instanteDesdeFechaHora(cierre.fechaCierre, '12:00');
 }
 
+function normalizarDescripcionPago(descripcion) {
+  const raw = String(descripcion || '').trim();
+  if (!raw) return undefined;
+
+  const dashIdx = raw.indexOf(' - [');
+  if (dashIdx <= 0) return raw;
+
+  const prefix = raw.slice(0, dashIdx).trim();
+  const jsonPart = raw.slice(dashIdx + 3).trim();
+  if (!jsonPart.startsWith('[')) return raw;
+
+  try {
+    const items = JSON.parse(jsonPart);
+    if (!Array.isArray(items) || items.length === 0) return prefix || raw;
+    const detalle = items
+      .map((it) => {
+        if (!it || typeof it !== 'object') return null;
+        const nombreBase = String(it.nombre || '').trim();
+        const nombre = nombreBase
+          ? nombreBase
+              .replace(/alquiler\s*\/\s*locaci[oó]n/gi, 'Alquiler x día')
+              .replace(/\s+/g, ' ')
+          : 'Concepto';
+        const fecha = String(it.fecha || '').trim();
+        return fecha ? `${nombre} (${fecha})` : nombre;
+      })
+      .filter(Boolean);
+    if (!detalle.length) return prefix || raw;
+    return prefix ? `${prefix} - ${detalle.join(' | ')}` : detalle.join(' | ');
+  } catch {
+    return raw;
+  }
+}
+
 function mapPagoRow(r) {
   return {
     id: r.id,
@@ -221,7 +255,7 @@ function mapPagoRow(r) {
     fecha: formatDateOnly(r.fecha),
     hora: r.hora || undefined,
     createdAt: r.created_at?.toISOString?.() ?? r.created_at,
-    descripcion: r.descripcion ?? undefined,
+    descripcion: normalizarDescripcionPago(r.descripcion),
   };
 }
 
@@ -2696,10 +2730,19 @@ async function getPortalPlazosMinutos(db, sucursalId) {
 async function validarTiempoPortal(db, sucursalId, { accion, semana, turno }) {
   const turnoInicio = getFechaHoraTurnoSemana(semana, turno?.dia_semana, turno?.hora);
   if (!turnoInicio || Number.isNaN(turnoInicio.getTime())) return;
+  const msRestantes = turnoInicio.getTime() - Date.now();
+  if (msRestantes <= 0) {
+    const error = new Error(
+      accion === 'liberar'
+        ? 'Esa clase ya empezó o ya pasó, no se puede liberar.'
+        : 'Esa clase ya empezó o ya pasó, no te podés anotar.'
+    );
+    error.status = 400;
+    throw error;
+  }
   const { minutosAntesLiberarClase, minutosAntesAnotarseClase } = await getPortalPlazosMinutos(db, sucursalId);
   const minutosLimite = accion === 'liberar' ? minutosAntesLiberarClase : minutosAntesAnotarseClase;
   if (!minutosLimite || minutosLimite <= 0) return;
-  const msRestantes = turnoInicio.getTime() - Date.now();
   if (msRestantes < minutosLimite * 60 * 1000) {
     const suf = minutosLimite === 1 ? 'minuto' : 'minutos';
     const error =

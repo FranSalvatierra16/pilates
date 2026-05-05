@@ -1919,12 +1919,12 @@ const Calendario = () => {
             const fechaDiaMovil = getFechaFromSemanaYDia(semanaVista, diaIndex);
             return (
             <div key={diaIndex} className="card">
-              <div className="flex items-start justify-between gap-2 border-b border-primary-200 pb-2 mb-4">
+              <div className="relative border-b border-primary-200 pb-2 mb-4 pr-11">
                 <h2 className="text-lg font-bold text-primary-700">
                   {DIAS_SEMANA[diaIndex]} <span className="text-sm font-normal text-gray-500">{formatDate(fechaDiaMovil)}</span>
                 </h2>
                 {useApi() && (
-                  <div className="relative shrink-0" data-cierre-menu-root="1" data-cierre-fecha={fechaDiaMovil}>
+                  <div className="absolute top-0 right-0 z-20" data-cierre-menu-root="1" data-cierre-fecha={fechaDiaMovil}>
                     <button
                       type="button"
                       disabled={guardandoCierreCal}
@@ -2163,10 +2163,16 @@ const Calendario = () => {
                       key={diaIndex}
                       className="p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700 min-w-[72px] relative"
                     >
-                      <div className="text-xs sm:text-sm uppercase">{DIAS_SEMANA[diaIndex]}</div>
-                      <div className="text-[10px] text-gray-500 font-normal mt-0.5">{formatDate(fechaCol)}</div>
+                      <div className="px-1 pr-7 sm:pr-8">
+                        <div className="text-xs sm:text-sm uppercase">{DIAS_SEMANA[diaIndex]}</div>
+                        <div className="text-[10px] text-gray-500 font-normal mt-0.5">{formatDate(fechaCol)}</div>
+                      </div>
                       {useApi() && (
-                        <div className="mt-0.5 flex justify-center" data-cierre-menu-root="1" data-cierre-fecha={fechaCol}>
+                        <div
+                          className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 z-20"
+                          data-cierre-menu-root="1"
+                          data-cierre-fecha={fechaCol}
+                        >
                           <button
                             type="button"
                             disabled={guardandoCierreCal}
@@ -2178,7 +2184,7 @@ const Calendario = () => {
                             <MoreVertical className="w-4 h-4" />
                           </button>
                           {cierreMenuFecha === fechaCol && (
-                            <div className="absolute left-1/2 top-full z-40 mt-0 w-[min(220px,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-gray-200 bg-white py-1 text-left text-xs font-normal shadow-lg sm:text-sm">
+                            <div className="absolute right-0 top-full z-40 mt-0.5 w-[min(220px,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white py-1 text-left text-xs font-normal shadow-lg sm:text-sm">
                               <button
                                 type="button"
                                 className="block w-full px-3 py-2 text-left hover:bg-gray-50"

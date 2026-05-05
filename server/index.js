@@ -2688,9 +2688,13 @@ async function validarTiempoPortal(db, sucursalId, { accion, semana, turno }) {
   const turnoInicio = getFechaHoraTurnoSemana(semana, turno?.dia_semana, turno?.hora);
   if (!turnoInicio || Number.isNaN(turnoInicio.getTime())) return;
   const limits = await getPortalTimeLimits(db, sucursalId);
-  const horasLimite = accion === 'liberar'
-    ? limits.horasAntesLiberarClase
-    : limits.horasAntesAnotarseClase;
+  /** Si «anotarse» es 0, se usa el mismo tope que «liberar» (un solo valor en configuración aplica a ambos). */
+  const horasLimite =
+    accion === 'liberar'
+      ? limits.horasAntesLiberarClase
+      : limits.horasAntesAnotarseClase > 0
+        ? limits.horasAntesAnotarseClase
+        : limits.horasAntesLiberarClase;
   if (!horasLimite || horasLimite <= 0) return;
   const msRestantes = turnoInicio.getTime() - Date.now();
   if (msRestantes < horasLimite * 60 * 60 * 1000) {
@@ -2961,7 +2965,8 @@ app.get('/api/alumno-portal', async (req, res) => {
     );
     const { rows: horRows } = await db.query(
       `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
-              horarios_no_disponibles_por_dia
+              horarios_no_disponibles_por_dia,
+              horas_antes_anotarse_clase, horas_antes_liberar_clase
          FROM sucursales
         WHERE id = $1`,
       [sid]
@@ -2974,6 +2979,9 @@ app.get('/api/alumno-portal', async (req, res) => {
     );
     const validAlumnoSet = new Set(validAlumnoRows.map((row) => String(row.id)));
     const hor = horRows[0] || {};
+    const horasAntesLiberarClase = Math.max(0, Number(hor.horas_antes_liberar_clase ?? 0));
+    const horasAntesAnotarseClase = Math.max(0, Number(hor.horas_antes_anotarse_clase ?? 0));
+    const horasAntesAnotarseEfectivas = horasAntesAnotarseClase > 0 ? horasAntesAnotarseClase : horasAntesLiberarClase;
     const manana = generarHorasDesdeHasta(hor.hora_inicio_manana || '07:00', hor.hora_fin_manana || '12:00');
     const tarde = generarHorasDesdeHasta(hor.hora_inicio_tarde || '16:00', hor.hora_fin_tarde || '21:00');
     const horasValidas = [...manana, ...tarde];
@@ -3115,6 +3123,9 @@ app.get('/api/alumno-portal', async (req, res) => {
         horaInicioTarde: hor.hora_inicio_tarde || '16:00',
         horaFinTarde: hor.hora_fin_tarde || '21:00',
         horariosNoDisponiblesPorDia: normalizarHorariosNoDisponiblesPorDia(hor.horarios_no_disponibles_por_dia, horasValidas),
+        horasAntesLiberarClase,
+        horasAntesAnotarseClase,
+        horasAntesAnotarseEfectivas,
       },
       cierresPorFecha,
     };

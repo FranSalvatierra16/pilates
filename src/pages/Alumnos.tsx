@@ -702,7 +702,12 @@ const Alumnos = () => {
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Configuración de links del portal</h2>
               <p className="text-sm text-gray-600 mt-1">
-                Liberar clase: {configPortal.horasAntesLiberarClase} h antes. Anotarse: {configPortal.horasAntesAnotarseClase} h antes.
+                Liberar: {configPortal.horasAntesLiberarClase} h antes del turno. Anotarse o recuperar:{' '}
+                {configPortal.horasAntesAnotarseClase > 0
+                  ? `${configPortal.horasAntesAnotarseClase} h antes.`
+                  : configPortal.horasAntesLiberarClase > 0
+                    ? `${configPortal.horasAntesLiberarClase} h antes (mismo valor que liberar si «anotarse» está en 0).`
+                    : 'sin tope.'}
               </p>
             </div>
             <button
@@ -1320,7 +1325,7 @@ const Alumnos = () => {
             </div>
             <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <p className="text-sm text-gray-600">
-                Elegí cuántas horas antes del turno se puede liberar una clase o anotarse desde los links generales.
+                Elegí cuántas horas antes del turno aplican desde los links (Mi clase). Podés usar distinto para liberar y para anotarse o recuperar. Si dejás «anotarse» en 0, se usa el mismo plazo que para liberar.
               </p>
 
               <div>
@@ -1339,7 +1344,7 @@ const Alumnos = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Horas mínimas para anotarse en una clase
+                  Horas mínimas para anotarse o recuperar (0 = mismo plazo que liberar)
                 </label>
                 <input
                   type="number"
@@ -1349,6 +1354,9 @@ const Alumnos = () => {
                   onChange={(e) => setConfigPortalForm((prev) => ({ ...prev, horasAntesAnotarseClase: e.target.value }))}
                   className="input-field"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Con 0 en este campo, anotarse y recuperar usan las horas de «liberar» arriba.
+                </p>
               </div>
 
               {configPortalError && (

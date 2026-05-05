@@ -33,6 +33,12 @@ type HorariosPortal = {
   horaInicioTarde: string;
   horaFinTarde: string;
   horariosNoDisponiblesPorDia?: Record<number, string[]>;
+  /** Horas antes del turno para liberar (0 = sin tope) */
+  horasAntesLiberarClase?: number;
+  /** Valor configurado para anotarse; si es 0, en el servidor vale lo mismo que liberar */
+  horasAntesAnotarseClase?: number;
+  /** Plazo que aplica al anotarse / recuperar (ya con fallback) */
+  horasAntesAnotarseEfectivas?: number;
 };
 
 type PortalData = {
@@ -700,6 +706,10 @@ const MiClase = () => {
   const nombreCompleto = [data.alumno.apellido, data.alumno.nombre].filter(Boolean).join(', ') || 'Alumno';
   const labelManana = formatRangoHorario(horarios.horaInicioManana, horarios.horaFinManana);
   const labelTarde = formatRangoHorario(horarios.horaInicioTarde, horarios.horaFinTarde);
+  const hLib = horarios.horasAntesLiberarClase ?? 0;
+  const hAnotCfg = horarios.horasAntesAnotarseClase ?? 0;
+  const hAnotEf = horarios.horasAntesAnotarseEfectivas ?? (hAnotCfg > 0 ? hAnotCfg : hLib);
+  const hayPoliticaAnticipacion = hLib > 0 || hAnotEf > 0;
   const esRecuperar = data.modo === 'recuperar';
   const clasesFijasOrdenadas = [...(data.clasesFijas || [])].sort((a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora));
   const turnosById = new Map(data.turnos.map((turno) => [turno.id, turno] as const));
@@ -937,6 +947,23 @@ const MiClase = () => {
                 <p className="text-xs text-gray-500 mt-1">
                   {esRecuperar ? 'Usá este formato para liberar una fija de la semana o sumarte a otra para recuperar.' : 'Filtrá por día u horario para encontrar rápido tu clase.'}
                 </p>
+                {hayPoliticaAnticipacion && (
+                  <p className="text-xs text-gray-600 mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 leading-snug">
+                    {hLib > 0 ? (
+                      <>Liberar cupo: hasta <strong>{hLib}</strong> h antes de cada turno.</>
+                    ) : (
+                      <>Liberar cupo: <strong>sin tope</strong> de anticipación.</>
+                    )}{' '}
+                    {hAnotEf > 0 ? (
+                      <>
+                        Anotarse o recuperar: hasta <strong>{hAnotEf}</strong> h antes
+                        {hAnotCfg === 0 && hLib > 0 ? ' (mismo plazo que liberar).' : '.'}
+                      </>
+                    ) : (
+                      <> Anotarse o recuperar: <strong>sin tope</strong> de anticipación.</>
+                    )}
+                  </p>
+                )}
               </div>
               <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
               <div className="flex flex-wrap gap-1.5 mb-3">

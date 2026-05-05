@@ -1527,7 +1527,8 @@ app.get('/api/sucursal/horarios', async (req, res) => {
     const { rows } = await db.query(
       `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
               horarios_no_disponibles_por_dia,
-              horas_antes_anotarse_clase, horas_antes_liberar_clase
+              horas_antes_anotarse_clase, horas_antes_liberar_clase,
+              minutos_antes_liberar_clase, minutos_antes_anotarse_clase
          FROM sucursales
         WHERE id = $1`,
       [sid]
@@ -1537,14 +1538,15 @@ app.get('/api/sucursal/horarios', async (req, res) => {
     const manana = generarHorasDesdeHasta(r.hora_inicio_manana || '07:00', r.hora_fin_manana || '12:00');
     const tarde = generarHorasDesdeHasta(r.hora_inicio_tarde || '16:00', r.hora_fin_tarde || '21:00');
     const horasValidas = [...manana, ...tarde];
+    const plazos = sucursalPlazosPortalMinutosDesdeRow(r);
     res.json({
       horaInicioManana: r.hora_inicio_manana || '07:00',
       horaFinManana: r.hora_fin_manana || '12:00',
       horaInicioTarde: r.hora_inicio_tarde || '16:00',
       horaFinTarde: r.hora_fin_tarde || '21:00',
       horariosNoDisponiblesPorDia: normalizarHorariosNoDisponiblesPorDia(r.horarios_no_disponibles_por_dia, horasValidas),
-      horasAntesAnotarseClase: Math.max(0, Number(r.horas_antes_anotarse_clase ?? 0)),
-      horasAntesLiberarClase: Math.max(0, Number(r.horas_antes_liberar_clase ?? 0)),
+      minutosAntesLiberarClase: plazos.minutosAntesLiberarClase,
+      minutosAntesAnotarseClase: plazos.minutosAntesAnotarseClase,
       manana,
       tarde,
     });
@@ -1575,13 +1577,13 @@ app.patch('/api/sucursal/horarios', async (req, res) => {
       updates.push(`horarios_no_disponibles_por_dia = $${i++}`);
       values.push(JSON.stringify(normalizarHorariosNoDisponiblesPorDia(b.horariosNoDisponiblesPorDia, horasValidas)));
     }
-    if (b.horasAntesAnotarseClase !== undefined) {
-      updates.push(`horas_antes_anotarse_clase = $${i++}`);
-      values.push(Math.max(0, parseInt(b.horasAntesAnotarseClase, 10) || 0));
+    if (b.minutosAntesAnotarseClase !== undefined) {
+      updates.push(`minutos_antes_anotarse_clase = $${i++}`);
+      values.push(Math.max(0, parseInt(b.minutosAntesAnotarseClase, 10) || 0));
     }
-    if (b.horasAntesLiberarClase !== undefined) {
-      updates.push(`horas_antes_liberar_clase = $${i++}`);
-      values.push(Math.max(0, parseInt(b.horasAntesLiberarClase, 10) || 0));
+    if (b.minutosAntesLiberarClase !== undefined) {
+      updates.push(`minutos_antes_liberar_clase = $${i++}`);
+      values.push(Math.max(0, parseInt(b.minutosAntesLiberarClase, 10) || 0));
     }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(sid);
@@ -2672,34 +2674,38 @@ function getFechaHoraTurnoSemana(semana, diaSemana, hora) {
   return new Date(`${fecha}T${normalizarHora(hora)}:00-03:00`);
 }
 
-async function getPortalTimeLimits(db, sucursalId) {
+/** Plazos del portal en minutos. Si minutos_* es NULL (DB vieja), se deriva de horas_* × 60. */
+function sucursalPlazosPortalMinutosDesdeRow(row) {
+  const legLib = Math.max(0, Number(row?.horas_antes_liberar_clase ?? 0)) * 60;
+  const legAnot = Math.max(0, Number(row?.horas_antes_anotarse_clase ?? 0)) * 60;
+  const mLib = row?.minutos_antes_liberar_clase != null ? Math.max(0, Number(row.minutos_antes_liberar_clase)) : legLib;
+  const mAnot = row?.minutos_antes_anotarse_clase != null ? Math.max(0, Number(row.minutos_antes_anotarse_clase)) : legAnot;
+  return { minutosAntesLiberarClase: mLib, minutosAntesAnotarseClase: mAnot };
+}
+
+async function getPortalPlazosMinutos(db, sucursalId) {
   const { rows } = await db.query(
-    'SELECT horas_antes_anotarse_clase, horas_antes_liberar_clase FROM sucursales WHERE id = $1',
+    `SELECT horas_antes_anotarse_clase, horas_antes_liberar_clase,
+            minutos_antes_liberar_clase, minutos_antes_anotarse_clase
+       FROM sucursales WHERE id = $1`,
     [sucursalId]
   );
-  const row = rows[0] || {};
-  return {
-    horasAntesAnotarseClase: Math.max(0, Number(row.horas_antes_anotarse_clase ?? 0)),
-    horasAntesLiberarClase: Math.max(0, Number(row.horas_antes_liberar_clase ?? 0)),
-  };
+  return sucursalPlazosPortalMinutosDesdeRow(rows[0] || {});
 }
 
 async function validarTiempoPortal(db, sucursalId, { accion, semana, turno }) {
   const turnoInicio = getFechaHoraTurnoSemana(semana, turno?.dia_semana, turno?.hora);
   if (!turnoInicio || Number.isNaN(turnoInicio.getTime())) return;
-  const limits = await getPortalTimeLimits(db, sucursalId);
-  /** Si «anotarse» es 0, se usa el mismo tope que «liberar» (un solo valor en configuración aplica a ambos). */
-  const horasLimite =
-    accion === 'liberar'
-      ? limits.horasAntesLiberarClase
-      : limits.horasAntesAnotarseClase > 0
-        ? limits.horasAntesAnotarseClase
-        : limits.horasAntesLiberarClase;
-  if (!horasLimite || horasLimite <= 0) return;
+  const { minutosAntesLiberarClase, minutosAntesAnotarseClase } = await getPortalPlazosMinutos(db, sucursalId);
+  const minutosLimite = accion === 'liberar' ? minutosAntesLiberarClase : minutosAntesAnotarseClase;
+  if (!minutosLimite || minutosLimite <= 0) return;
   const msRestantes = turnoInicio.getTime() - Date.now();
-  if (msRestantes < horasLimite * 60 * 60 * 1000) {
-    const verbo = accion === 'liberar' ? 'liberar' : 'anotarte';
-    const error = new Error(`Ya no se puede ${verbo} con menos de ${horasLimite} hora${horasLimite === 1 ? '' : 's'} de anticipación.`);
+  if (msRestantes < minutosLimite * 60 * 1000) {
+    const suf = minutosLimite === 1 ? 'minuto' : 'minutos';
+    const error =
+      accion === 'liberar'
+        ? new Error(`Ya no se puede liberar con menos de ${minutosLimite} ${suf} de anticipación.`)
+        : new Error(`Ya no se puede anotarse con menos de ${minutosLimite} ${suf} de anticipación.`);
     error.status = 400;
     throw error;
   }
@@ -2966,7 +2972,8 @@ app.get('/api/alumno-portal', async (req, res) => {
     const { rows: horRows } = await db.query(
       `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
               horarios_no_disponibles_por_dia,
-              horas_antes_anotarse_clase, horas_antes_liberar_clase
+              horas_antes_anotarse_clase, horas_antes_liberar_clase,
+              minutos_antes_liberar_clase, minutos_antes_anotarse_clase
          FROM sucursales
         WHERE id = $1`,
       [sid]
@@ -2979,9 +2986,7 @@ app.get('/api/alumno-portal', async (req, res) => {
     );
     const validAlumnoSet = new Set(validAlumnoRows.map((row) => String(row.id)));
     const hor = horRows[0] || {};
-    const horasAntesLiberarClase = Math.max(0, Number(hor.horas_antes_liberar_clase ?? 0));
-    const horasAntesAnotarseClase = Math.max(0, Number(hor.horas_antes_anotarse_clase ?? 0));
-    const horasAntesAnotarseEfectivas = horasAntesAnotarseClase > 0 ? horasAntesAnotarseClase : horasAntesLiberarClase;
+    const plazosPortal = sucursalPlazosPortalMinutosDesdeRow(hor);
     const manana = generarHorasDesdeHasta(hor.hora_inicio_manana || '07:00', hor.hora_fin_manana || '12:00');
     const tarde = generarHorasDesdeHasta(hor.hora_inicio_tarde || '16:00', hor.hora_fin_tarde || '21:00');
     const horasValidas = [...manana, ...tarde];
@@ -3123,9 +3128,8 @@ app.get('/api/alumno-portal', async (req, res) => {
         horaInicioTarde: hor.hora_inicio_tarde || '16:00',
         horaFinTarde: hor.hora_fin_tarde || '21:00',
         horariosNoDisponiblesPorDia: normalizarHorariosNoDisponiblesPorDia(hor.horarios_no_disponibles_por_dia, horasValidas),
-        horasAntesLiberarClase,
-        horasAntesAnotarseClase,
-        horasAntesAnotarseEfectivas,
+        minutosAntesLiberarClase: plazosPortal.minutosAntesLiberarClase,
+        minutosAntesAnotarseClase: plazosPortal.minutosAntesAnotarseClase,
       },
       cierresPorFecha,
     };
@@ -4346,13 +4350,16 @@ app.get('/api/admin/sucursales', async (req, res) => {
       `SELECT s.id, s.nombre_lugar, s.usuario, s.foto_perfil, s.pago_mensual, s.fecha_vencimiento_cuenta, s.activa,
         s.planificacion_habilitada,
         s.hora_inicio_manana, s.hora_fin_manana, s.hora_inicio_tarde, s.hora_fin_tarde,
-        s.horas_antes_anotarse_clase, s.horas_antes_liberar_clase, s.created_at,
+        s.horas_antes_anotarse_clase, s.horas_antes_liberar_clase,
+        s.minutos_antes_liberar_clase, s.minutos_antes_anotarse_clase, s.created_at,
         (SELECT COUNT(*) FROM alumnos a WHERE a.sucursal_id = s.id) AS cantidad_alumnos,
         (SELECT COUNT(*) FROM actividades ac WHERE ac.sucursal_id = s.id) AS cantidad_actividades,
         (SELECT COUNT(*) FROM profesores p WHERE p.sucursal_id = s.id) AS cantidad_profesores
        FROM sucursales s ORDER BY s.created_at DESC`
     );
-    res.json(rows.map((r) => ({
+    res.json(rows.map((r) => {
+      const pl = sucursalPlazosPortalMinutosDesdeRow(r);
+      return {
       id: r.id,
       nombreLugar: r.nombre_lugar,
       usuario: r.usuario,
@@ -4365,13 +4372,14 @@ app.get('/api/admin/sucursales', async (req, res) => {
       horaFinManana: r.hora_fin_manana || '12:00',
       horaInicioTarde: r.hora_inicio_tarde || '16:00',
       horaFinTarde: r.hora_fin_tarde || '21:00',
-      horasAntesAnotarseClase: Math.max(0, Number(r.horas_antes_anotarse_clase ?? 0)),
-      horasAntesLiberarClase: Math.max(0, Number(r.horas_antes_liberar_clase ?? 0)),
+      minutosAntesAnotarseClase: pl.minutosAntesAnotarseClase,
+      minutosAntesLiberarClase: pl.minutosAntesLiberarClase,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
       cantidadAlumnos: Number(r.cantidad_alumnos ?? 0),
       cantidadActividades: Number(r.cantidad_actividades ?? 0),
       cantidadProfesores: Number(r.cantidad_profesores ?? 0),
-    })));
+    };
+    }));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -4428,8 +4436,8 @@ app.patch('/api/admin/sucursales/:id', async (req, res) => {
     if (b.horaFinManana !== undefined) { updates.push(`hora_fin_manana = $${i++}`); values.push(b.horaFinManana || '12:00'); }
     if (b.horaInicioTarde !== undefined) { updates.push(`hora_inicio_tarde = $${i++}`); values.push(b.horaInicioTarde || '16:00'); }
     if (b.horaFinTarde !== undefined) { updates.push(`hora_fin_tarde = $${i++}`); values.push(b.horaFinTarde || '21:00'); }
-    if (b.horasAntesAnotarseClase !== undefined) { updates.push(`horas_antes_anotarse_clase = $${i++}`); values.push(Math.max(0, parseInt(b.horasAntesAnotarseClase, 10) || 0)); }
-    if (b.horasAntesLiberarClase !== undefined) { updates.push(`horas_antes_liberar_clase = $${i++}`); values.push(Math.max(0, parseInt(b.horasAntesLiberarClase, 10) || 0)); }
+    if (b.minutosAntesAnotarseClase !== undefined) { updates.push(`minutos_antes_anotarse_clase = $${i++}`); values.push(Math.max(0, parseInt(b.minutosAntesAnotarseClase, 10) || 0)); }
+    if (b.minutosAntesLiberarClase !== undefined) { updates.push(`minutos_antes_liberar_clase = $${i++}`); values.push(Math.max(0, parseInt(b.minutosAntesLiberarClase, 10) || 0)); }
     if (typeof b.planificacionHabilitada === 'boolean') { updates.push(`planificacion_habilitada = $${i++}`); values.push(b.planificacionHabilitada); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id);

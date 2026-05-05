@@ -21,6 +21,15 @@ function normalizePhoneForWhatsApp(telefono: string): string | null {
   return num.length >= 12 ? num : null;
 }
 
+function textoPlazoMinutos(n: number): string {
+  if (n <= 0) return 'sin tope';
+  if (n < 60) return `${n} min`;
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+}
+
 /** Arma mensaje de recordatorio por WhatsApp según estado de cuota. nombreLugar = sucursal/estudio (ej. Savia). */
 function getWhatsAppRecordatorio(alumno: Alumno, nombreLugar: string = ''): { url: string | null; tooltip: string } {
   const nombre = [alumno.nombre, alumno.apellido].filter(Boolean).join(' ') || 'Hola';
@@ -99,12 +108,12 @@ const Alumnos = () => {
   /** Al asignar actividad desde la lista (a prueba → plan fijo) */
   const [asignandoActividadAlumnoId, setAsignandoActividadAlumnoId] = useState<string | null>(null);
   const [configPortal, setConfigPortal] = useState({
-    horasAntesLiberarClase: 0,
-    horasAntesAnotarseClase: 0,
+    minutosAntesLiberarClase: 0,
+    minutosAntesAnotarseClase: 0,
   });
   const [configPortalForm, setConfigPortalForm] = useState({
-    horasAntesLiberarClase: '0',
-    horasAntesAnotarseClase: '0',
+    minutosAntesLiberarClase: '0',
+    minutosAntesAnotarseClase: '0',
   });
   const [configPortalSaving, setConfigPortalSaving] = useState(false);
   const [configPortalError, setConfigPortalError] = useState('');
@@ -262,22 +271,22 @@ const Alumnos = () => {
     try {
       const data = await storageApi.sucursal.getHorarios();
       const siguiente = {
-        horasAntesLiberarClase: Math.max(0, Number(data.horasAntesLiberarClase ?? 0)),
-        horasAntesAnotarseClase: Math.max(0, Number(data.horasAntesAnotarseClase ?? 0)),
+        minutosAntesLiberarClase: Math.max(0, Number(data.minutosAntesLiberarClase ?? 0)),
+        minutosAntesAnotarseClase: Math.max(0, Number(data.minutosAntesAnotarseClase ?? 0)),
       };
       setConfigPortal(siguiente);
       setConfigPortalForm({
-        horasAntesLiberarClase: String(siguiente.horasAntesLiberarClase),
-        horasAntesAnotarseClase: String(siguiente.horasAntesAnotarseClase),
+        minutosAntesLiberarClase: String(siguiente.minutosAntesLiberarClase),
+        minutosAntesAnotarseClase: String(siguiente.minutosAntesAnotarseClase),
       });
     } catch {
       setConfigPortal({
-        horasAntesLiberarClase: 0,
-        horasAntesAnotarseClase: 0,
+        minutosAntesLiberarClase: 0,
+        minutosAntesAnotarseClase: 0,
       });
       setConfigPortalForm({
-        horasAntesLiberarClase: '0',
-        horasAntesAnotarseClase: '0',
+        minutosAntesLiberarClase: '0',
+        minutosAntesAnotarseClase: '0',
       });
     }
   };
@@ -616,30 +625,30 @@ const Alumnos = () => {
   const handleOpenModalConfigPortal = () => {
     setConfigPortalError('');
     setConfigPortalForm({
-      horasAntesLiberarClase: String(configPortal.horasAntesLiberarClase),
-      horasAntesAnotarseClase: String(configPortal.horasAntesAnotarseClase),
+      minutosAntesLiberarClase: String(configPortal.minutosAntesLiberarClase),
+      minutosAntesAnotarseClase: String(configPortal.minutosAntesAnotarseClase),
     });
     setShowModalConfigPortal(true);
   };
 
   const handleGuardarConfigPortal = async () => {
-    const horasAntesLiberarClase = Math.max(0, parseInt(configPortalForm.horasAntesLiberarClase, 10) || 0);
-    const horasAntesAnotarseClase = Math.max(0, parseInt(configPortalForm.horasAntesAnotarseClase, 10) || 0);
+    const minutosAntesLiberarClase = Math.max(0, parseInt(configPortalForm.minutosAntesLiberarClase, 10) || 0);
+    const minutosAntesAnotarseClase = Math.max(0, parseInt(configPortalForm.minutosAntesAnotarseClase, 10) || 0);
     setConfigPortalSaving(true);
     setConfigPortalError('');
     try {
       await storageApi.sucursal.updateHorarios({
-        horasAntesLiberarClase,
-        horasAntesAnotarseClase,
+        minutosAntesLiberarClase,
+        minutosAntesAnotarseClase,
       });
       const siguiente = {
-        horasAntesLiberarClase,
-        horasAntesAnotarseClase,
+        minutosAntesLiberarClase,
+        minutosAntesAnotarseClase,
       };
       setConfigPortal(siguiente);
       setConfigPortalForm({
-        horasAntesLiberarClase: String(horasAntesLiberarClase),
-        horasAntesAnotarseClase: String(horasAntesAnotarseClase),
+        minutosAntesLiberarClase: String(minutosAntesLiberarClase),
+        minutosAntesAnotarseClase: String(minutosAntesAnotarseClase),
       });
       setShowModalConfigPortal(false);
     } catch (e) {
@@ -702,12 +711,8 @@ const Alumnos = () => {
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Configuración de links del portal</h2>
               <p className="text-sm text-gray-600 mt-1">
-                Liberar: {configPortal.horasAntesLiberarClase} h antes del turno. Anotarse o recuperar:{' '}
-                {configPortal.horasAntesAnotarseClase > 0
-                  ? `${configPortal.horasAntesAnotarseClase} h antes.`
-                  : configPortal.horasAntesLiberarClase > 0
-                    ? `${configPortal.horasAntesLiberarClase} h antes (mismo valor que liberar si «anotarse» está en 0).`
-                    : 'sin tope.'}
+                Liberar: {textoPlazoMinutos(configPortal.minutosAntesLiberarClase)} antes del turno. Anotarse o recuperar:{' '}
+                {textoPlazoMinutos(configPortal.minutosAntesAnotarseClase)} antes del turno (0 = sin tope; independiente de liberar).
               </p>
             </div>
             <button
@@ -1325,37 +1330,38 @@ const Alumnos = () => {
             </div>
             <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <p className="text-sm text-gray-600">
-                Elegí cuántas horas antes del turno aplican desde los links (Mi clase). Podés usar distinto para liberar y para anotarse o recuperar. Si dejás «anotarse» en 0, se usa el mismo plazo que para liberar.
+                Elegí cuántos <strong>minutos</strong> antes del turno aplican desde los links (Mi clase). Liberar y anotarse/recuperar son <strong>independientes</strong>: 0 en cualquiera de los dos significa <strong>sin tope</strong> para esa acción.
               </p>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Horas mínimas para liberar una clase
+                  Minutos mínimos antes del turno para liberar cupo
                 </label>
                 <input
                   type="number"
                   min="0"
                   step="1"
-                  value={configPortalForm.horasAntesLiberarClase}
-                  onChange={(e) => setConfigPortalForm((prev) => ({ ...prev, horasAntesLiberarClase: e.target.value }))}
+                  value={configPortalForm.minutosAntesLiberarClase}
+                  onChange={(e) => setConfigPortalForm((prev) => ({ ...prev, minutosAntesLiberarClase: e.target.value }))}
                   className="input-field"
                 />
+                <p className="text-xs text-gray-500 mt-1">0 = se puede liberar hasta el inicio del turno.</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Horas mínimas para anotarse o recuperar (0 = mismo plazo que liberar)
+                  Minutos mínimos antes del turno para anotarse o recuperar
                 </label>
                 <input
                   type="number"
                   min="0"
                   step="1"
-                  value={configPortalForm.horasAntesAnotarseClase}
-                  onChange={(e) => setConfigPortalForm((prev) => ({ ...prev, horasAntesAnotarseClase: e.target.value }))}
+                  value={configPortalForm.minutosAntesAnotarseClase}
+                  onChange={(e) => setConfigPortalForm((prev) => ({ ...prev, minutosAntesAnotarseClase: e.target.value }))}
                   className="input-field"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Con 0 en este campo, anotarse y recuperar usan las horas de «liberar» arriba.
+                  0 = sin tope para anotarse/recuperar (no copia el valor de liberar).
                 </p>
               </div>
 

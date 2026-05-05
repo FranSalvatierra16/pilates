@@ -23,6 +23,13 @@ ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS hora_fin_tarde TEXT DEFAULT '21:
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horarios_no_disponibles_por_dia JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horas_antes_anotarse_clase INTEGER DEFAULT 0;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS horas_antes_liberar_clase INTEGER DEFAULT 0;
+-- Plazos del portal (Mi clase) en minutos; las columnas horas_antes_* quedan como legado (valor en horas hasta migrar)
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS minutos_antes_liberar_clase INTEGER;
+ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS minutos_antes_anotarse_clase INTEGER;
+UPDATE sucursales SET
+  minutos_antes_liberar_clase = COALESCE(minutos_antes_liberar_clase, COALESCE(horas_antes_liberar_clase, 0) * 60),
+  minutos_antes_anotarse_clase = COALESCE(minutos_antes_anotarse_clase, COALESCE(horas_antes_anotarse_clase, 0) * 60)
+WHERE minutos_antes_liberar_clase IS NULL OR minutos_antes_anotarse_clase IS NULL;
 -- PIN opcional para desbloquear Caja / ver totales completos en Pagos (hash bcrypt)
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS finanzas_pin_hash TEXT;
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS finanzas_auto_bloqueo_minutos INTEGER DEFAULT 15;

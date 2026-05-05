@@ -239,8 +239,8 @@ export const storageApi = {
       horaInicioTarde?: string;
       horaFinTarde?: string;
       horariosNoDisponiblesPorDia?: Record<number, string[]>;
-      horasAntesAnotarseClase?: number;
-      horasAntesLiberarClase?: number;
+      minutosAntesAnotarseClase?: number;
+      minutosAntesLiberarClase?: number;
     }): Promise<void> =>
       request('/api/sucursal/horarios', { method: 'PATCH', body: JSON.stringify(data) }),
     getFeatures: (): Promise<{ planificacionHabilitada: boolean }> =>
@@ -358,8 +358,8 @@ export const storageApi = {
         horaFinManana?: string;
         horaInicioTarde?: string;
         horaFinTarde?: string;
-        horasAntesAnotarseClase?: number;
-        horasAntesLiberarClase?: number;
+        minutosAntesAnotarseClase?: number;
+        minutosAntesLiberarClase?: number;
         planificacionHabilitada?: boolean;
       }
     ): Promise<void> =>

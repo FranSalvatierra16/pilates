@@ -33,12 +33,9 @@ type HorariosPortal = {
   horaInicioTarde: string;
   horaFinTarde: string;
   horariosNoDisponiblesPorDia?: Record<number, string[]>;
-  /** Horas antes del turno para liberar (0 = sin tope) */
-  horasAntesLiberarClase?: number;
-  /** Valor configurado para anotarse; si es 0, en el servidor vale lo mismo que liberar */
-  horasAntesAnotarseClase?: number;
-  /** Plazo que aplica al anotarse / recuperar (ya con fallback) */
-  horasAntesAnotarseEfectivas?: number;
+  /** Minutos antes del turno (0 = sin tope) */
+  minutosAntesLiberarClase?: number;
+  minutosAntesAnotarseClase?: number;
 };
 
 type PortalData = {
@@ -88,6 +85,15 @@ const horaToNum = (hora: string): number => {
   const [h] = hora.split(':').map(Number);
   return h ?? 0;
 };
+
+function textoPlazoMinutos(n: number): string {
+  if (n <= 0) return 'sin tope';
+  if (n < 60) return `${n} min`;
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  if (m === 0) return `${h} h`;
+  return `${h} h ${m} min`;
+}
 
 /** Formatea "07:00"-"12:00" como "7–12h" para etiquetas */
 function formatRangoHorario(ini: string, fin: string): string {
@@ -706,10 +712,9 @@ const MiClase = () => {
   const nombreCompleto = [data.alumno.apellido, data.alumno.nombre].filter(Boolean).join(', ') || 'Alumno';
   const labelManana = formatRangoHorario(horarios.horaInicioManana, horarios.horaFinManana);
   const labelTarde = formatRangoHorario(horarios.horaInicioTarde, horarios.horaFinTarde);
-  const hLib = horarios.horasAntesLiberarClase ?? 0;
-  const hAnotCfg = horarios.horasAntesAnotarseClase ?? 0;
-  const hAnotEf = horarios.horasAntesAnotarseEfectivas ?? (hAnotCfg > 0 ? hAnotCfg : hLib);
-  const hayPoliticaAnticipacion = hLib > 0 || hAnotEf > 0;
+  const mLib = horarios.minutosAntesLiberarClase ?? 0;
+  const mAnot = horarios.minutosAntesAnotarseClase ?? 0;
+  const hayPoliticaAnticipacion = mLib > 0 || mAnot > 0;
   const esRecuperar = data.modo === 'recuperar';
   const clasesFijasOrdenadas = [...(data.clasesFijas || [])].sort((a, b) => a.diaSemana - b.diaSemana || horaToNum(a.hora) - horaToNum(b.hora));
   const turnosById = new Map(data.turnos.map((turno) => [turno.id, turno] as const));
@@ -949,19 +954,8 @@ const MiClase = () => {
                 </p>
                 {hayPoliticaAnticipacion && (
                   <p className="text-xs text-gray-600 mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 leading-snug">
-                    {hLib > 0 ? (
-                      <>Liberar cupo: hasta <strong>{hLib}</strong> h antes de cada turno.</>
-                    ) : (
-                      <>Liberar cupo: <strong>sin tope</strong> de anticipación.</>
-                    )}{' '}
-                    {hAnotEf > 0 ? (
-                      <>
-                        Anotarse o recuperar: hasta <strong>{hAnotEf}</strong> h antes
-                        {hAnotCfg === 0 && hLib > 0 ? ' (mismo plazo que liberar).' : '.'}
-                      </>
-                    ) : (
-                      <> Anotarse o recuperar: <strong>sin tope</strong> de anticipación.</>
-                    )}
+                    Liberar cupo: <strong>{textoPlazoMinutos(mLib)}</strong> antes de cada turno. Anotarse o recuperar:{' '}
+                    <strong>{textoPlazoMinutos(mAnot)}</strong> antes de cada turno.
                   </p>
                 )}
               </div>

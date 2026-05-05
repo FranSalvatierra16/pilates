@@ -220,6 +220,19 @@ export const storageApi = {
   },
   sucursal: {
     getHorarios: (): Promise<HorariosSucursal> => request<HorariosSucursal>('/api/sucursal/horarios'),
+    getCierresCalendarioRango: (desde: string, hasta: string): Promise<{ fecha: string; cerrarTodo: boolean; horasCerradas: string[] }[]> =>
+      request(
+        `/api/sucursal/cierres-calendario?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`
+      ),
+    putCierreCalendario: (body: {
+      fecha: string;
+      semana: string;
+      cerrarTodo: boolean;
+      horasCerradas: string[];
+    }): Promise<{ ok: boolean; creditosOtorgados?: number; turnosNuevosCerrados?: number }> =>
+      request('/api/sucursal/cierres-calendario', { method: 'PUT', body: JSON.stringify(body) }),
+    deleteCierreCalendario: (fecha: string): Promise<{ ok: boolean }> =>
+      request(`/api/sucursal/cierres-calendario/${encodeURIComponent(fecha)}`, { method: 'DELETE' }),
     updateHorarios: (data: {
       horaInicioManana?: string;
       horaFinManana?: string;

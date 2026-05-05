@@ -69,6 +69,8 @@ type PortalData = {
     clasesParaRecuperar: number;
     clasesDisponiblesSemana: number | null;
   };
+  /** Cierres excepcionales por fecha (feriado / horas cerradas) — misma semana que la vista del portal */
+  cierresPorFecha?: Record<string, { cerrarTodo: boolean; horasCerradas: string[] }>;
 };
 
 type SucursalOption = { id: string; nombre_lugar: string };
@@ -653,9 +655,21 @@ const MiClase = () => {
   const iniTarde = horaToNum(horarios.horaInicioTarde);
   const finTarde = horaToNum(horarios.horaFinTarde);
   const horariosNoDisponibles = horarios.horariosNoDisponiblesPorDia || DEFAULT_HORARIOS.horariosNoDisponiblesPorDia;
+  const semanaParaCierre = data.semanaVista || getSemanaActual();
+  const cierresPorFecha = data.cierresPorFecha || {};
+
+  const turnoCerradoPorCalendario = (t: TurnoPortal) => {
+    const fecha = getFechaFromSemanaYDia(semanaParaCierre, t.diaSemana);
+    const c = cierresPorFecha[fecha];
+    if (!c) return false;
+    if (c.cerrarTodo) return true;
+    const hh = (t.hora || '').slice(0, 5);
+    return (c.horasCerradas || []).includes(hh);
+  };
 
   const turnosFiltrados = data.turnos.filter((t) => {
     if (filtroDia !== null && t.diaSemana !== filtroDia) return false;
+    if (turnoCerradoPorCalendario(t)) return false;
     if ((horariosNoDisponibles?.[t.diaSemana] || []).includes(t.hora)) return false;
     const h = horaToNum(t.hora);
     if (filtroHorario === 'manana') return h >= iniManana && h <= finManana;

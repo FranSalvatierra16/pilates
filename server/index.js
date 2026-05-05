@@ -1437,6 +1437,87 @@ function normalizarHorariosNoDisponiblesPorDia(raw, horasValidas = null) {
   return out;
 }
 
+/** Fecha YYYY-MM-DD del lunes..sábado de la semana YYYY-WW (diaSemana 0=Lun .. 5=Sáb). */
+function getFechaFromSemanaYDiaServer(semana, diaSemana) {
+  const parts = String(semana || '').split('-');
+  const y = parseInt(parts[0], 10);
+  const w = parseInt(parts[1], 10);
+  if (!Number.isFinite(y) || !Number.isFinite(w) || w < 1) return null;
+  const dia = Math.min(6, Math.max(0, Number(diaSemana) || 0));
+  const jan1 = new Date(y, 0, 1);
+  const dayOfJan1 = jan1.getDay();
+  const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+  const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+  const d = new Date(mondayWeek1);
+  d.setDate(d.getDate() + (w - 1) * 7 + dia);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function diaSemanaDesdeFechaIsoLocal(fechaStr) {
+  if (!fechaStr || typeof fechaStr !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) return 0;
+  const [y, m, d] = fechaStr.split('-').map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  const day = dt.getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+function parseHorasCerradasRow(row) {
+  const h = row?.horas_cerradas;
+  if (Array.isArray(h)) {
+    return h.map((x) => String(x || '').slice(0, 5)).filter((x) => /^\d{2}:\d{2}$/.test(x));
+  }
+  if (h && typeof h === 'object') return [];
+  if (typeof h === 'string') {
+    try {
+      const p = JSON.parse(h);
+      return Array.isArray(p) ? p.map((x) => String(x || '').slice(0, 5)).filter((x) => /^\d{2}:\d{2}$/.test(x)) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function turnoIdsCerradosPorCierre(turnoRows, fechaStr, cerrarTodo, horasNorm) {
+  const set = new Set();
+  const dsTarget = diaSemanaDesdeFechaIsoLocal(fechaStr);
+  for (const t of turnoRows) {
+    if (Number(t.dia_semana) !== dsTarget) continue;
+    if (cerrarTodo) {
+      set.add(t.id);
+      continue;
+    }
+    const hh = String(t.hora || '').slice(0, 5);
+    if (horasNorm.includes(hh)) set.add(t.id);
+  }
+  return set;
+}
+
+async function assertTurnoNoCerradoExcepcional(db, sucursalId, semana, turno) {
+  const fecha = getFechaFromSemanaYDiaServer(semana, turno?.dia_semana);
+  if (!fecha) return;
+  const { rows } = await db.query(
+    'SELECT cerrar_todo, horas_cerradas FROM cierre_dia_calendario WHERE sucursal_id = $1 AND fecha = $2::date LIMIT 1',
+    [sucursalId, fecha]
+  );
+  if (rows.length === 0) return;
+  const r = rows[0];
+  const horas = parseHorasCerradasRow(r);
+  const ds = diaSemanaDesdeFechaIsoLocal(fecha);
+  if (Number(turno.dia_semana) !== ds) return;
+  if (r.cerrar_todo === true) {
+    const err = new Error('Ese día está cerrado en el calendario de la sede.');
+    err.status = 400;
+    throw err;
+  }
+  const hh = String(turno.hora || '').slice(0, 5);
+  if (horas.includes(hh)) {
+    const err = new Error('Ese horario está cerrado en el calendario de la sede.');
+    err.status = 400;
+    throw err;
+  }
+}
+
 app.get('/api/sucursal/horarios', async (req, res) => {
   try {
     const db = await getPool();
@@ -1505,6 +1586,175 @@ app.patch('/api/sucursal/horarios', async (req, res) => {
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(sid);
     await db.query(`UPDATE sucursales SET ${updates.join(', ')} WHERE id = $${i}`, values);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/sucursal/cierres-calendario', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const desde = parseFechaPlanifParam((req.query.desde || '').toString());
+    const hasta = parseFechaPlanifParam((req.query.hasta || '').toString());
+    if (!desde || !hasta) return res.status(400).json({ error: 'Parámetros desde y hasta requeridos (YYYY-MM-DD)' });
+    const { rows } = await db.query(
+      `SELECT fecha::text AS fecha, cerrar_todo, horas_cerradas
+         FROM cierre_dia_calendario
+        WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date
+        ORDER BY fecha ASC`,
+      [sid, desde, hasta]
+    );
+    res.json(
+      rows.map((r) => ({
+        fecha: String(r.fecha).slice(0, 10),
+        cerrarTodo: r.cerrar_todo === true,
+        horasCerradas: parseHorasCerradasRow(r),
+      }))
+    );
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.put('/api/sucursal/cierres-calendario', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const b = req.body || {};
+    const fecha = parseFechaPlanifParam((b.fecha || '').toString());
+    const semana = (b.semana || '').toString().trim();
+    if (!fecha) return res.status(400).json({ error: 'fecha inválida (YYYY-MM-DD)' });
+    if (!/^\d{4}-\d{1,2}$/.test(semana)) {
+      return res.status(400).json({ error: 'semana inválida (YYYY-WW)' });
+    }
+    const cerrarTodo = b.cerrarTodo === true;
+    const { rows: horSuc } = await db.query(
+      `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde
+         FROM sucursales WHERE id = $1`,
+      [sid]
+    );
+    if (horSuc.length === 0) return res.status(404).json({ error: 'Sucursal no encontrada' });
+    const hs = horSuc[0];
+    const manana = generarHorasDesdeHasta(hs.hora_inicio_manana || '07:00', hs.hora_fin_manana || '12:00');
+    const tarde = generarHorasDesdeHasta(hs.hora_inicio_tarde || '16:00', hs.hora_fin_tarde || '21:00');
+    const validSet = new Set([...manana, ...tarde]);
+    const horasRaw = Array.isArray(b.horasCerradas) ? b.horasCerradas : [];
+    const horasNorm = cerrarTodo
+      ? []
+      : Array.from(
+        new Set(
+          horasRaw
+            .map((h) => String(h || '').slice(0, 5))
+            .filter((h) => /^\d{2}:\d{2}$/.test(h) && validSet.has(h))
+        )
+      ).sort();
+    if (!cerrarTodo && horasNorm.length === 0) {
+      return res.status(400).json({ error: 'Elegí al menos un horario a cerrar, o usá cerrar día completo.' });
+    }
+    const fechaSemana = getFechaFromSemanaYDiaServer(semana, diaSemanaDesdeFechaIsoLocal(fecha));
+    if (fechaSemana !== fecha) {
+      return res.status(400).json({ error: 'La fecha no corresponde a la semana indicada.' });
+    }
+    const { rows: oldRows } = await db.query(
+      'SELECT cerrar_todo, horas_cerradas FROM cierre_dia_calendario WHERE sucursal_id = $1 AND fecha = $2::date LIMIT 1',
+      [sid, fecha]
+    );
+    const old = oldRows[0]
+      ? { cerrarTodo: oldRows[0].cerrar_todo === true, horas: parseHorasCerradasRow(oldRows[0]) }
+      : null;
+    const { rows: turnoRows } = await db.query(
+      'SELECT id, dia_semana, hora, alumno_ids FROM turnos WHERE sucursal_id = $1',
+      [sid]
+    );
+    const oldSet = old
+      ? turnoIdsCerradosPorCierre(turnoRows, fecha, old.cerrarTodo, old.horas)
+      : new Set();
+    const newSet = turnoIdsCerradosPorCierre(turnoRows, fecha, cerrarTodo, horasNorm);
+    const delta = [];
+    for (const id of newSet) {
+      if (!oldSet.has(id)) delta.push(id);
+    }
+    const creditMap = new Map();
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      const idRow = crypto.randomUUID();
+      await client.query(
+        `INSERT INTO cierre_dia_calendario (id, sucursal_id, fecha, cerrar_todo, horas_cerradas, updated_at)
+         VALUES ($1, $2, $3::date, $4, $5::jsonb, NOW())
+         ON CONFLICT (sucursal_id, fecha) DO UPDATE SET
+           cerrar_todo = EXCLUDED.cerrar_todo,
+           horas_cerradas = EXCLUDED.horas_cerradas,
+           updated_at = NOW()`,
+        [idRow, sid, fecha, cerrarTodo, JSON.stringify(horasNorm)]
+      );
+      for (const tid of delta) {
+        const t = turnoRows.find((r) => r.id === tid);
+        if (!t) continue;
+        const afectados = new Set();
+        const ids = t.alumno_ids || [];
+        for (const aid of ids) {
+          const { rows: ins } = await client.query(
+            'SELECT semana_desde FROM inscripciones_turno WHERE turno_id = $1 AND alumno_id = $2 LIMIT 1',
+            [tid, aid]
+          );
+          if (ins.length > 0 && ins[0].semana_desde > semana) continue;
+          const { rows: lib } = await client.query(
+            'SELECT 1 FROM liberaciones_semana WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3 LIMIT 1',
+            [tid, aid, semana]
+          );
+          if (lib.length > 0) continue;
+          afectados.add(String(aid));
+        }
+        const { rows: recs } = await client.query(
+          'SELECT alumno_id FROM recuperaciones WHERE turno_id = $1 AND semana = $2',
+          [tid, semana]
+        );
+        for (const r of recs) {
+          if (r.alumno_id) afectados.add(String(r.alumno_id));
+        }
+        for (const aid of afectados) {
+          creditMap.set(aid, (creditMap.get(aid) || 0) + 1);
+        }
+      }
+      for (const [aid, n] of creditMap) {
+        if (n <= 0) continue;
+        await client.query(
+          'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + $1 WHERE id = $2 AND sucursal_id = $3',
+          [n, aid, sid]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    res.json({ ok: true, creditosOtorgados: creditMap.size, turnosNuevosCerrados: delta.length });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete('/api/sucursal/cierres-calendario/:fecha', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    if (!sid) return res.status(403).json({ error: 'Acceso de sucursal requerido' });
+    const fecha = parseFechaPlanifParam((req.params.fecha || '').toString());
+    if (!fecha) return res.status(400).json({ error: 'fecha inválida' });
+    await db.query('DELETE FROM cierre_dia_calendario WHERE sucursal_id = $1 AND fecha = $2::date', [sid, fecha]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -2727,6 +2977,24 @@ app.get('/api/alumno-portal', async (req, res) => {
     const manana = generarHorasDesdeHasta(hor.hora_inicio_manana || '07:00', hor.hora_fin_manana || '12:00');
     const tarde = generarHorasDesdeHasta(hor.hora_inicio_tarde || '16:00', hor.hora_fin_tarde || '21:00');
     const horasValidas = [...manana, ...tarde];
+    const semanaCierres = esRecuperar && semanaVista ? semanaVista : getSemanaActual();
+    const desdeCi = getFechaFromSemanaYDiaServer(semanaCierres, 0);
+    const hastaCi = getFechaFromSemanaYDiaServer(semanaCierres, 5);
+    const cierresPorFecha = {};
+    if (desdeCi && hastaCi) {
+      const { rows: cierreRows } = await db.query(
+        `SELECT fecha::text AS fecha, cerrar_todo, horas_cerradas FROM cierre_dia_calendario
+         WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
+        [sid, desdeCi, hastaCi]
+      );
+      for (const cr of cierreRows) {
+        const fk = String(cr.fecha).slice(0, 10);
+        cierresPorFecha[fk] = {
+          cerrarTodo: cr.cerrar_todo === true,
+          horasCerradas: parseHorasCerradasRow(cr),
+        };
+      }
+    }
     const actividadNombre = alumno.actividad_id
       ? (await db.query('SELECT nombre FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1', [alumno.actividad_id, sid])).rows[0]?.nombre || ''
       : '';
@@ -2848,6 +3116,7 @@ app.get('/api/alumno-portal', async (req, res) => {
         horaFinTarde: hor.hora_fin_tarde || '21:00',
         horariosNoDisponiblesPorDia: normalizarHorariosNoDisponiblesPorDia(hor.horarios_no_disponibles_por_dia, horasValidas),
       },
+      cierresPorFecha,
     };
     res.json(payload);
   } catch (e) {
@@ -2925,6 +3194,7 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: turnoRows[0] });
+    await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semanaVista, turnoRows[0]);
     const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [alumno.sucursal_id]);
     const { rows: exist } = await db.query(
       'SELECT id FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3',
@@ -3254,6 +3524,7 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const t = turnoRows[0];
     await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaActual, turno: t });
+    await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semanaActual, t);
     const ids = t.alumno_ids || [];
     const cupo = t.cupo != null ? Number(t.cupo) : 6;
     if (ids.includes(alumno.id)) return res.json({ ok: true, message: 'Ya estabas inscripto' });

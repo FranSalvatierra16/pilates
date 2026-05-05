@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -245,6 +245,13 @@ const Calendario = () => {
   const [notaPlanifViewport, setNotaPlanifViewport] = useState<{ h: number; top: number } | null>(null);
   const notaPlanifTextareaRef = useRef<HTMLTextAreaElement>(null);
 
+  type CierreDiaCal = { cerrarTodo: boolean; horasCerradas: string[] };
+  const [cierresPorFecha, setCierresPorFecha] = useState<Record<string, CierreDiaCal>>({});
+  const [cierreMenuFecha, setCierreMenuFecha] = useState<string | null>(null);
+  const [modalCierreHorasFecha, setModalCierreHorasFecha] = useState<string | null>(null);
+  const [horasSeleccionadasCierre, setHorasSeleccionadasCierre] = useState<Record<string, boolean>>({});
+  const [guardandoCierreCal, setGuardandoCierreCal] = useState(false);
+
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [selectedDiaMobile, setSelectedDiaMobile] = useState<number | null>(null);
   const [selectedBloqueMobile, setSelectedBloqueMobile] = useState<'todos' | 'manana' | 'tarde'>('todos');
@@ -291,6 +298,7 @@ const Calendario = () => {
       await loadRecuperaciones();
       await loadLiberacionesSemana();
       await loadInscripciones();
+      await loadCierresCalendario();
     })();
   }, [semanaVista]);
 
@@ -314,6 +322,18 @@ const Calendario = () => {
       cancelled = true;
     };
   }, [planificacionHabilitada, semanaVista]);
+
+  useEffect(() => {
+    if (!cierreMenuFecha) return;
+    const fn = (e: MouseEvent) => {
+      const el = (e.target as HTMLElement)?.closest?.('[data-cierre-menu-root="1"]');
+      const fechaAttr = el?.getAttribute('data-cierre-fecha');
+      if (fechaAttr === cierreMenuFecha) return;
+      setCierreMenuFecha(null);
+    };
+    document.addEventListener('mousedown', fn);
+    return () => document.removeEventListener('mousedown', fn);
+  }, [cierreMenuFecha]);
 
   /** Modal nota: seguir visualViewport para que el teclado no tape el texto (iOS / Android). */
   useLayoutEffect(() => {
@@ -422,6 +442,25 @@ const Calendario = () => {
     }
   };
 
+  const loadCierresCalendario = async () => {
+    if (!useApi()) {
+      setCierresPorFecha({});
+      return;
+    }
+    const desde = getFechaFromSemanaYDia(semanaVista, 0);
+    const hasta = getFechaFromSemanaYDia(semanaVista, 5);
+    try {
+      const rows = await storageApi.sucursal.getCierresCalendarioRango(desde, hasta);
+      const map: Record<string, CierreDiaCal> = {};
+      for (const r of rows) {
+        map[r.fecha] = { cerrarTodo: !!r.cerrarTodo, horasCerradas: r.horasCerradas ?? [] };
+      }
+      setCierresPorFecha(map);
+    } catch {
+      setCierresPorFecha({});
+    }
+  };
+
   // Días de la semana: 0 = Lunes, 1 = Martes, ..., 5 = Sábado (sin domingo)
   const diasSemana = [0, 1, 2, 3, 4, 5];
 
@@ -469,6 +508,95 @@ const Calendario = () => {
 
   const isHorarioDisponibleEnDia = (diaSemana: number, hora: string) => {
     return !(horariosNoDisponiblesPorDia[diaSemana] || []).includes(hora);
+  };
+
+  const isCeldaOperativaPorFecha = (diaSemana: number, hora: string, fechaIso: string) => {
+    if (!isHorarioDisponibleEnDia(diaSemana, hora)) return false;
+    const ex = cierresPorFecha[fechaIso];
+    if (!ex) return true;
+    if (ex.cerrarTodo) return false;
+    return !(ex.horasCerradas || []).includes(hora);
+  };
+
+  const abrirModalReducirHorarios = (fechaIso: string) => {
+    setCierreMenuFecha(null);
+    const ex = cierresPorFecha[fechaIso];
+    const init: Record<string, boolean> = {};
+    if (ex && !ex.cerrarTodo) {
+      for (const h of ex.horasCerradas || []) init[h] = true;
+    }
+    setHorasSeleccionadasCierre(init);
+    setModalCierreHorasFecha(fechaIso);
+  };
+
+  const guardarCierreHorasParcial = async () => {
+    if (!modalCierreHorasFecha) return;
+    const horas = Object.keys(horasSeleccionadasCierre).filter((h) => horasSeleccionadasCierre[h]);
+    if (horas.length === 0) {
+      toast.warning('Marcá al menos un horario a cerrar.');
+      return;
+    }
+    setGuardandoCierreCal(true);
+    try {
+      await storageApi.sucursal.putCierreCalendario({
+        fecha: modalCierreHorasFecha,
+        semana: semanaVista,
+        cerrarTodo: false,
+        horasCerradas: horas.sort((a, b) => a.localeCompare(b)),
+      });
+      await loadCierresCalendario();
+      await loadAlumnos();
+      setModalCierreHorasFecha(null);
+      toast.success('Horarios actualizados. Se otorgaron créditos donde correspondía.');
+    } catch {
+      toast.error('No se pudo guardar el cierre.');
+    } finally {
+      setGuardandoCierreCal(false);
+    }
+  };
+
+  const confirmarCerrarDiaCompleto = async (fechaIso: string) => {
+    setCierreMenuFecha(null);
+    const ok = await toast.confirm(
+      `¿Cerrar todo el día ${formatDate(fechaIso)}? Quienes tengan clase fija o recuperación en turnos de ese día que pasen a estar cerrados recibirán un crédito por cada turno nuevo cerrado (no se quitan créditos si después reabrís el día).`,
+      { title: 'Cerrar día', confirmText: 'Cerrar día' }
+    );
+    if (!ok) return;
+    setGuardandoCierreCal(true);
+    try {
+      await storageApi.sucursal.putCierreCalendario({
+        fecha: fechaIso,
+        semana: semanaVista,
+        cerrarTodo: true,
+        horasCerradas: [],
+      });
+      await loadCierresCalendario();
+      await loadAlumnos();
+      toast.success('Día cerrado. Créditos actualizados donde correspondía.');
+    } catch {
+      toast.error('No se pudo cerrar el día.');
+    } finally {
+      setGuardandoCierreCal(false);
+    }
+  };
+
+  const quitarCierreExcepcional = async (fechaIso: string) => {
+    setCierreMenuFecha(null);
+    const ok = await toast.confirm(
+      '¿Quitar el cierre excepcional de este día? No se descuentan créditos ya otorgados.',
+      { title: 'Quitar cierre', confirmText: 'Quitar' }
+    );
+    if (!ok) return;
+    setGuardandoCierreCal(true);
+    try {
+      await storageApi.sucursal.deleteCierreCalendario(fechaIso);
+      await loadCierresCalendario();
+      toast.success('Cierre quitado.');
+    } catch {
+      toast.error('No se pudo quitar el cierre.');
+    } finally {
+      setGuardandoCierreCal(false);
+    }
   };
 
   const toggleHorarioNoDisponible = (diaSemana: number, hora: string) => {
@@ -591,7 +719,7 @@ const Calendario = () => {
         const turnosDelDia = todasLasHoras
           .filter((hora) => !horaDesde || hora >= horaDesde)
           .filter((hora) => !horaHasta || hora <= horaHasta)
-          .filter((hora) => isHorarioDisponibleEnDia(diaSemana, hora))
+          .filter((hora) => isCeldaOperativaPorFecha(diaSemana, hora, getFechaFromSemanaYDia(semanaVista, diaSemana)))
           .map((hora) => getTurnoDelDia(diaSemana, hora))
           .filter((turno): turno is Turno => turno !== undefined)
           .map((turno) => {
@@ -661,8 +789,13 @@ const Calendario = () => {
     window.open(`https://wa.me/?text=${encodeURIComponent(mensajeDisponibles)}`, '_blank', 'noopener,noreferrer');
   };
 
-  const handleAgregarAlumno = (diaSemana: number, hora: string) => {
-    if (!isHorarioDisponibleEnDia(diaSemana, hora)) {
+  const handleAgregarAlumno = (diaSemana: number, hora: string, fechaIso?: string) => {
+    if (fechaIso) {
+      if (!isCeldaOperativaPorFecha(diaSemana, hora, fechaIso)) {
+        toast.warning('Ese día u horario está cerrado o no disponible.');
+        return;
+      }
+    } else if (!isHorarioDisponibleEnDia(diaSemana, hora)) {
       toast.warning('Ese horario está marcado como no disponible para ese día.');
       return;
     }
@@ -735,6 +868,11 @@ const Calendario = () => {
     if (!turnoSeleccionado || !alumnoSeleccionado) return;
 
     try {
+      const fechaTurnoSel = getFechaFromSemanaYDia(semanaVista, turnoSeleccionado.diaSemana);
+      if (!isCeldaOperativaPorFecha(turnoSeleccionado.diaSemana, turnoSeleccionado.hora, fechaTurnoSel)) {
+        toast.warning('Ese día u horario está cerrado o no disponible.');
+        return;
+      }
       const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
       const alumnoActual = alumnos.find((a) => a.id === alumnoSeleccionado);
       if (!alumnoActual) {
@@ -1777,11 +1915,56 @@ const Calendario = () => {
           </div>
 
           <div className="space-y-6">
-          {(selectedDiaMobile !== null ? [selectedDiaMobile] : diasSemana).map((diaIndex) => (
+          {(selectedDiaMobile !== null ? [selectedDiaMobile] : diasSemana).map((diaIndex) => {
+            const fechaDiaMovil = getFechaFromSemanaYDia(semanaVista, diaIndex);
+            return (
             <div key={diaIndex} className="card">
-              <h2 className="text-lg font-bold text-primary-700 border-b border-primary-200 pb-2 mb-4">
-                {DIAS_SEMANA[diaIndex]}
-              </h2>
+              <div className="flex items-start justify-between gap-2 border-b border-primary-200 pb-2 mb-4">
+                <h2 className="text-lg font-bold text-primary-700">
+                  {DIAS_SEMANA[diaIndex]} <span className="text-sm font-normal text-gray-500">{formatDate(fechaDiaMovil)}</span>
+                </h2>
+                {useApi() && (
+                  <div className="relative shrink-0" data-cierre-menu-root="1" data-cierre-fecha={fechaDiaMovil}>
+                    <button
+                      type="button"
+                      disabled={guardandoCierreCal}
+                      onClick={() => setCierreMenuFecha((prev) => (prev === fechaDiaMovil ? null : fechaDiaMovil))}
+                      className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation disabled:opacity-40"
+                      title="Opciones del día"
+                      aria-label="Opciones del día"
+                    >
+                      <MoreVertical className="w-5 h-5" />
+                    </button>
+                    {cierreMenuFecha === fechaDiaMovil && (
+                      <div className="absolute right-0 top-full z-40 mt-1 min-w-[200px] rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg">
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                          onClick={() => void confirmarCerrarDiaCompleto(fechaDiaMovil)}
+                        >
+                          Cerrar día entero…
+                        </button>
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                          onClick={() => abrirModalReducirHorarios(fechaDiaMovil)}
+                        >
+                          Reducir horarios…
+                        </button>
+                        {cierresPorFecha[fechaDiaMovil] && (
+                          <button
+                            type="button"
+                            className="block w-full px-3 py-2 text-left text-amber-800 hover:bg-amber-50"
+                            onClick={() => void quitarCierreExcepcional(fechaDiaMovil)}
+                          >
+                            Quitar cierre
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="space-y-5">
                 {(selectedBloqueMobile === 'todos' || selectedBloqueMobile === 'manana') && (
                 <div>
@@ -1795,7 +1978,7 @@ const Calendario = () => {
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
-                      const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
+                      const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaDiaMovil);
                       return (
                         <div
                           key={hora}
@@ -1830,7 +2013,7 @@ const Calendario = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
+                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora, fechaDiaMovil)}
                                 disabled={lleno || !horarioDisponible}
                                 className="p-2 rounded-lg bg-primary-600 text-white disabled:opacity-50 touch-manipulation"
                                 title={!horarioDisponible ? 'Horario no disponible' : lleno ? 'Clase llena' : 'Agregar alumno'}
@@ -1858,7 +2041,7 @@ const Calendario = () => {
                           {horarioDisponible && !lleno && ocupacionTurno === 0 && (
                             <button
                               type="button"
-                              onClick={() => handleAgregarAlumno(diaIndex, hora)}
+                              onClick={() => handleAgregarAlumno(diaIndex, hora, fechaDiaMovil)}
                               className="mt-2 w-full py-2 text-sm font-medium text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 touch-manipulation"
                             >
                               + Agregar alumno
@@ -1882,7 +2065,7 @@ const Calendario = () => {
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
-                      const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
+                      const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaDiaMovil);
                       return (
                         <div
                           key={hora}
@@ -1917,7 +2100,7 @@ const Calendario = () => {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
+                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora, fechaDiaMovil)}
                                 disabled={lleno || !horarioDisponible}
                                 className="p-2 rounded-lg bg-primary-600 text-white disabled:opacity-50 touch-manipulation"
                                 title={!horarioDisponible ? 'Horario no disponible' : lleno ? 'Clase llena' : 'Agregar alumno'}
@@ -1945,7 +2128,7 @@ const Calendario = () => {
                           {horarioDisponible && !lleno && ocupacionTurno === 0 && (
                             <button
                               type="button"
-                              onClick={() => handleAgregarAlumno(diaIndex, hora)}
+                              onClick={() => handleAgregarAlumno(diaIndex, hora, fechaDiaMovil)}
                               className="mt-2 w-full py-2 text-sm font-medium text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 touch-manipulation"
                             >
                               + Agregar alumno
@@ -1959,7 +2142,8 @@ const Calendario = () => {
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
           </div>
         </div>
       ) : (
@@ -1977,10 +2161,51 @@ const Calendario = () => {
                   return (
                     <div
                       key={diaIndex}
-                      className="p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700 min-w-[72px]"
+                      className="p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700 min-w-[72px] relative"
                     >
                       <div className="text-xs sm:text-sm uppercase">{DIAS_SEMANA[diaIndex]}</div>
                       <div className="text-[10px] text-gray-500 font-normal mt-0.5">{formatDate(fechaCol)}</div>
+                      {useApi() && (
+                        <div className="mt-0.5 flex justify-center" data-cierre-menu-root="1" data-cierre-fecha={fechaCol}>
+                          <button
+                            type="button"
+                            disabled={guardandoCierreCal}
+                            onClick={() => setCierreMenuFecha((prev) => (prev === fechaCol ? null : fechaCol))}
+                            className="inline-flex items-center justify-center rounded-lg p-1 text-gray-500 hover:bg-gray-200 touch-manipulation disabled:opacity-40"
+                            title="Opciones del día"
+                            aria-label="Opciones del día"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          {cierreMenuFecha === fechaCol && (
+                            <div className="absolute left-1/2 top-full z-40 mt-0 w-[min(220px,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-gray-200 bg-white py-1 text-left text-xs font-normal shadow-lg sm:text-sm">
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                                onClick={() => void confirmarCerrarDiaCompleto(fechaCol)}
+                              >
+                                Cerrar día entero…
+                              </button>
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                                onClick={() => abrirModalReducirHorarios(fechaCol)}
+                              >
+                                Reducir horarios…
+                              </button>
+                              {cierresPorFecha[fechaCol] && (
+                                <button
+                                  type="button"
+                                  className="block w-full px-3 py-2 text-left text-amber-800 hover:bg-amber-50"
+                                  onClick={() => void quitarCierreExcepcional(fechaCol)}
+                                >
+                                  Quitar cierre
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {planificacionHabilitada && (
                         <button
                           type="button"
@@ -2010,6 +2235,7 @@ const Calendario = () => {
                       {hora}
                     </div>
                     {diasSemana.map((diaIndex) => {
+                      const fechaCol = getFechaFromSemanaYDia(semanaVista, diaIndex);
                       const turno = getTurnoDelDia(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
@@ -2017,7 +2243,7 @@ const Calendario = () => {
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
-                      const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
+                      const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaCol);
                       return (
                         <div
                           key={`${diaIndex}-${hora}`}
@@ -2070,7 +2296,7 @@ const Calendario = () => {
                             const lleno = ocupacionTurno >= cupo;
                             return (
                               <button
-                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
+                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora, fechaCol)}
                                 disabled={lleno || !horarioDisponible}
                                 className="absolute top-1 right-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20 disabled:opacity-50 touch-manipulation"
                                 title={!horarioDisponible ? 'Horario no disponible' : lleno ? 'Clase llena' : 'Agregar alumno'}
@@ -2095,6 +2321,7 @@ const Calendario = () => {
                       {hora}
                     </div>
                     {diasSemana.map((diaIndex) => {
+                      const fechaCol = getFechaFromSemanaYDia(semanaVista, diaIndex);
                       const turno = getTurnoDelDia(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelTurno(turno);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
@@ -2102,7 +2329,7 @@ const Calendario = () => {
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
-                      const horarioDisponible = isHorarioDisponibleEnDia(diaIndex, hora);
+                      const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaCol);
                       return (
                         <div
                           key={`${diaIndex}-${hora}`}
@@ -2155,7 +2382,7 @@ const Calendario = () => {
                             const lleno = ocupacionTurno >= cupo;
                             return (
                               <button
-                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora)}
+                                onClick={() => !lleno && horarioDisponible && handleAgregarAlumno(diaIndex, hora, fechaCol)}
                                 disabled={lleno || !horarioDisponible}
                                 className="absolute top-1 right-1 w-8 h-8 sm:w-6 sm:h-6 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-primary-600 hover:bg-primary-700 rounded text-white z-20 disabled:opacity-50 touch-manipulation"
                                 title={!horarioDisponible ? 'Horario no disponible' : lleno ? 'Clase llena' : 'Agregar alumno'}
@@ -2439,6 +2666,66 @@ const Calendario = () => {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalCierreHorasFecha && (
+        <div
+          className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-cierre-horas-titulo"
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[85vh] overflow-y-auto border border-gray-200">
+            <div className="flex justify-between items-center border-b border-gray-200 px-4 py-3">
+              <h3 id="modal-cierre-horas-titulo" className="font-semibold text-gray-900 pr-2">
+                Cerrar horarios · {formatDate(modalCierreHorasFecha)}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalCierreHorasFecha(null)}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 touch-manipulation shrink-0"
+                aria-label="Cerrar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 px-4 pt-3">
+              Marcá los horarios que no se dictan ese día. Los alumnos con clase fija o recuperación en un turno que pase a estar cerrado reciben un crédito (solo por turnos recién cerrados).
+            </p>
+            <div className="px-4 py-3 space-y-2">
+              {todasLasHoras.map((h) => (
+                <label key={h} className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!horasSeleccionadasCierre[h]}
+                    onChange={(e) =>
+                      setHorasSeleccionadasCierre((prev) => ({ ...prev, [h]: e.target.checked }))
+                    }
+                    className="rounded border-gray-300"
+                  />
+                  <span>{h}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end border-t border-gray-200 px-4 py-3">
+              <button
+                type="button"
+                className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg touch-manipulation"
+                onClick={() => setModalCierreHorasFecha(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="px-3 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 touch-manipulation"
+                disabled={guardandoCierreCal}
+                onClick={() => void guardarCierreHorasParcial()}
+              >
+                {guardandoCierreCal ? 'Guardando…' : 'Guardar'}
+              </button>
             </div>
           </div>
         </div>

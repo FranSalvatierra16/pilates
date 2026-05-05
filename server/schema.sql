@@ -261,6 +261,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_liberaciones_semana_unique
 CREATE INDEX IF NOT EXISTS idx_liberaciones_semana_turno
   ON liberaciones_semana(turno_id, semana);
 
+-- Cierre excepcional por fecha (feriado / reducción de horario): no ofrece turnos y puede otorgar créditos
+CREATE TABLE IF NOT EXISTS cierre_dia_calendario (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  fecha DATE NOT NULL,
+  cerrar_todo BOOLEAN NOT NULL DEFAULT false,
+  horas_cerradas JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (sucursal_id, fecha)
+);
+CREATE INDEX IF NOT EXISTS idx_cierre_cal_sucursal_fecha ON cierre_dia_calendario(sucursal_id, fecha);
+
 -- Planificación de entrenamientos (opcional por sucursal; admin habilita)
 ALTER TABLE sucursales ADD COLUMN IF NOT EXISTS planificacion_habilitada BOOLEAN NOT NULL DEFAULT false;
 

@@ -3266,13 +3266,11 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     if (esClaseFijaPropia && !liberacionPropia) {
       return res.status(400).json({ error: 'Esa ya es una clase fija tuya de esa semana. Si vas a faltar, primero liberala.' });
     }
-    const t = turnoRows[0];
-    const cupo = t.cupo != null ? Number(t.cupo) : 6;
-    const { rows: recCount } = await db.query('SELECT COUNT(*) AS n FROM recuperaciones WHERE turno_id = $1 AND semana = $2', [turnoId, semanaVista]);
-    const { rows: libCount } = await db.query('SELECT COUNT(*) AS n FROM liberaciones_semana WHERE turno_id = $1 AND semana = $2', [turnoId, semanaVista]);
-    const totalFijos = Math.max(0, (t.alumno_ids || []).length - parseInt(libCount[0]?.n || '0', 10));
-    const recs = parseInt(recCount[0]?.n || '0', 10);
-    if (totalFijos + recs >= cupo) return res.status(400).json({ error: 'No hay cupo para recuperar esta semana' });
+    const ocupacion = await ocupacionEfectivaTurnoSemana(db, turnoId, semanaVista, alumno.sucursal_id);
+    if (!ocupacion) return res.status(404).json({ error: 'Turno no encontrado' });
+    if (ocupacion.ocupacion >= ocupacion.cupo) {
+      return res.status(400).json({ error: 'No hay cupo para recuperar esta semana' });
+    }
     const clasesUsadasSemana = ctx.clasesFijasSemana + ctx.recuperacionesSemana.length;
     const excedeBase = ctx.clasesPorSemana != null && clasesUsadasSemana >= ctx.clasesPorSemana;
     const debeConsumirCreditoPorLiberacion = ctx.liberacionesPendientesTotales > 0 && ctx.clasesParaRecuperar > 0;

@@ -2898,12 +2898,13 @@ async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) 
   const libRows = allLibRows.filter((r) => r.semana === semanaVista);
   const outstandingLibRows = libRows.filter((r) => outstandingLiberacionIds.has(r.id));
   const libByTurno = new Map(outstandingLibRows.map((r) => [r.turno_id, r]));
-  const clasesFijasSemana = turnoRows.filter((t) => {
+  const candidatosClasesFijas = turnoRows.filter((t) => {
     const ids = t.alumno_ids || [];
     if (!ids.includes(alumno.id)) return false;
     const ins = insByTurno.get(t.id);
     return (!ins || ins.semana_desde <= semanaVista) && !libByTurno.has(t.id);
-  }).length;
+  });
+  const clasesFijasSemana = dedupeTurnosPorFranjaHoraria(candidatosClasesFijas).length;
 
   const { rows: recRows } = await db.query(
     'SELECT id, turno_id, usa_credito, origen_credito FROM recuperaciones WHERE alumno_id = $1 AND semana = $2',
@@ -2959,7 +2960,7 @@ async function getPortalHistorialAsistencias(db, alumnoId, sucursalId) {
 
 async function getClasesFijasActivasSemana(db, alumno, semanaVista) {
   const { rows: turnoRows } = await db.query(
-    'SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1',
+    'SELECT id, dia_semana, hora, titulo, alumno_ids FROM turnos WHERE sucursal_id = $1',
     [alumno.sucursal_id]
   );
   const { rows: insRows } = await db.query(
@@ -2967,12 +2968,13 @@ async function getClasesFijasActivasSemana(db, alumno, semanaVista) {
     [alumno.id]
   );
   const insByTurno = new Map(insRows.map((r) => [r.turno_id, r]));
-  return turnoRows.filter((t) => {
+  const candidatos = turnoRows.filter((t) => {
     const ids = t.alumno_ids || [];
     if (!ids.includes(alumno.id)) return false;
     const ins = insByTurno.get(t.id);
     return !ins || ins.semana_desde <= semanaVista;
-  }).length;
+  });
+  return dedupeTurnosPorFranjaHoraria(candidatos).length;
 }
 
 function alumnoActivoEnTurnoSemana(turno, alumnoId, semanaVista, insByTurnoAlumno) {
@@ -2980,6 +2982,31 @@ function alumnoActivoEnTurnoSemana(turno, alumnoId, semanaVista, insByTurnoAlumn
   if (!alumnoIds.includes(alumnoId)) return false;
   const ins = insByTurnoAlumno.get(`${turno.id}:${alumnoId}`);
   return !ins || ins.semana_desde <= semanaVista;
+}
+
+/** Misma franja (día + hora + título): un solo turno representativo (id menor, estable). */
+function dedupeTurnosPorFranjaHoraria(turnoRows) {
+  const sorted = [...turnoRows].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const seen = new Set();
+  const out = [];
+  for (const r of sorted) {
+    const hh = normalizarHora(r.hora);
+    const tit = String(r.titulo || 'Clase').trim().toLowerCase();
+    const key = `${Number(r.dia_semana)}|${hh}|${tit}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
+}
+
+/**
+ * Si en la DB hay varios turnos con el mismo día/hora/título y el mismo alumno anotado en todos,
+ * el portal mostraría la misma franja repetida. Dejamos un representativo (id menor, estable).
+ */
+function dedupeTurnosClaseFijaAlumno(turnoRows, alumnoId, semanaVista, insByTurnoAlumno) {
+  const activos = turnoRows.filter((r) => alumnoActivoEnTurnoSemana(r, alumnoId, semanaVista, insByTurnoAlumno));
+  return dedupeTurnosPorFranjaHoraria(activos);
 }
 
 function getAlumnosActivosTurnoSemana(turno, semanaVista, insByTurnoAlumno) {
@@ -3055,16 +3082,13 @@ app.get('/api/alumno-portal', async (req, res) => {
       ? (await db.query('SELECT nombre FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1', [alumno.actividad_id, sid])).rows[0]?.nombre || ''
       : '';
     const historialAsistencias = await getPortalHistorialAsistencias(db, alumno.id, sid);
-    const clasesFijas = turnoRows
-      .filter((r) => {
-        return alumnoActivoEnTurnoSemana(r, alumno.id, getSemanaActual(), insByTurno);
-      })
-      .map((r) => ({
-        id: r.id,
-        diaSemana: r.dia_semana,
-        hora: r.hora,
-        titulo: r.titulo || 'Clase',
-      }));
+    const semanaParaClasesFijas = esRecuperar && semanaVista ? semanaVista : getSemanaActual();
+    const clasesFijas = dedupeTurnosClaseFijaAlumno(turnoRows, alumno.id, semanaParaClasesFijas, insByTurno).map((r) => ({
+      id: r.id,
+      diaSemana: r.dia_semana,
+      hora: r.hora,
+      titulo: r.titulo || 'Clase',
+    }));
     let turnos;
     let recuperacionStats = null;
     if (esRecuperar && semanaVista) {

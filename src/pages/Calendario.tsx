@@ -205,6 +205,7 @@ const Calendario = () => {
   });
   const [cupoTurnoInput, setCupoTurnoInput] = useState(String(CUPO_DEFAULT));
   const [showModalAumentarCupo, setShowModalAumentarCupo] = useState(false);
+  const [guardandoCupoGlobal, setGuardandoCupoGlobal] = useState(false);
   const [showModalCompartirDisponibles, setShowModalCompartirDisponibles] = useState(false);
   const [showModalHorarios, setShowModalHorarios] = useState(false);
   const [horaInicioManana, setHoraInicioManana] = useState('07:00');
@@ -1426,17 +1427,25 @@ const Calendario = () => {
   };
 
   const handleAumentarCupo = async () => {
+    if (turnos.length === 0) {
+      toast.warning('No hay turnos para actualizar.');
+      setShowModalAumentarCupo(false);
+      return;
+    }
     const valor = parseCupo(cupoGlobalInput, cupoGlobal);
+    setGuardandoCupoGlobal(true);
     try {
       for (const t of turnos) {
         await storageHybrid.turnos.update(t.id, { cupo: valor });
       }
-      await loadTurnos();
       setShowModalAumentarCupo(false);
+      await loadTurnos();
       toast.success(`Cupo de todas las clases actualizado a ${valor}.`);
     } catch (e) {
       console.error(e);
       toast.error('Error al actualizar el cupo. Reintentá.');
+    } finally {
+      setGuardandoCupoGlobal(false);
     }
   };
 
@@ -3259,6 +3268,7 @@ const Calendario = () => {
                 type="number"
                 min={1}
                 value={cupoGlobalInput}
+                disabled={guardandoCupoGlobal}
                 onChange={(e) => {
                   setCupoGlobalInput(e.target.value);
                   if (e.target.value !== '') {
@@ -3273,11 +3283,17 @@ const Calendario = () => {
                 type="button"
                 onClick={() => setShowModalAumentarCupo(false)}
                 className="btn-secondary"
+                disabled={guardandoCupoGlobal}
               >
                 Cancelar
               </button>
-              <button type="button" onClick={handleAumentarCupo} className="btn-primary">
-                Guardar en todas las clases
+              <button
+                type="button"
+                onClick={() => void handleAumentarCupo()}
+                disabled={guardandoCupoGlobal}
+                className="btn-primary disabled:opacity-60"
+              >
+                {guardandoCupoGlobal ? 'Guardando…' : 'Guardar en todas las clases'}
               </button>
             </div>
           </div>

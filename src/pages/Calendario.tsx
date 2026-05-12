@@ -618,11 +618,11 @@ const Calendario = () => {
       .filter((t) => t.diaSemana === diaSemana && t.hora === hora)
       .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 
-  /** Cupo mostrado en la celda: si hay varios registros `turnos` con el mismo día/hora (duplicados), es el mismo aula — no se suman cupos (evita 6/30). */
+  /** Cupo mostrado en la celda: duplicados mismo día/hora → un solo aula; si un registro quedó en 6 y otro en 5, se muestra el más restrictivo (min). */
   const cupoDelSlot = (diaSemana: number, hora: string): number => {
     const ts = getTurnosDelSlot(diaSemana, hora);
     if (ts.length === 0) return CUPO_DEFAULT;
-    return Math.max(...ts.map((t) => t.cupo ?? CUPO_DEFAULT), CUPO_DEFAULT);
+    return Math.min(...ts.map((t) => t.cupo ?? CUPO_DEFAULT));
   };
 
   /** Primer turno del slot (metadatos título/profesor); alumnos se listan con getAlumnosDelSlot. */
@@ -2480,17 +2480,21 @@ const Calendario = () => {
         <button
           type="button"
           onClick={async () => {
-            const ok = await toast.confirm('¿Recortar todas las clases al cupo configurado? Se quitarán alumnos de las clases que tengan más del cupo (los últimos de la lista).', {
-              title: 'Ajustar cupos',
-              confirmText: 'Recortar',
-            });
+            const ok = await toast.confirm(
+              `¿Ajustar la semana ${semanaVista} al cupo de cada turno? Si hay exceso, primero se quitan recuperaciones (las últimas anotadas) y después alumnos fijos. Quienes liberaron con «Lib.» no cuentan contra el cupo.`,
+              { title: 'Ajustar cupos', confirmText: 'Recortar' }
+            );
             if (!ok) return;
             try {
-              const { turnosActualizados, alumnosEliminados } = await storageHybrid.turnos.ajustarCupo();
-              await loadTurnos();
-              toast.success(turnosActualizados === 0
-                ? 'Todas las clases ya respetan el cupo.'
-                : `Listo: ${turnosActualizados} clase(s) ajustadas. Se quitaron ${alumnosEliminados} alumno(s) en total.`);
+              const { turnosActualizados, alumnosEliminados, recuperacionesEliminadas } =
+                await storageHybrid.turnos.ajustarCupo(semanaVista);
+              await Promise.all([loadTurnos(), loadRecuperaciones(), loadInscripciones(), loadLiberacionesSemana()]);
+              const recN = recuperacionesEliminadas ?? 0;
+              let msg = `Listo: ${turnosActualizados} turno(s) ajustado(s).`;
+              if (recN > 0) msg += ` ${recN} recuperación(es) quitada(s).`;
+              if (alumnosEliminados > 0) msg += ` ${alumnosEliminados} alumno(s) fijo(s) quitado(s) del turno.`;
+              else if (recN === 0 && turnosActualizados > 0) msg += ' Sin bajas de fijos.';
+              toast.success(turnosActualizados === 0 ? 'Todas las clases ya respetan el cupo para esta semana.' : msg);
             } catch (e) {
               console.error(e);
               toast.error('Error al ajustar. Reintentá.');
@@ -2504,8 +2508,10 @@ const Calendario = () => {
         <button
           type="button"
           onClick={() => {
-            setCupoGlobal(CUPO_DEFAULT);
-            setCupoGlobalInput(String(CUPO_DEFAULT));
+            const cupos = turnos.map((t) => t.cupo ?? CUPO_DEFAULT);
+            const sugerencia = cupos.length ? Math.min(...cupos) : CUPO_DEFAULT;
+            setCupoGlobal(sugerencia);
+            setCupoGlobalInput(String(sugerencia));
             setShowModalAumentarCupo(true);
           }}
           className="btn-primary flex items-center justify-center gap-2 min-h-[44px] flex-1 sm:flex-initial"

@@ -171,8 +171,12 @@ export const storageApi = {
     },
     getByAlumnoId: (alumnoId: string): Promise<Turno[]> =>
       request<Turno[]>(`/api/turnos/by-alumno/${alumnoId}`),
-    ajustarCupo: (): Promise<{ turnosActualizados: number; alumnosEliminados: number }> =>
-      request('/api/turnos/ajustar-cupo', { method: 'POST' }),
+    ajustarCupo: (semana?: string): Promise<{
+      turnosActualizados: number;
+      alumnosEliminados: number;
+      recuperacionesEliminadas?: number;
+    }> =>
+      request('/api/turnos/ajustar-cupo', { method: 'POST', body: JSON.stringify({ semana: semana ?? '' }) }),
   },
   asistencias: {
     getAll: (): Promise<Asistencia[]> => request<Asistencia[]>('/api/asistencias'),

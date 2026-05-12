@@ -63,6 +63,8 @@ export interface Alumno {
   tienePagosHistorial?: boolean;
   clasesAsistidas: number; // Contador de clases asistidas en el mes actual
   clasesParaRecuperar?: number; // Créditos disponibles para recuperar por faltas marcadas en rojo
+  /** Saldo de arrastre del pack semanal (solo lectura; lo recalcula el servidor al usar el portal/calendario) */
+  actividadArrastreSaldo?: number;
   descripcion?: string; // Notas o info adicional del alumno (editable)
   /** Token para que el alumno acceda a /mi-clase y solo pueda sumarse o liberar cupo */
   linkToken?: string;

@@ -463,6 +463,7 @@ app.get('/api/alumnos', async (req, res) => {
       actividadId: r.actividad_id,
       clasesAsistidas: r.clases_este_mes ?? 0,
       clasesParaRecuperar: Number(r.clases_para_recuperar ?? 0),
+      actividadArrastreSaldo: Math.max(0, Number(r.actividad_arrastre_saldo ?? 0)),
       descripcion: r.descripcion ?? '',
       linkToken: r.link_token ?? '',
       activo: r.activo !== false,

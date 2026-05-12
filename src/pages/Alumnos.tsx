@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles } from 'lucide-react';
+import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -19,6 +19,13 @@ function normalizePhoneForWhatsApp(telefono: string): string | null {
   if (!num.startsWith('54')) num = '54' + num;
   if (num.startsWith('54') && num.length >= 11 && num[2] !== '9') num = '549' + num.slice(2);
   return num.length >= 12 ? num : null;
+}
+
+const MAX_CREDITOS_RECUPERAR = 999;
+
+function clampCreditoRecuperar(n: number): number {
+  const x = Math.floor(Number.isFinite(n) ? n : 0);
+  return Math.max(0, Math.min(MAX_CREDITOS_RECUPERAR, x));
 }
 
 function textoPlazoMinutos(n: number): string {
@@ -127,6 +134,7 @@ const Alumnos = () => {
     actividadId: '',
     aPrueba: false,
     descripcion: '',
+    clasesParaRecuperar: 0,
   });
   const [formDataPago, setFormDataPago] = useState({
     monto: '',
@@ -316,6 +324,7 @@ const Alumnos = () => {
       actividadId: '',
       aPrueba: false,
       descripcion: '',
+      clasesParaRecuperar: 0,
     });
     setEditingAlumno(null);
   };
@@ -333,6 +342,7 @@ const Alumnos = () => {
         actividadId: alumno.actividadId || '',
         aPrueba: !!alumno.aPrueba,
         descripcion: alumno.descripcion ?? '',
+        clasesParaRecuperar: clampCreditoRecuperar(alumno.clasesParaRecuperar ?? 0),
       });
     } else {
       // Para nuevo alumno, dejar sin fecha de vencimiento (pendiente de pago)
@@ -346,6 +356,7 @@ const Alumnos = () => {
         actividadId: '',
         aPrueba: false,
         descripcion: '',
+        clasesParaRecuperar: 0,
       });
       setEditingAlumno(null);
     }
@@ -382,6 +393,7 @@ const Alumnos = () => {
           actividadId: actividadIdFinal,
           aPrueba: aPruebaFinal,
           descripcion: formData.descripcion ?? '',
+          clasesParaRecuperar: clampCreditoRecuperar(formData.clasesParaRecuperar),
         });
       } else {
         // Crear nuevo alumno sin fecha de vencimiento (pendiente de pago)
@@ -396,6 +408,7 @@ const Alumnos = () => {
           actividadId: actividadIdFinal,
           aPrueba: aPruebaFinal,
           clasesAsistidas: 0, // Iniciar contador en 0
+          clasesParaRecuperar: clampCreditoRecuperar(formData.clasesParaRecuperar),
           descripcion: formData.descripcion ?? '',
           activo: true,
           createdAt: new Date().toISOString(),
@@ -1275,6 +1288,70 @@ const Alumnos = () => {
                     className="input-field min-h-[80px] resize-y"
                     rows={3}
                   />
+                </div>
+                <div className="md:col-span-2 rounded-xl border border-violet-200 bg-violet-50/50 p-4 space-y-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <label className="text-sm font-medium text-gray-800">
+                      Créditos de recuperación
+                    </label>
+                    {editingAlumno &&
+                      editingAlumno.actividadArrastreSaldo != null &&
+                      editingAlumno.actividadId &&
+                      !formData.aPrueba && (
+                        <span className="text-xs text-gray-600">
+                          Arrastre de cupo (automático):{' '}
+                          <strong className="text-violet-800">{editingAlumno.actividadArrastreSaldo}</strong>
+                        </span>
+                      )}
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    Sirven para anotarse por encima del cupo semanal cuando hubo falta (marcada en rojo). Podés sumar o
+                    restar manualmente.
+                  </p>
+                  <div className="flex items-center gap-2 max-w-xs">
+                    <button
+                      type="button"
+                      aria-label="Quitar un crédito"
+                      className="p-2 rounded-lg border border-violet-300 bg-white text-violet-800 hover:bg-violet-100 disabled:opacity-40"
+                      disabled={formData.clasesParaRecuperar <= 0}
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          clasesParaRecuperar: clampCreditoRecuperar(prev.clasesParaRecuperar - 1),
+                        }))
+                      }
+                    >
+                      <Minus className="w-5 h-5" />
+                    </button>
+                    <input
+                      type="number"
+                      min={0}
+                      max={MAX_CREDITOS_RECUPERAR}
+                      step={1}
+                      value={formData.clasesParaRecuperar}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          clasesParaRecuperar: clampCreditoRecuperar(Number(e.target.value)),
+                        })
+                      }
+                      className="input-field text-center tabular-nums flex-1 min-w-0"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Agregar un crédito"
+                      className="p-2 rounded-lg border border-violet-300 bg-white text-violet-800 hover:bg-violet-100 disabled:opacity-40"
+                      disabled={formData.clasesParaRecuperar >= MAX_CREDITOS_RECUPERAR}
+                      onClick={() =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          clasesParaRecuperar: clampCreditoRecuperar(prev.clasesParaRecuperar + 1),
+                        }))
+                      }
+                    >
+                      <Plus className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">

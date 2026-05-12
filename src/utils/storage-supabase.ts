@@ -20,6 +20,10 @@ const dbToAlumno = (row: any): Alumno => ({
   actividadId: row.actividad_id,
   clasesAsistidas: row.clases_asistidas || 0,
   clasesParaRecuperar: row.clases_para_recuperar || 0,
+  actividadArrastreSaldo:
+    row.actividad_arrastre_saldo != null && row.actividad_arrastre_saldo !== ''
+      ? Math.max(0, Number(row.actividad_arrastre_saldo))
+      : undefined,
   descripcion: row.descripcion || '',
   linkToken: row.link_token || '',
   activo: row.activo !== false,

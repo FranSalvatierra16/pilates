@@ -612,9 +612,22 @@ const Calendario = () => {
     });
   };
 
-  const getTurnoDelDia = (diaSemana: number, hora: string): Turno | undefined => {
-    return turnos.find(t => t.diaSemana === diaSemana && t.hora === hora);
+  /** Todos los turnos del mismo día y hora (p. ej. duplicados en DB). El calendario debe fusionarlos. */
+  const getTurnosDelSlot = (diaSemana: number, hora: string): Turno[] =>
+    turnos
+      .filter((t) => t.diaSemana === diaSemana && t.hora === hora)
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+
+  const cupoDelSlot = (diaSemana: number, hora: string): number => {
+    const ts = getTurnosDelSlot(diaSemana, hora);
+    if (ts.length === 0) return CUPO_DEFAULT;
+    if (ts.length === 1) return ts[0].cupo ?? CUPO_DEFAULT;
+    return ts.reduce((sum, t) => sum + (t.cupo ?? CUPO_DEFAULT), 0);
   };
+
+  /** Primer turno del slot (metadatos título/profesor); alumnos se listan con getAlumnosDelSlot. */
+  const getTurnoRepresentativoDelSlot = (diaSemana: number, hora: string): Turno | undefined =>
+    getTurnosDelSlot(diaSemana, hora)[0];
 
   type AlumnoEnTurno = {
     alumno: Alumno;
@@ -624,6 +637,8 @@ const Calendario = () => {
     recuperacionId?: string;
     usaCredito?: boolean;
     aPrueba?: boolean;
+    /** Turno real en DB (cupos, liberaciones, asistencia) cuando hay varios turnos en el mismo horario */
+    sourceTurnoId?: string;
   };
   const buscarLiberacionSemana = (turnoId: string, alumnoId: string, semana = semanaVista) =>
     liberacionesSemana.find((item) => item.turnoId === turnoId && item.alumnoId === alumnoId && item.semana === semana);
@@ -650,16 +665,60 @@ const Calendario = () => {
           liberadaSemana: !!liberacion,
           liberacionId: liberacion?.id,
           aPrueba: !!ins?.aPrueba || !!a.aPrueba,
+          sourceTurnoId: turno.id,
         };
       });
     const recs: AlumnoEnTurno[] = recuperaciones
       .filter(r => r.turnoId === turno.id)
       .map(r => {
         const a = alumnos.find(x => x.id === r.alumnoId);
-        return a ? { alumno: a, isRecuperacion: true, recuperacionId: r.id, usaCredito: r.usaCredito } : null;
+        return a ? { alumno: a, isRecuperacion: true, recuperacionId: r.id, usaCredito: r.usaCredito, sourceTurnoId: turno.id } : null;
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
     return [...regulares, ...recs];
+  };
+
+  /** Une alumnos de todos los turnos del mismo día/hora (evita que solo se vea el primero de la DB). */
+  const getAlumnosDelSlot = (diaSemana: number, hora: string): AlumnoEnTurno[] => {
+    const ts = getTurnosDelSlot(diaSemana, hora);
+    const byAlumno = new Map<string, AlumnoEnTurno>();
+    const recs: AlumnoEnTurno[] = [];
+    const seenRecIds = new Set<string>();
+    for (const t of ts) {
+      for (const item of getAlumnosDelTurno(t)) {
+        if (item.isRecuperacion && item.recuperacionId) {
+          if (seenRecIds.has(item.recuperacionId)) continue;
+          seenRecIds.add(item.recuperacionId);
+          recs.push(item);
+          continue;
+        }
+        const aid = item.alumno.id;
+        const prev = byAlumno.get(aid);
+        if (!prev) {
+          byAlumno.set(aid, item);
+          continue;
+        }
+        const better =
+          !item.liberadaSemana && prev.liberadaSemana
+            ? item
+            : prev.liberadaSemana && !item.liberadaSemana
+              ? prev
+              : item;
+        byAlumno.set(aid, better);
+      }
+    }
+    return [...byAlumno.values(), ...recs];
+  };
+
+  /** Para agregar fijo o recuperación: turno con cupo libre dentro del slot. */
+  const elegirTurnoConCupoEnSlot = (diaSemana: number, hora: string): Turno | undefined => {
+    const ts = getTurnosDelSlot(diaSemana, hora);
+    for (const t of ts) {
+      const occ = contarOcupacionTurno(getAlumnosDelTurno(t));
+      const cap = t.cupo ?? CUPO_DEFAULT;
+      if (occ < cap) return t;
+    }
+    return ts[0];
   };
 
   const getActividadDelAlumno = (alumnoId: string) => {
@@ -720,12 +779,12 @@ const Calendario = () => {
           .filter((hora) => !horaDesde || hora >= horaDesde)
           .filter((hora) => !horaHasta || hora <= horaHasta)
           .filter((hora) => isCeldaOperativaPorFecha(diaSemana, hora, getFechaFromSemanaYDia(semanaVista, diaSemana)))
-          .map((hora) => getTurnoDelDia(diaSemana, hora))
+          .map((hora) => getTurnoRepresentativoDelSlot(diaSemana, hora))
           .filter((turno): turno is Turno => turno !== undefined)
           .map((turno) => {
             // Para compartir disponibilidad "estable", los liberados semanales se consideran ocupados.
-            const alumnasFijasBase = getAlumnosDelTurno(turno).filter((item) => !item.isRecuperacion).length;
-            const cupo = turno.cupo ?? CUPO_DEFAULT;
+            const alumnasFijasBase = getAlumnosDelSlot(diaSemana, turno.hora).filter((item) => !item.isRecuperacion).length;
+            const cupo = cupoDelSlot(diaSemana, turno.hora);
             const disponibles = Math.max(0, cupo - alumnasFijasBase);
             return {
               hora: turno.hora,
@@ -808,7 +867,7 @@ const Calendario = () => {
   };
 
   const handleEditarTurno = (diaSemana: number, hora: string) => {
-    const turno = getTurnoDelDia(diaSemana, hora);
+    const turno = getTurnoRepresentativoDelSlot(diaSemana, hora);
     if (turno) {
       setTurnoParaEditar(turno);
       setFormDataTurno({
@@ -873,14 +932,16 @@ const Calendario = () => {
         toast.warning('Ese día u horario está cerrado o no disponible.');
         return;
       }
-      const turnoExistente = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
+      const turnoSeleccion = turnoSeleccionado;
       const alumnoActual = alumnos.find((a) => a.id === alumnoSeleccionado);
       if (!alumnoActual) {
         toast.warning('No se encontró el alumno seleccionado.');
         return;
       }
-      const cupo = turnoExistente?.cupo ?? CUPO_DEFAULT;
-      const alumnosVisiblesEnTurno = getAlumnosDelTurno(turnoExistente);
+      const alumnosVisiblesEnTurno = getAlumnosDelSlot(turnoSeleccion.diaSemana, turnoSeleccion.hora);
+      const cupo = cupoDelSlot(turnoSeleccion.diaSemana, turnoSeleccion.hora);
+      const turnosEnSlot = getTurnosDelSlot(turnoSeleccion.diaSemana, turnoSeleccion.hora);
+      const turnoDestinoFijo = elegirTurnoConCupoEnSlot(turnoSeleccion.diaSemana, turnoSeleccion.hora);
       const recsEnTurno = alumnosVisiblesEnTurno.filter((a) => a.isRecuperacion);
       const totalEnTurno = contarOcupacionTurno(alumnosVisiblesEnTurno);
 
@@ -904,13 +965,13 @@ const Calendario = () => {
         }
         const rec: Recuperacion = {
           id: Date.now().toString(),
-          turnoId: turnoExistente?.id ?? '',
+          turnoId: turnoDestinoFijo?.id ?? '',
           alumnoId: alumnoSeleccionado,
           semana: semanaVista,
           usaCredito,
           createdAt: new Date().toISOString(),
         };
-        if (!turnoExistente) {
+        if (turnosEnSlot.length === 0) {
           const nuevoTurno: Turno = {
             id: Date.now().toString(),
             diaSemana: turnoSeleccionado.diaSemana,
@@ -931,18 +992,23 @@ const Calendario = () => {
           });
         }
       } else {
-        if (turnoExistente) {
+        if (turnosEnSlot.length > 0) {
           if (totalEnTurno >= cupo) {
             toast.warning('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (titulo/profesor) o desde "Aumentar cupo".');
             return;
           }
-          if (!turnoExistente.alumnoIds.includes(alumnoSeleccionado)) {
-            await storageHybrid.turnos.update(turnoExistente.id, {
-              alumnoIds: [...turnoExistente.alumnoIds, alumnoSeleccionado],
+          const destino = turnoDestinoFijo;
+          if (!destino) {
+            toast.warning('Esta clase ya tiene el cupo completo.');
+            return;
+          }
+          if (!destino.alumnoIds.includes(alumnoSeleccionado)) {
+            await storageHybrid.turnos.update(destino.id, {
+              alumnoIds: [...destino.alumnoIds, alumnoSeleccionado],
             });
             await storageHybrid.inscripcionesTurno.add({
               id: Date.now().toString(),
-              turnoId: turnoExistente.id,
+              turnoId: destino.id,
               alumnoId: alumnoSeleccionado,
               semanaDesde: semanaVista,
               aPrueba: !!alumnoActual.aPrueba,
@@ -987,11 +1053,11 @@ const Calendario = () => {
     if (!turnoParaEditar) return;
 
     try {
-      const turnoExistente = getTurnoDelDia(turnoParaEditar.diaSemana, turnoParaEditar.hora);
       const cupo = parseCupo(cupoTurnoInput, formDataTurno.cupo);
-      
-      if (turnoExistente) {
-        await storageHybrid.turnos.update(turnoExistente.id, {
+      const yaEnDb = turnos.some((t) => t.id === turnoParaEditar.id);
+
+      if (yaEnDb) {
+        await storageHybrid.turnos.update(turnoParaEditar.id, {
           titulo: formDataTurno.titulo,
           profesorId: formDataTurno.profesorId,
           cupo,
@@ -1058,7 +1124,9 @@ const Calendario = () => {
       await handleEliminarAlumno(showPopupAlumno.turnoId, alumnoIdMover);
       
       // Agregar al turno destino
-      const turnoDestinoExistente = getTurnoDelDia(turnoDestino.diaSemana, turnoDestino.hora);
+      const turnoDestinoExistente =
+        elegirTurnoConCupoEnSlot(turnoDestino.diaSemana, turnoDestino.hora) ??
+        getTurnoRepresentativoDelSlot(turnoDestino.diaSemana, turnoDestino.hora);
       
       if (turnoDestinoExistente) {
         // Si el turno ya existe, agregar el alumno si no está
@@ -1170,7 +1238,7 @@ const Calendario = () => {
   };
 
   const handleToggleDestacado = async (diaSemana: number, hora: string) => {
-    const turno = getTurnoDelDia(diaSemana, hora);
+    const turno = getTurnoRepresentativoDelSlot(diaSemana, hora);
     try {
       if (turno) {
         await storageHybrid.turnos.update(turno.id, { destacado: !turno.destacado });
@@ -1199,7 +1267,7 @@ const Calendario = () => {
     e.stopPropagation();
     setShowPopupAlumno({
       alumno: item.alumno,
-      turnoId: turno.id,
+      turnoId: item.sourceTurnoId ?? turno.id,
       diaSemana,
       hora,
       isRecuperacion: item.isRecuperacion,
@@ -1683,8 +1751,9 @@ const Calendario = () => {
   const renderAlumnoEnTurno = (item: AlumnoEnTurno, turno: Turno | undefined, diaSemana: number, hora: string) => {
     if (!turno) return null;
     const { alumno, isRecuperacion, liberadaSemana, aPrueba } = item;
-    
-    const estadoAsistencia = getEstadoAsistencia(turno.id, alumno.id);
+    const turnoRefId = item.sourceTurnoId ?? turno.id;
+
+    const estadoAsistencia = getEstadoAsistencia(turnoRefId, alumno.id);
     const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
     const vencido = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
     const porVencer = tieneFecha && !vencido && (isCuotaVenceHoy(alumno.fechaVencimientoCuota) || isCuotaPorVencer(alumno.fechaVencimientoCuota, 3));
@@ -1698,7 +1767,7 @@ const Calendario = () => {
     
     return (
       <div
-        key={isRecuperacion ? `rec-${item.recuperacionId}` : alumno.id}
+        key={isRecuperacion ? `rec-${item.recuperacionId}` : `${turnoRefId}-${alumno.id}`}
         className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors cursor-pointer`}
         onClick={(e) => handleAbrirPopupAlumno(e, item, turno, diaSemana, hora)}
       >
@@ -1719,7 +1788,7 @@ const Calendario = () => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleMarcarAsistencia(turno.id, alumno.id, 'asistio');
+              handleMarcarAsistencia(turnoRefId, alumno.id, 'asistio');
             }}
             className={`min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 sm:p-0.5 rounded transition-colors flex items-center justify-center touch-manipulation ${
               estadoAsistencia === 'asistio'
@@ -1733,7 +1802,7 @@ const Calendario = () => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleMarcarAsistencia(turno.id, alumno.id, 'no_asistio');
+              handleMarcarAsistencia(turnoRefId, alumno.id, 'no_asistio');
             }}
             className={`min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 sm:p-0.5 rounded transition-colors flex items-center justify-center touch-manipulation ${
               estadoAsistencia === 'no_asistio'
@@ -1971,10 +2040,10 @@ const Calendario = () => {
                   <h3 className="text-sm font-semibold text-gray-600 mb-2">Mañana ({labelManana})</h3>
                   <div className="space-y-3">
                     {horariosManana.map((hora) => {
-                      const turno = getTurnoDelDia(diaIndex, hora);
-                      const alumnosTurno = getAlumnosDelTurno(turno);
+                      const turno = getTurnoRepresentativoDelSlot(diaIndex, hora);
+                      const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
-                      const cupo = turno?.cupo ?? CUPO_DEFAULT;
+                      const cupo = cupoDelSlot(diaIndex, hora);
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
@@ -2058,10 +2127,10 @@ const Calendario = () => {
                   <h3 className="text-sm font-semibold text-gray-600 mb-2">Tarde ({labelTarde})</h3>
                   <div className="space-y-3">
                     {horariosTarde.map((hora) => {
-                      const turno = getTurnoDelDia(diaIndex, hora);
-                      const alumnosTurno = getAlumnosDelTurno(turno);
+                      const turno = getTurnoRepresentativoDelSlot(diaIndex, hora);
+                      const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
-                      const cupo = turno?.cupo ?? CUPO_DEFAULT;
+                      const cupo = cupoDelSlot(diaIndex, hora);
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
@@ -2242,10 +2311,10 @@ const Calendario = () => {
                     </div>
                     {diasSemana.map((diaIndex) => {
                       const fechaCol = getFechaFromSemanaYDia(semanaVista, diaIndex);
-                      const turno = getTurnoDelDia(diaIndex, hora);
-                      const alumnosTurno = getAlumnosDelTurno(turno);
+                      const turno = getTurnoRepresentativoDelSlot(diaIndex, hora);
+                      const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
-                      const cupo = turno?.cupo ?? CUPO_DEFAULT;
+                      const cupo = cupoDelSlot(diaIndex, hora);
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
@@ -2298,7 +2367,6 @@ const Calendario = () => {
                             </div>
                           )}
                           {(() => {
-                            const cupo = turno?.cupo ?? CUPO_DEFAULT;
                             const lleno = ocupacionTurno >= cupo;
                             return (
                               <button
@@ -2328,10 +2396,10 @@ const Calendario = () => {
                     </div>
                     {diasSemana.map((diaIndex) => {
                       const fechaCol = getFechaFromSemanaYDia(semanaVista, diaIndex);
-                      const turno = getTurnoDelDia(diaIndex, hora);
-                      const alumnosTurno = getAlumnosDelTurno(turno);
+                      const turno = getTurnoRepresentativoDelSlot(diaIndex, hora);
+                      const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
-                      const cupo = turno?.cupo ?? CUPO_DEFAULT;
+                      const cupo = cupoDelSlot(diaIndex, hora);
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
@@ -2384,7 +2452,6 @@ const Calendario = () => {
                             </div>
                           )}
                           {(() => {
-                            const cupo = turno?.cupo ?? CUPO_DEFAULT;
                             const lleno = ocupacionTurno >= cupo;
                             return (
                               <button
@@ -2886,9 +2953,17 @@ const Calendario = () => {
                 >
                   <option value="">Seleccionar alumno</option>
                   {alumnosFiltrados.map((alumno) => {
-                    const turno = getTurnoDelDia(turnoSeleccionado.diaSemana, turnoSeleccionado.hora);
-                    const yaEnTurno = getAlumnosDelTurno(turno).some(a => a.alumno.id === alumno.id);
-                    const yaRecuperacion = recuperaciones.some(r => r.turnoId === turno?.id && r.alumnoId === alumno.id);
+                    const sel = turnoSeleccionado;
+                    const yaEnTurno = sel
+                      ? getAlumnosDelSlot(sel.diaSemana, sel.hora).some((a) => a.alumno.id === alumno.id)
+                      : false;
+                    const slotIds = sel ? getTurnosDelSlot(sel.diaSemana, sel.hora).map((t) => t.id) : [];
+                    const yaRecuperacion = recuperaciones.some(
+                      (r) =>
+                        r.alumnoId === alumno.id &&
+                        r.semana === semanaVista &&
+                        slotIds.includes(r.turnoId)
+                    );
                     const yaAsignado = yaEnTurno || yaRecuperacion;
                     return (
                       <option

@@ -2991,13 +2991,15 @@ async function computePortalPackWeek(db, alumno, semanaW, turnoRows) {
 
 /**
  * Saldo de clases del plan no usadas en semanas anteriores a semanaVista (arrastre al inicio de esa semana).
- * Solo cuenta semanas desde la primera actividad del alumno (inscripción, recuperación o alta).
+ * Solo cuenta desde la semana que contiene hoy en adelante (sin arrastre retroactivo de semanas pasadas)
+ * y desde la primera actividad del alumno (inscripción, recuperación o alta), la que sea más reciente.
  * Persiste en alumnos.actividad_arrastre_* para no recalcular todo en cada request.
  */
 async function syncActividadArrastrePack(db, alumno, semanaVista, turnoRows, clasesPorSemana) {
   if (clasesPorSemana == null || !/^\d{4}-\d{2}$/.test(String(semanaVista).trim())) return 0;
   const sv = String(semanaVista).trim();
   const target = semanaPortalAnterior(sv);
+  const semanaHoy = normalizarSemanaPortal(getSemanaActual());
   const { rows } = await db.query(
     'SELECT actividad_arrastre_saldo, actividad_arrastre_procesado_hasta FROM alumnos WHERE id = $1',
     [alumno.id]
@@ -3013,9 +3015,16 @@ async function syncActividadArrastrePack(db, alumno, semanaVista, turnoRows, cla
     : null;
 
   const wStart = goBackSemanasPortal(target, 104);
-  const wInit = !primeraN ? semanaPortalSiguiente(target) : semanaPortalLater(wStart, primeraN);
+  let wInit;
+  if (!primeraN) {
+    wInit = semanaPortalSiguiente(target);
+  } else {
+    wInit = semanaPortalLater(wStart, primeraN);
+    wInit = semanaPortalLater(wInit, semanaHoy);
+  }
 
-  const maxWeeksSpan = primeraN ? countSemanasPortalInclusive(wInit, target) : 0;
+  const maxWeeksSpan =
+    compareSemanaPortal(wInit, target) <= 0 ? countSemanasPortalInclusive(wInit, target) : 0;
   if (proc && primeraN && saldo > maxWeeksSpan * base + 1) {
     proc = null;
   }
@@ -3039,7 +3048,8 @@ async function syncActividadArrastrePack(db, alumno, semanaVista, turnoRows, cla
   } else {
     let w = semanaPortalSiguiente(proc);
     while (compareSemanaPortal(w, target) <= 0) {
-      if (!primeraN || compareSemanaPortal(w, primeraN) >= 0) {
+      const desdeHoy = compareSemanaPortal(w, semanaHoy) >= 0;
+      if (desdeHoy && (!primeraN || compareSemanaPortal(w, primeraN) >= 0)) {
         const week = await computePortalPackWeek(db, alumno, w, turnoRows);
         const used = week.clasesFijasSemana + week.recuperacionesSemana.length;
         saldo = Math.max(0, saldo + base - used);

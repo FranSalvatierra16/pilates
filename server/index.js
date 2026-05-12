@@ -1260,31 +1260,6 @@ app.delete('/api/turnos/:id', async (req, res) => {
   }
 });
 
-app.post('/api/turnos/ajustar-cupo', async (req, res) => {
-  try {
-    const db = await getPool();
-    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const sid = req.user.sucursalId;
-    const semana = (req.body?.semana || '').toString().trim() || getSemanaActual();
-    const { rows } = await db.query('SELECT id FROM turnos WHERE sucursal_id = $1', [sid]);
-    let turnosActualizados = 0;
-    let alumnosEliminados = 0;
-    let recuperacionesEliminadas = 0;
-    for (const r of rows) {
-      const det = await reducirExcesoCupoTurnoSemana(db, r.id, semana, sid);
-      if (det.recuperacionesEliminadas > 0 || det.fijosEliminados > 0) {
-        turnosActualizados++;
-        recuperacionesEliminadas += det.recuperacionesEliminadas;
-        alumnosEliminados += det.fijosEliminados;
-      }
-    }
-    res.json({ ok: true, turnosActualizados, alumnosEliminados, recuperacionesEliminadas });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
 app.get('/api/turnos/by-dia/:diaSemana', async (req, res) => {
   try {
     const db = await getPool();
@@ -2947,68 +2922,6 @@ async function ocupacionEfectivaTurnoSemana(db, turnoId, semana, sucursalId, exc
     if (validAlumnoSet.has(aid)) ocupados.add(aid);
   }
   return { ocupacion: ocupados.size, cupo };
-}
-
-/**
- * Baja la ocupación efectiva de un turno en una semana hasta que entre en el cupo del turno.
- * Orden: primero borra recuperaciones (las más recientes primero; devuelve crédito si usaba_credito),
- * después saca alumnos fijos del array (los que esta semana ocupan cupo, desde el final del array).
- */
-async function reducirExcesoCupoTurnoSemana(db, turnoId, semana, sucursalId) {
-  let recuperacionesEliminadas = 0;
-  let fijosEliminados = 0;
-  for (let iter = 0; iter < 200; iter++) {
-    const occ = await ocupacionEfectivaTurnoSemana(db, turnoId, semana, sucursalId);
-    if (!occ || occ.ocupacion <= occ.cupo) break;
-
-    const { rows: lastRec } = await db.query(
-      `SELECT r.id, r.alumno_id, r.usa_credito
-         FROM recuperaciones r
-         JOIN turnos t ON r.turno_id = t.id AND t.sucursal_id = $1
-        WHERE r.turno_id = $2 AND r.semana = $3
-        ORDER BY r.created_at DESC NULLS LAST, r.id DESC
-        LIMIT 1`,
-      [sucursalId, turnoId, semana]
-    );
-    if (lastRec.length > 0) {
-      const { id, alumno_id, usa_credito } = lastRec[0];
-      await db.query('DELETE FROM recuperaciones WHERE id = $1', [id]);
-      if (usa_credito) {
-        await db.query(
-          'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
-          [alumno_id, sucursalId]
-        );
-      }
-      recuperacionesEliminadas++;
-      continue;
-    }
-
-    const { rows: trows } = await db.query('SELECT alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, sucursalId]);
-    const ids = (trows[0]?.alumno_ids || []).map((id) => String(id));
-    if (ids.length === 0) break;
-
-    const { rows: libRows2 } = await db.query(
-      'SELECT alumno_id FROM liberaciones_semana WHERE turno_id = $1 AND semana = $2',
-      [turnoId, semana]
-    );
-    const libSet = new Set(libRows2.map((r) => String(r.alumno_id)));
-    let victim = null;
-    for (let i = ids.length - 1; i >= 0; i--) {
-      const aid = ids[i];
-      if (!libSet.has(aid)) {
-        victim = aid;
-        break;
-      }
-    }
-    if (!victim) {
-      victim = ids[ids.length - 1];
-    }
-    const nuevosIds = ids.filter((id) => id !== victim);
-    await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [nuevosIds, turnoId, sucursalId]);
-    await db.query('DELETE FROM inscripciones_turno WHERE turno_id = $1 AND alumno_id = $2', [turnoId, victim]);
-    fijosEliminados++;
-  }
-  return { recuperacionesEliminadas, fijosEliminados };
 }
 
 /**

@@ -318,26 +318,6 @@ export const storageHybrid = {
       if (b) return await b.turnos.getByAlumnoId(alumnoId);
       return storage.turnos.getByAlumnoId(alumnoId);
     },
-    ajustarCupo: async (semana?: string): Promise<{
-      turnosActualizados: number;
-      alumnosEliminados: number;
-      recuperacionesEliminadas?: number;
-    }> => {
-      if (useApi()) return await storageApi.turnos.ajustarCupo(semana);
-      const todos = storage.turnos.getAll();
-      let turnosActualizados = 0;
-      let alumnosEliminados = 0;
-      const def = 6;
-      for (const t of todos) {
-        const max = (t as Turno & { cupo?: number }).cupo ?? def;
-        if (t.alumnoIds.length > max) {
-          storage.turnos.update(t.id, { alumnoIds: t.alumnoIds.slice(0, max) });
-          turnosActualizados++;
-          alumnosEliminados += t.alumnoIds.length - max;
-        }
-      }
-      return { turnosActualizados, alumnosEliminados };
-    },
   },
 
   profesores: {

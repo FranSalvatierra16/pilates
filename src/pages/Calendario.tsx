@@ -994,7 +994,7 @@ const Calendario = () => {
       } else {
         if (turnosEnSlot.length > 0) {
           if (totalEnTurno >= cupo) {
-            toast.warning('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (titulo/profesor) o desde "Aumentar cupo".');
+            toast.warning('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (título/profesor) o desde «Editar cupo» abajo del calendario.');
             return;
           }
           const destino = turnoDestinoFijo;
@@ -1431,6 +1431,7 @@ const Calendario = () => {
       }
       await loadTurnos();
       setShowModalAumentarCupo(false);
+      toast.success(`Cupo de todas las clases actualizado a ${valor}.`);
     } catch (e) {
       console.error(e);
       toast.error('Error al actualizar el cupo. Reintentá.');
@@ -2475,36 +2476,8 @@ const Calendario = () => {
         </>
       )}
 
-      {/* Botones cupo - abajo del calendario */}
+      {/* Botón cupo global - solo cambia el número en cada turno (no toca anotaciones ni recuperaciones) */}
       <div className="mt-4 sm:mt-6 flex flex-wrap justify-end gap-2 sm:gap-3">
-        <button
-          type="button"
-          onClick={async () => {
-            const ok = await toast.confirm(
-              `¿Ajustar la semana ${semanaVista} al cupo de cada turno? Si hay exceso, primero se quitan recuperaciones (las últimas anotadas) y después alumnos fijos. Quienes liberaron con «Lib.» no cuentan contra el cupo.`,
-              { title: 'Ajustar cupos', confirmText: 'Recortar' }
-            );
-            if (!ok) return;
-            try {
-              const { turnosActualizados, alumnosEliminados, recuperacionesEliminadas } =
-                await storageHybrid.turnos.ajustarCupo(semanaVista);
-              await Promise.all([loadTurnos(), loadRecuperaciones(), loadInscripciones(), loadLiberacionesSemana()]);
-              const recN = recuperacionesEliminadas ?? 0;
-              let msg = `Listo: ${turnosActualizados} turno(s) ajustado(s).`;
-              if (recN > 0) msg += ` ${recN} recuperación(es) quitada(s).`;
-              if (alumnosEliminados > 0) msg += ` ${alumnosEliminados} alumno(s) fijo(s) quitado(s) del turno.`;
-              else if (recN === 0 && turnosActualizados > 0) msg += ' Sin bajas de fijos.';
-              toast.success(turnosActualizados === 0 ? 'Todas las clases ya respetan el cupo para esta semana.' : msg);
-            } catch (e) {
-              console.error(e);
-              toast.error('Error al ajustar. Reintentá.');
-            }
-          }}
-          className="btn-secondary flex items-center justify-center gap-2 min-h-[44px] flex-1 sm:flex-initial"
-        >
-          <Users className="w-5 h-5" />
-          Recortar al cupo
-        </button>
         <button
           type="button"
           onClick={() => {
@@ -2517,7 +2490,7 @@ const Calendario = () => {
           className="btn-primary flex items-center justify-center gap-2 min-h-[44px] flex-1 sm:flex-initial"
         >
           <Users className="w-5 h-5" />
-          Aumentar cupo
+          Editar cupo
         </button>
       </div>
 
@@ -3251,13 +3224,13 @@ const Calendario = () => {
         </div>
       )}
 
-      {/* Modal Aumentar cupo */}
+      {/* Modal editar cupo global (solo el límite numérico por turno) */}
       {showModalAumentarCupo && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-sm w-full p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Aumentar cupo</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Editar cupo</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Establecé el cupo (máx. alumnos) para todas las clases. Las que ya existan se actualizarán.
+              Cambiá el cupo máximo (cantidad de lugares) para <strong>todas</strong> las clases de la grilla, por ejemplo de 6 a 8 o de 8 a 6. No se modifican anotaciones, recuperaciones ni liberaciones: solo el número de cupo de cada turno.
             </p>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Cupo por clase</label>
@@ -3283,7 +3256,7 @@ const Calendario = () => {
                 Cancelar
               </button>
               <button type="button" onClick={handleAumentarCupo} className="btn-primary">
-                Aplicar a todas las clases
+                Guardar en todas las clases
               </button>
             </div>
           </div>

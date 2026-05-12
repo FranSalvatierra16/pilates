@@ -1281,10 +1281,12 @@ const Calendario = () => {
     setTurnoDestino(null);
   };
 
-  // Cerrar popup al hacer click fuera
+  // Cerrar popup al hacer click fuera (no si el clic es en otro modal del calendario)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement;
+      if (target.closest?.('[data-calendario-dialog]')) return;
+      if (popupRef.current && !popupRef.current.contains(target)) {
         setShowPopupAlumno(null);
         setShowMoverAlumno(false);
       }
@@ -2481,6 +2483,8 @@ const Calendario = () => {
         <button
           type="button"
           onClick={() => {
+            setShowPopupAlumno(null);
+            setShowMoverAlumno(false);
             const cupos = turnos.map((t) => t.cupo ?? CUPO_DEFAULT);
             const sugerencia = cupos.length ? Math.min(...cupos) : CUPO_DEFAULT;
             setCupoGlobal(sugerencia);
@@ -2563,7 +2567,10 @@ const Calendario = () => {
       </div>
 
       {showModalReporte && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          data-calendario-dialog
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
               <div>
@@ -2726,6 +2733,7 @@ const Calendario = () => {
       {modalCierreHorasFecha && (
         <div
           className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-4"
+          data-calendario-dialog
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-cierre-horas-titulo"
@@ -2786,6 +2794,7 @@ const Calendario = () => {
       {modalNotaFecha && (
         <div
           className="fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] sm:flex sm:items-center sm:justify-center sm:p-6"
+          data-calendario-dialog
           aria-hidden={false}
         >
           <div
@@ -2884,7 +2893,10 @@ const Calendario = () => {
       )}
 
       {showModal && turnoSeleccionado && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          data-calendario-dialog
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
@@ -3001,7 +3013,10 @@ const Calendario = () => {
 
       {/* Modal Horarios */}
       {showModalHorarios && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          data-calendario-dialog
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Horarios</h2>
@@ -3121,7 +3136,10 @@ const Calendario = () => {
 
       {/* Modal para editar título y profesor del turno */}
       {showModalEditarTurno && turnoParaEditar && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          data-calendario-dialog
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900">
@@ -3226,7 +3244,10 @@ const Calendario = () => {
 
       {/* Modal editar cupo global (solo el límite numérico por turno) */}
       {showModalAumentarCupo && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          data-calendario-dialog
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-sm w-full p-4 sm:p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Editar cupo</h2>
             <p className="text-sm text-gray-600 mb-4">
@@ -3264,7 +3285,10 @@ const Calendario = () => {
       )}
 
       {showModalCompartirDisponibles && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4"
+          data-calendario-dialog
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
               <div>
@@ -3425,7 +3449,7 @@ const Calendario = () => {
       {showPopupAlumno && (
         <div
           ref={popupRef}
-          className="fixed bg-white shadow-xl border border-gray-200 p-4 z-50 min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md rounded-xl sm:rounded-lg"
+          className="fixed bg-white shadow-xl border border-gray-200 p-4 z-40 min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md rounded-xl sm:rounded-lg"
           style={{
             left: window.innerWidth < 640
               ? '1rem'

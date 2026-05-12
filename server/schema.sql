@@ -72,6 +72,9 @@ ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS clases_para_recuperar INTEGER DEFAULT 0;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS a_prueba BOOLEAN NOT NULL DEFAULT false;
+-- Arrastre de cupo del plan (clases_por_semana): lo no usado en semanas pasadas suma al tope de la semana vista (portal).
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS actividad_arrastre_saldo INTEGER DEFAULT 0;
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS actividad_arrastre_procesado_hasta TEXT;
 
 -- Pagos
 CREATE TABLE IF NOT EXISTS pagos (

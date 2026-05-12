@@ -2690,6 +2690,44 @@ function getSemanaActual() {
   return `${año}-${String(semana).padStart(2, '0')}`;
 }
 
+/** Semana ISO portal YYYY-WW (misma convención que getSemanaActual). */
+function semanaPortalAnterior(s) {
+  const [y, w] = String(s || '')
+    .split('-')
+    .map((x) => Number(x));
+  if (!y || Number.isNaN(w)) return s;
+  if (w <= 1) return `${y - 1}-52`;
+  return `${y}-${String(w - 1).padStart(2, '0')}`;
+}
+
+function semanaPortalSiguiente(s) {
+  const [y, w] = String(s || '')
+    .split('-')
+    .map((x) => Number(x));
+  if (!y || Number.isNaN(w)) return s;
+  if (w >= 52) return `${y + 1}-01`;
+  return `${y}-${String(w + 1).padStart(2, '0')}`;
+}
+
+function compareSemanaPortal(a, b) {
+  const [ya, wa] = String(a).split('-').map(Number);
+  const [yb, wb] = String(b).split('-').map(Number);
+  if (ya !== yb) return ya < yb ? -1 : ya > yb ? 1 : 0;
+  if (wa !== wb) return wa < wb ? -1 : wa > wb ? 1 : 0;
+  return 0;
+}
+
+function goBackSemanasPortal(s, n) {
+  let cur = s;
+  for (let i = 0; i < n; i++) cur = semanaPortalAnterior(cur);
+  return cur;
+}
+
+async function invalidateActividadArrastrePortal(db, alumnoId) {
+  if (!alumnoId) return;
+  await db.query('UPDATE alumnos SET actividad_arrastre_procesado_hasta = NULL WHERE id = $1', [alumnoId]);
+}
+
 function getFechaFromSemanaYDia(semana, diaSemana) {
   const [y, w] = String(semana || '').split('-').map(Number);
   if (!y || !w || Number.isNaN(Number(diaSemana))) return '';
@@ -2929,19 +2967,7 @@ function ocupacionEfectivaMemoria(turno, semana, insDesdePorTurnoAlumno, libRows
   return ocupados.size;
 }
 
-async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) {
-  const actividadId = alumno.actividad_id || null;
-  let clasesPorSemana = null;
-  if (actividadId) {
-    const { rows: actividadRows } = await db.query(
-      'SELECT clases_por_semana FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
-      [actividadId, alumno.sucursal_id]
-    );
-    if (actividadRows.length > 0 && actividadRows[0].clases_por_semana != null) {
-      clasesPorSemana = Number(actividadRows[0].clases_por_semana);
-    }
-  }
-
+async function computePortalPackWeek(db, alumno, semanaW, turnoRows) {
   const { rows: insRows } = await db.query(
     'SELECT turno_id, alumno_id, semana_desde FROM inscripciones_turno WHERE alumno_id = $1',
     [alumno.id]
@@ -2957,30 +2983,99 @@ async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) 
   );
   const consumedLiberacionCount = libCreditUseRows.length;
   const outstandingLiberacionIds = new Set(allLibRows.slice(consumedLiberacionCount).map((r) => r.id));
-  const libRows = allLibRows.filter((r) => r.semana === semanaVista);
+  const libRows = allLibRows.filter((r) => r.semana === semanaW);
   const outstandingLibRows = libRows.filter((r) => outstandingLiberacionIds.has(r.id));
   const libByTurno = new Map(outstandingLibRows.map((r) => [r.turno_id, r]));
   const candidatosClasesFijas = turnoRows.filter((t) => {
     const ids = t.alumno_ids || [];
     if (!ids.includes(alumno.id)) return false;
     const ins = insByTurno.get(t.id);
-    return (!ins || ins.semana_desde <= semanaVista) && !libByTurno.has(t.id);
+    return (!ins || ins.semana_desde <= semanaW) && !libByTurno.has(t.id);
   });
   const clasesFijasSemana = dedupeTurnosPorFranjaHoraria(candidatosClasesFijas).length;
-
   const { rows: recRows } = await db.query(
     'SELECT id, turno_id, usa_credito, origen_credito FROM recuperaciones WHERE alumno_id = $1 AND semana = $2',
-    [alumno.id, semanaVista]
+    [alumno.id, semanaW]
   );
-
   return {
-    clasesPorSemana,
     clasesFijasSemana,
     recuperacionesSemana: recRows,
     liberacionesSemana: libRows,
     liberacionesPendientesSemana: outstandingLibRows,
     liberacionesPendientesTotales: outstandingLiberacionIds.size,
     inscripcionesByTurno: insByTurno,
+  };
+}
+
+/**
+ * Saldo de clases del plan no usadas en semanas anteriores a semanaVista (arrastre al inicio de esa semana).
+ * Persiste en alumnos.actividad_arrastre_* para no recalcular todo en cada request.
+ */
+async function syncActividadArrastrePack(db, alumno, semanaVista, turnoRows, clasesPorSemana) {
+  if (clasesPorSemana == null || !/^\d{4}-\d{2}$/.test(String(semanaVista).trim())) return 0;
+  const sv = String(semanaVista).trim();
+  const target = semanaPortalAnterior(sv);
+  const { rows } = await db.query(
+    'SELECT actividad_arrastre_saldo, actividad_arrastre_procesado_hasta FROM alumnos WHERE id = $1',
+    [alumno.id]
+  );
+  if (!rows.length) return 0;
+  const base = clasesPorSemana;
+  let saldo = Math.max(0, Number(rows[0].actividad_arrastre_saldo ?? 0));
+  let proc = rows[0].actividad_arrastre_procesado_hasta;
+
+  if (proc && compareSemanaPortal(proc, target) > 0) {
+    proc = null;
+  }
+  if (!proc) {
+    const wStart = goBackSemanasPortal(target, 104);
+    saldo = 0;
+    let w = wStart;
+    while (compareSemanaPortal(w, target) <= 0) {
+      const week = await computePortalPackWeek(db, alumno, w, turnoRows);
+      const used = week.clasesFijasSemana + week.recuperacionesSemana.length;
+      saldo = Math.max(0, saldo + base - used);
+      w = semanaPortalSiguiente(w);
+    }
+    proc = target;
+  } else {
+    let w = semanaPortalSiguiente(proc);
+    while (compareSemanaPortal(w, target) <= 0) {
+      const week = await computePortalPackWeek(db, alumno, w, turnoRows);
+      const used = week.clasesFijasSemana + week.recuperacionesSemana.length;
+      saldo = Math.max(0, saldo + base - used);
+      proc = w;
+      w = semanaPortalSiguiente(w);
+    }
+  }
+  await db.query(
+    'UPDATE alumnos SET actividad_arrastre_saldo = $1, actividad_arrastre_procesado_hasta = $2 WHERE id = $3',
+    [saldo, proc, alumno.id]
+  );
+  return saldo;
+}
+
+async function getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows) {
+  const actividadId = alumno.actividad_id || null;
+  let clasesPorSemana = null;
+  if (actividadId) {
+    const { rows: actividadRows } = await db.query(
+      'SELECT clases_por_semana FROM actividades WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
+      [actividadId, alumno.sucursal_id]
+    );
+    if (actividadRows.length > 0 && actividadRows[0].clases_por_semana != null) {
+      clasesPorSemana = Number(actividadRows[0].clases_por_semana);
+    }
+  }
+  const pack = await computePortalPackWeek(db, alumno, semanaVista, turnoRows);
+  return {
+    clasesPorSemana,
+    clasesFijasSemana: pack.clasesFijasSemana,
+    recuperacionesSemana: pack.recuperacionesSemana,
+    liberacionesSemana: pack.liberacionesSemana,
+    liberacionesPendientesSemana: pack.liberacionesPendientesSemana,
+    liberacionesPendientesTotales: pack.liberacionesPendientesTotales,
+    inscripcionesByTurno: pack.inscripcionesByTurno,
     clasesParaRecuperar: Math.max(0, Number(alumno.clases_para_recuperar ?? 0)),
   };
 }
@@ -3155,6 +3250,11 @@ app.get('/api/alumno-portal', async (req, res) => {
     let recuperacionStats = null;
     if (esRecuperar && semanaVista) {
       const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, turnoRows);
+      const arrastrePack =
+        ctx.clasesPorSemana != null
+          ? await syncActividadArrastrePack(db, alumno, semanaVista, turnoRows, ctx.clasesPorSemana)
+          : 0;
+      const cupoPackSemana = ctx.clasesPorSemana != null ? ctx.clasesPorSemana + arrastrePack : null;
       const recRows = ctx.recuperacionesSemana;
       const turnoIdsAll = turnoRows.map((row) => row.id);
       const { rows: libAll } = await db.query(
@@ -3209,6 +3309,8 @@ app.get('/api/alumno-portal', async (req, res) => {
       const clasesUsadasSemana = ctx.clasesFijasSemana + recRows.length;
       recuperacionStats = {
         clasesPorSemana: ctx.clasesPorSemana,
+        actividadArrastrePack: arrastrePack,
+        cupoPackSemana,
         clasesFijasSemana: ctx.clasesFijasSemana,
         recuperacionesSemana: recRows.length,
         clasesUsadasSemana,
@@ -3216,7 +3318,7 @@ app.get('/api/alumno-portal', async (req, res) => {
         clasesDisponiblesSemana:
           ctx.clasesPorSemana == null
             ? null
-            : Math.max(0, ctx.clasesPorSemana + ctx.clasesParaRecuperar - clasesUsadasSemana),
+            : Math.max(0, (ctx.clasesPorSemana + arrastrePack) + ctx.clasesParaRecuperar - clasesUsadasSemana),
       };
     } else {
       const semanaActual = getSemanaActual();
@@ -3339,13 +3441,21 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: turnoRows[0] });
     await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semanaVista, turnoRows[0]);
-    const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [alumno.sucursal_id]);
+    const { rows: allTurnoRows } = await db.query(
+      'SELECT id, alumno_ids, dia_semana, hora, titulo FROM turnos WHERE sucursal_id = $1',
+      [alumno.sucursal_id]
+    );
     const { rows: exist } = await db.query(
       'SELECT id FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3',
       [alumno.id, turnoId, semanaVista]
     );
     if (exist.length > 0) return res.json({ ok: true, message: 'Ya estás anotado para recuperar esta semana' });
     const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
+    const arrastrePack =
+      ctx.clasesPorSemana != null
+        ? await syncActividadArrastrePack(db, alumno, semanaVista, allTurnoRows, ctx.clasesPorSemana)
+        : 0;
+    const cupoPackSemana = ctx.clasesPorSemana != null ? ctx.clasesPorSemana + arrastrePack : null;
     const liberacionPropia = ctx.liberacionesSemana.find((l) => l.turno_id === turnoId);
     const insPropia = ctx.inscripcionesByTurno.get(turnoId);
     const esClaseFijaPropia = (turnoRows[0].alumno_ids || []).includes(alumno.id) && (!insPropia || insPropia.semana_desde <= semanaVista);
@@ -3358,7 +3468,7 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
       return res.status(400).json({ error: 'No hay cupo para recuperar esta semana' });
     }
     const clasesUsadasSemana = ctx.clasesFijasSemana + ctx.recuperacionesSemana.length;
-    const excedeBase = ctx.clasesPorSemana != null && clasesUsadasSemana >= ctx.clasesPorSemana;
+    const excedeBase = cupoPackSemana != null && clasesUsadasSemana >= cupoPackSemana;
     const debeConsumirCreditoPorLiberacion = ctx.liberacionesPendientesTotales > 0 && ctx.clasesParaRecuperar > 0;
     if (excedeBase && ctx.clasesParaRecuperar <= 0) {
       return res.status(400).json({ error: 'No te quedan clases para recuperar disponibles.' });
@@ -3376,6 +3486,7 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
         [alumno.id, alumno.sucursal_id]
       );
     }
+    await invalidateActividadArrastrePortal(db, alumno.id);
     await db.query(
       'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
       [crypto.randomUUID(), alumno.sucursal_id, 'inscribio', alumno.id, turnoId]
@@ -3456,6 +3567,7 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
         [alumno.id, alumno.sucursal_id]
       );
     }
+    await invalidateActividadArrastrePortal(db, alumno.id);
     if (turnoIdParaPush) {
       await db.query(
         'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
@@ -3551,6 +3663,7 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
         ? `/mi-clase?token=${encodeURIComponent(sub.link_token)}&modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(semanaVista)}&promptTomar=1`
         : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(semanaVista)}&promptTomar=1`,
     }), { excludeAlumnoId: alumno.id });
+    await invalidateActividadArrastrePortal(db, alumno.id);
     res.json({ ok: true, liberacionId: id });
   } catch (e) {
     console.error(e);
@@ -3572,21 +3685,34 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
     const alumno = resolved.alumno;
     let semanaVista = (semana || '').toString().trim() || getSemanaActual();
     const turnoIdTarget = (turnoId || '').toString().trim();
-    const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [alumno.sucursal_id]);
+    const liberacionIdTrim = (liberacionId || '').toString().trim();
+    let turnoIdDesdeLiberacion = '';
+    if (liberacionIdTrim) {
+      const { rows: libRowPre } = await db.query(
+        'SELECT turno_id, semana FROM liberaciones_semana WHERE id = $1 AND alumno_id = $2',
+        [liberacionIdTrim, alumno.id]
+      );
+      if (libRowPre.length === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
+      turnoIdDesdeLiberacion = libRowPre[0].turno_id;
+      if (libRowPre[0].semana) semanaVista = libRowPre[0].semana;
+    }
+    const { rows: allTurnoRows } = await db.query(
+      'SELECT id, alumno_ids, dia_semana, hora, titulo FROM turnos WHERE sucursal_id = $1',
+      [alumno.sucursal_id]
+    );
     const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
+    const arrastrePack =
+      ctx.clasesPorSemana != null
+        ? await syncActividadArrastrePack(db, alumno, semanaVista, allTurnoRows, ctx.clasesPorSemana)
+        : 0;
+    const cupoPackSemana = ctx.clasesPorSemana != null ? ctx.clasesPorSemana + arrastrePack : null;
     const recuperacionesConCreditoPorLiberacion = ctx.recuperacionesSemana.filter((r) => r.origen_credito === 'liberacion').length;
     const hayCreditoDeLiberacionSinUsar = ctx.liberacionesSemana.length > recuperacionesConCreditoPorLiberacion;
     let rowCount = 0;
     let turnoIdRestaurado = '';
-    if (liberacionId) {
-      const { rows: libRow } = await db.query(
-        'SELECT turno_id, semana FROM liberaciones_semana WHERE id = $1 AND alumno_id = $2',
-        [liberacionId, alumno.id]
-      );
-      if (libRow.length === 0) return res.status(404).json({ error: 'Liberación no encontrada' });
-      turnoIdRestaurado = libRow[0].turno_id;
-      if (libRow[0].semana) semanaVista = libRow[0].semana;
-      if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
+    if (liberacionIdTrim) {
+      turnoIdRestaurado = turnoIdDesdeLiberacion;
+      if (cupoPackSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > cupoPackSemana) {
         return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
       }
       const { rows: turnoRows } = await db.query(
@@ -3596,18 +3722,18 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
       if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
       const t = turnoRows[0];
       await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: t });
-      const oCup = await ocupacionEfectivaTurnoSemana(db, turnoIdRestaurado, semanaVista, alumno.sucursal_id, [liberacionId]);
+      const oCup = await ocupacionEfectivaTurnoSemana(db, turnoIdRestaurado, semanaVista, alumno.sucursal_id, [liberacionIdTrim]);
       if (!oCup) return res.status(404).json({ error: 'Turno no encontrado' });
       if (oCup.ocupacion > oCup.cupo) {
         return res.status(400).json({ error: 'No se puede volver a tomar la clase porque ya no hay cupo.' });
       }
       ({ rowCount } = await db.query(
         'DELETE FROM liberaciones_semana WHERE id = $1 AND alumno_id = $2',
-        [liberacionId, alumno.id]
+        [liberacionIdTrim, alumno.id]
       ));
     } else if (turnoIdTarget) {
       turnoIdRestaurado = turnoIdTarget;
-      if (ctx.clasesPorSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > ctx.clasesPorSemana) {
+      if (cupoPackSemana != null && ctx.clasesFijasSemana + ctx.recuperacionesSemana.length + 1 > cupoPackSemana) {
         return res.status(400).json({ error: 'Ya usaste esa clase semanal con otra reserva. Liberá primero la otra clase para volver a tomar esta.' });
       }
       const { rows: turnoRows } = await db.query(
@@ -3641,6 +3767,7 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
         [alumno.id, alumno.sucursal_id]
       );
     }
+    await invalidateActividadArrastrePortal(db, alumno.id);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -3673,8 +3800,13 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
     if (ids.length >= cupo) return res.status(400).json({ error: 'No hay cupo disponible' });
     const clasesPorSemana = await getActividadClasesPorSemana(db, alumno);
     if (clasesPorSemana != null) {
+      const { rows: allTurnoRowsInscr } = await db.query(
+        'SELECT id, alumno_ids, dia_semana, hora, titulo FROM turnos WHERE sucursal_id = $1',
+        [alumno.sucursal_id]
+      );
+      const arrastre = await syncActividadArrastrePack(db, alumno, semanaActual, allTurnoRowsInscr, clasesPorSemana);
       const clasesFijasActivas = await getClasesFijasActivasSemana(db, alumno, semanaActual);
-      if (clasesFijasActivas >= clasesPorSemana) {
+      if (clasesFijasActivas >= clasesPorSemana + arrastre) {
         return res.status(400).json({ error: `Este alumno tiene un plan de ${clasesPorSemana} ${clasesPorSemana === 1 ? 'clase' : 'clases'} por semana y ya alcanzó ese límite.` });
       }
     }
@@ -3701,6 +3833,7 @@ app.post('/api/alumno-portal/inscribir', async (req, res) => {
         body: `${nombre} se anotó en ${turno}`,
       });
     }
+    await invalidateActividadArrastrePortal(db, alumno.id);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -3750,6 +3883,7 @@ app.post('/api/alumno-portal/liberar', async (req, res) => {
           : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(getSemanaActual())}&promptTomar=1`,
       }), { excludeAlumnoId: alumno.id });
     }
+    await invalidateActividadArrastrePortal(db, alumno.id);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -4137,6 +4271,7 @@ app.post('/api/liberaciones-semana', async (req, res) => {
       'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
       [alumnoId, sid]
     );
+    await invalidateActividadArrastrePortal(db, alumnoId);
     res.status(201).json({ id, turnoId, alumnoId, semana, createdAt: new Date().toISOString() });
   } catch (e) {
     console.error(e);
@@ -4167,7 +4302,10 @@ app.delete('/api/liberaciones-semana/:id', async (req, res) => {
       clases_para_recuperar: lib.clases_para_recuperar,
     };
     const semanaVista = lib.semana;
-    const { rows: allTurnoRows } = await db.query('SELECT id, alumno_ids FROM turnos WHERE sucursal_id = $1', [sid]);
+    const { rows: allTurnoRows } = await db.query(
+      'SELECT id, alumno_ids, dia_semana, hora, titulo FROM turnos WHERE sucursal_id = $1',
+      [sid]
+    );
     const ctx = await getPortalRecuperacionContext(db, alumno, semanaVista, allTurnoRows);
     const recuperacionesConCreditoPorLiberacion = ctx.recuperacionesSemana.filter((r) => r.origen_credito === 'liberacion').length;
     const hayCreditoDeLiberacionSinUsar = ctx.liberacionesSemana.length > recuperacionesConCreditoPorLiberacion;
@@ -4185,6 +4323,7 @@ app.delete('/api/liberaciones-semana/:id', async (req, res) => {
         [alumno.id, sid]
       );
     }
+    await invalidateActividadArrastrePortal(db, alumno.id);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -4206,6 +4345,7 @@ app.post('/api/recuperaciones', async (req, res) => {
       'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, usa_credito, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
       [id, turnoId, alumnoId, semana, !!usaCredito]
     );
+    await invalidateActividadArrastrePortal(db, alumnoId);
     res.status(201).json({ id, turnoId, alumnoId, semana, usaCredito: !!usaCredito, createdAt: new Date().toISOString() });
   } catch (e) {
     console.error(e);
@@ -4218,11 +4358,12 @@ app.delete('/api/recuperaciones/:id', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
-    const { rowCount } = await db.query(
-      'DELETE FROM recuperaciones r USING turnos t WHERE r.turno_id = t.id AND t.sucursal_id = $1 AND r.id = $2',
+    const { rows: delRows } = await db.query(
+      'DELETE FROM recuperaciones r USING turnos t WHERE r.turno_id = t.id AND t.sucursal_id = $1 AND r.id = $2 RETURNING r.alumno_id AS alumno_id',
       [sid, req.params.id]
     );
-    if (rowCount === 0) return res.status(404).json({ error: 'Recuperación no encontrada' });
+    if (delRows.length === 0) return res.status(404).json({ error: 'Recuperación no encontrada' });
+    await invalidateActividadArrastrePortal(db, delRows[0].alumno_id);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -4235,10 +4376,19 @@ app.delete('/api/recuperaciones/by-semana/:semana', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
+    const { rows: affectedRows } = await db.query(
+      `SELECT DISTINCT r.alumno_id FROM recuperaciones r
+       JOIN turnos t ON r.turno_id = t.id AND t.sucursal_id = $1
+       WHERE r.semana = $2`,
+      [sid, req.params.semana]
+    );
     await db.query(
       'DELETE FROM recuperaciones r USING turnos t WHERE r.turno_id = t.id AND t.sucursal_id = $1 AND r.semana = $2',
       [sid, req.params.semana]
     );
+    for (const row of affectedRows) {
+      await invalidateActividadArrastrePortal(db, row.alumno_id);
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error(e);

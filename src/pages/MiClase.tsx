@@ -66,6 +66,8 @@ type PortalData = {
   semanaVista?: string;
   recuperacionStats?: {
     clasesPorSemana: number | null;
+    actividadArrastrePack?: number;
+    cupoPackSemana?: number | null;
     clasesFijasSemana: number;
     recuperacionesSemana: number;
     clasesUsadasSemana: number;
@@ -944,7 +946,22 @@ const MiClase = () => {
                     <p>
                       Usadas esta semana: <strong>{data.recuperacionStats.clasesUsadasSemana}</strong>
                       {data.recuperacionStats.clasesPorSemana != null && (
-                        <> / <strong>{data.recuperacionStats.clasesPorSemana}</strong> base</>
+                        <>
+                          {' '}
+                          /{' '}
+                          <strong>
+                            {data.recuperacionStats.cupoPackSemana ?? data.recuperacionStats.clasesPorSemana}
+                          </strong>{' '}
+                          del plan
+                          {typeof data.recuperacionStats.actividadArrastrePack === 'number' &&
+                            data.recuperacionStats.actividadArrastrePack > 0 && (
+                              <>
+                                {' '}
+                                ({data.recuperacionStats.clasesPorSemana} base +{' '}
+                                {data.recuperacionStats.actividadArrastrePack} arrastre)
+                              </>
+                            )}
+                        </>
                       )}
                       {data.recuperacionStats.clasesDisponiblesSemana != null && (
                         <> · disponibles esta semana: <strong>{data.recuperacionStats.clasesDisponiblesSemana}</strong></>

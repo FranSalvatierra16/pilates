@@ -2723,6 +2723,75 @@ function goBackSemanasPortal(s, n) {
   return cur;
 }
 
+/** Normaliza "2026-5" → "2026-05" para comparar con YYYY-WW. */
+function normalizarSemanaPortal(s) {
+  const raw = String(s || '').trim();
+  const m = raw.match(/^(\d{4})-(\d{1,2})$/);
+  if (!m) return raw;
+  const w = Number(m[2]);
+  if (!Number.isFinite(w) || w < 1 || w > 53) return raw;
+  return `${m[1]}-${String(w).padStart(2, '0')}`;
+}
+
+/** La más reciente de dos semanas YYYY-WW (misma convención que getSemanaActual). */
+function semanaPortalLater(a, b) {
+  return compareSemanaPortal(a, b) >= 0 ? a : b;
+}
+
+/** Semana ISO portal que contiene la fecha local (alineado con src/utils/date getSemanaFromDate). */
+function getSemanaPortalDesdeDate(d) {
+  const dt = d instanceof Date ? new Date(d.getTime()) : new Date(d);
+  if (Number.isNaN(dt.getTime())) return null;
+  dt.setHours(0, 0, 0, 0);
+  const day = dt.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const lunes = new Date(dt);
+  lunes.setDate(lunes.getDate() - diff);
+  const y = lunes.getFullYear();
+  const jan1 = new Date(y, 0, 1);
+  const dayOfJan1 = jan1.getDay();
+  const mondayOffset = dayOfJan1 === 0 ? 6 : dayOfJan1 - 1;
+  const mondayWeek1 = new Date(y, 0, 1 - mondayOffset);
+  const semanas = Math.floor((lunes.getTime() - mondayWeek1.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return `${y}-${String(semanas).padStart(2, '0')}`;
+}
+
+/** Cantidad de semanas [a,b] inclusive en el calendario portal. */
+function countSemanasPortalInclusive(a, b) {
+  let n = 0;
+  let w = a;
+  while (compareSemanaPortal(w, b) <= 0) {
+    n++;
+    w = semanaPortalSiguiente(w);
+  }
+  return n;
+}
+
+/**
+ * Primera semana en que tiene sentido acumular arrastre: la más temprana entre
+ * primera inscripción a turno, primera recuperación y alta del alumno.
+ */
+async function getSemanaPrimeraActividadArrastre(db, alumnoId) {
+  const { rows } = await db.query(
+    `SELECT
+       (SELECT MIN(semana_desde) FROM inscripciones_turno WHERE alumno_id = $1) AS ins_min,
+       (SELECT MIN(semana) FROM recuperaciones WHERE alumno_id = $1) AS rec_min,
+       (SELECT created_at FROM alumnos WHERE id = $1) AS created_at`,
+    [alumnoId]
+  );
+  const r0 = rows[0] || {};
+  const candidates = [];
+  if (r0.ins_min) candidates.push(normalizarSemanaPortal(String(r0.ins_min)));
+  if (r0.rec_min) candidates.push(normalizarSemanaPortal(String(r0.rec_min)));
+  if (r0.created_at) {
+    const d = r0.created_at instanceof Date ? r0.created_at : new Date(r0.created_at);
+    const sw = getSemanaPortalDesdeDate(d);
+    if (sw && /^\d{4}-\d{2}$/.test(sw)) candidates.push(sw);
+  }
+  if (candidates.length === 0) return null;
+  return candidates.reduce((a, b) => (compareSemanaPortal(a, b) <= 0 ? a : b));
+}
+
 async function invalidateActividadArrastrePortal(db, alumnoId) {
   if (!alumnoId) return;
   await db.query('UPDATE alumnos SET actividad_arrastre_procesado_hasta = NULL WHERE id = $1', [alumnoId]);
@@ -3009,6 +3078,7 @@ async function computePortalPackWeek(db, alumno, semanaW, turnoRows) {
 
 /**
  * Saldo de clases del plan no usadas en semanas anteriores a semanaVista (arrastre al inicio de esa semana).
+ * Solo cuenta semanas desde la primera actividad del alumno (inscripción, recuperación o alta).
  * Persiste en alumnos.actividad_arrastre_* para no recalcular todo en cada request.
  */
 async function syncActividadArrastrePack(db, alumno, semanaVista, turnoRows, clasesPorSemana) {
@@ -3024,13 +3094,28 @@ async function syncActividadArrastrePack(db, alumno, semanaVista, turnoRows, cla
   let saldo = Math.max(0, Number(rows[0].actividad_arrastre_saldo ?? 0));
   let proc = rows[0].actividad_arrastre_procesado_hasta;
 
+  const semanaPrimera = await getSemanaPrimeraActividadArrastre(db, alumno.id);
+  const primeraN = semanaPrimera && /^\d{4}-\d{2}$/.test(normalizarSemanaPortal(semanaPrimera))
+    ? normalizarSemanaPortal(semanaPrimera)
+    : null;
+
+  const wStart = goBackSemanasPortal(target, 104);
+  const wInit = !primeraN ? semanaPortalSiguiente(target) : semanaPortalLater(wStart, primeraN);
+
+  const maxWeeksSpan = primeraN ? countSemanasPortalInclusive(wInit, target) : 0;
+  if (proc && primeraN && saldo > maxWeeksSpan * base + 1) {
+    proc = null;
+  }
+  if (proc && primeraN && compareSemanaPortal(proc, semanaPortalAnterior(primeraN)) < 0) {
+    proc = null;
+  }
+
   if (proc && compareSemanaPortal(proc, target) > 0) {
     proc = null;
   }
   if (!proc) {
-    const wStart = goBackSemanasPortal(target, 104);
     saldo = 0;
-    let w = wStart;
+    let w = wInit;
     while (compareSemanaPortal(w, target) <= 0) {
       const week = await computePortalPackWeek(db, alumno, w, turnoRows);
       const used = week.clasesFijasSemana + week.recuperacionesSemana.length;
@@ -3041,9 +3126,11 @@ async function syncActividadArrastrePack(db, alumno, semanaVista, turnoRows, cla
   } else {
     let w = semanaPortalSiguiente(proc);
     while (compareSemanaPortal(w, target) <= 0) {
-      const week = await computePortalPackWeek(db, alumno, w, turnoRows);
-      const used = week.clasesFijasSemana + week.recuperacionesSemana.length;
-      saldo = Math.max(0, saldo + base - used);
+      if (!primeraN || compareSemanaPortal(w, primeraN) >= 0) {
+        const week = await computePortalPackWeek(db, alumno, w, turnoRows);
+        const used = week.clasesFijasSemana + week.recuperacionesSemana.length;
+        saldo = Math.max(0, saldo + base - used);
+      }
       proc = w;
       w = semanaPortalSiguiente(w);
     }

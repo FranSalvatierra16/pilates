@@ -618,11 +618,11 @@ const Calendario = () => {
       .filter((t) => t.diaSemana === diaSemana && t.hora === hora)
       .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 
+  /** Cupo mostrado en la celda: si hay varios registros `turnos` con el mismo día/hora (duplicados), es el mismo aula — no se suman cupos (evita 6/30). */
   const cupoDelSlot = (diaSemana: number, hora: string): number => {
     const ts = getTurnosDelSlot(diaSemana, hora);
     if (ts.length === 0) return CUPO_DEFAULT;
-    if (ts.length === 1) return ts[0].cupo ?? CUPO_DEFAULT;
-    return ts.reduce((sum, t) => sum + (t.cupo ?? CUPO_DEFAULT), 0);
+    return Math.max(...ts.map((t) => t.cupo ?? CUPO_DEFAULT), CUPO_DEFAULT);
   };
 
   /** Primer turno del slot (metadatos título/profesor); alumnos se listan con getAlumnosDelSlot. */

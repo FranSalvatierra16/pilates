@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles } from 'lucide-react';
-import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem } from '../types';
+import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem, Turno, DIAS_SEMANA } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { storageApi } from '../utils/storage-api';
@@ -22,6 +23,9 @@ function normalizePhoneForWhatsApp(telefono: string): string | null {
 }
 
 const MAX_CREDITOS_RECUPERAR = 999;
+
+/** Lunes=0 … Domingo=6 (igual que Calendario) */
+const NOMBRE_DIA_SEMANA = [...DIAS_SEMANA, 'Domingo'];
 
 function clampCreditoRecuperar(n: number): number {
   const x = Math.floor(Number.isFinite(n) ? n : 0);
@@ -142,6 +146,9 @@ const Alumnos = () => {
     fecha: new Date().toISOString().split('T')[0],
     fechaVencimiento: '',
   });
+  /** Turnos del calendario donde el alumno está en la lista (solo al editar) */
+  const [turnosFijosAlumno, setTurnosFijosAlumno] = useState<Turno[]>([]);
+  const [cargandoTurnosFijos, setCargandoTurnosFijos] = useState(false);
 
   const refNombre = useRef<HTMLInputElement>(null);
   const refApellido = useRef<HTMLInputElement>(null);
@@ -151,6 +158,8 @@ const Alumnos = () => {
   const refActividad = useRef<HTMLSelectElement>(null);
   const refDescripcion = useRef<HTMLTextAreaElement>(null);
   const refFecha = useRef<HTMLInputElement>(null);
+  /** Invalida respuestas tardías de `getByAlumnoId` al cerrar el modal o abrir otro alumno */
+  const turnosFijosRequestId = useRef(0);
 
   const focusNext = (e: React.KeyboardEvent, next: React.RefObject<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null>) => {
     if (e.key === 'Enter') {
@@ -314,6 +323,9 @@ const Alumnos = () => {
 
 
   const resetForm = () => {
+    turnosFijosRequestId.current += 1;
+    setTurnosFijosAlumno([]);
+    setCargandoTurnosFijos(false);
     setFormData({
       nombre: '',
       apellido: '',
@@ -331,6 +343,10 @@ const Alumnos = () => {
 
   const handleOpenModal = (alumno?: Alumno) => {
     if (alumno) {
+      turnosFijosRequestId.current += 1;
+      const reqId = turnosFijosRequestId.current;
+      setTurnosFijosAlumno([]);
+      setCargandoTurnosFijos(true);
       setEditingAlumno(alumno);
       setFormData({
         nombre: alumno.nombre,
@@ -344,7 +360,27 @@ const Alumnos = () => {
         descripcion: alumno.descripcion ?? '',
         clasesParaRecuperar: clampCreditoRecuperar(alumno.clasesParaRecuperar ?? 0),
       });
+      void storageHybrid.turnos
+        .getByAlumnoId(alumno.id)
+        .then((list) => {
+          if (turnosFijosRequestId.current !== reqId) return;
+          const sorted = [...list].sort((a, b) => {
+            if (a.diaSemana !== b.diaSemana) return a.diaSemana - b.diaSemana;
+            return formatHora24(a.hora).localeCompare(formatHora24(b.hora));
+          });
+          setTurnosFijosAlumno(sorted);
+        })
+        .catch(() => {
+          if (turnosFijosRequestId.current !== reqId) return;
+          setTurnosFijosAlumno([]);
+        })
+        .finally(() => {
+          if (turnosFijosRequestId.current === reqId) setCargandoTurnosFijos(false);
+        });
     } else {
+      turnosFijosRequestId.current += 1;
+      setTurnosFijosAlumno([]);
+      setCargandoTurnosFijos(false);
       // Para nuevo alumno, dejar sin fecha de vencimiento (pendiente de pago)
       setFormData({
         nombre: '',
@@ -1276,6 +1312,41 @@ const Alumnos = () => {
                     <span className="text-sm font-medium text-gray-800">Alumna a prueba (sin actividad)</span>
                   </label>
                 </div>
+                {editingAlumno && (
+                  <div className="md:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-emerald-700 shrink-0" aria-hidden />
+                      <span className="text-sm font-medium text-gray-900">Notada en el calendario</span>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      Horarios fijos en los que aparece en la grilla semanal (mismo criterio que en Calendario).
+                    </p>
+                    {cargandoTurnosFijos ? (
+                      <p className="text-sm text-gray-500">Cargando…</p>
+                    ) : turnosFijosAlumno.length === 0 ? (
+                      <p className="text-sm text-gray-700">
+                        No está anotada en ningún turno. Podés anotarla desde la pantalla{' '}
+                        <Link to="/calendario" className="text-primary-700 font-semibold underline underline-offset-2">
+                          Calendario
+                        </Link>
+                        .
+                      </p>
+                    ) : (
+                      <ul className="space-y-1.5 list-none pl-0">
+                        {turnosFijosAlumno.map((t) => (
+                          <li key={t.id} className="text-sm text-gray-900">
+                            <span className="font-semibold">
+                              {NOMBRE_DIA_SEMANA[t.diaSemana] ?? `Día ${t.diaSemana}`} {formatHora24(t.hora)}
+                            </span>
+                            {t.titulo?.trim() ? (
+                              <span className="text-gray-600 font-normal"> — {t.titulo.trim()}</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Descripción / Notas (opcional)

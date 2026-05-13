@@ -3656,13 +3656,17 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
       'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
       [alumno.id, alumno.sucursal_id]
     );
-    await db.query(
-      'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
-      [crypto.randomUUID(), alumno.sucursal_id, 'liberar', alumno.id, turnoId]
-    );
+    res.json({ ok: true, liberacionId: id });
+
     const nombre = [alumno.apellido, alumno.nombre].filter(Boolean).join(', ');
     const dia = DIAS_SEMANA_ES[t.dia_semana] ?? '';
     const turno = `${dia} ${t.hora} - ${t.titulo || 'Clase'}`;
+    void db
+      .query(
+        'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+        [crypto.randomUUID(), alumno.sucursal_id, 'liberar', alumno.id, turnoId]
+      )
+      .catch((err) => console.error('[liberar-clase-semana] notificación', err));
     queuePushToSucursal(db, alumno.sucursal_id, {
       title: 'Cupo liberado',
       body: `${nombre} liberó cupo en ${turno}`,
@@ -3674,8 +3678,10 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
         ? `/mi-clase?token=${encodeURIComponent(sub.link_token)}&modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(semanaVista)}&promptTomar=1`
         : `/mi-clase?modo=recuperar&notifTurnoId=${encodeURIComponent(turnoId)}&notifSemana=${encodeURIComponent(semanaVista)}&promptTomar=1`,
     }), { excludeAlumnoId: alumno.id });
-    await invalidateActividadArrastrePortal(db, alumno.id);
-    res.json({ ok: true, liberacionId: id });
+    void invalidateActividadArrastrePortal(db, alumno.id).catch((err) => {
+      console.error('[liberar-clase-semana] invalidar arrastre', err);
+    });
+    return;
   } catch (e) {
     console.error(e);
     res.status(e.status || 500).json({ error: e.message });
@@ -4282,8 +4288,11 @@ app.post('/api/liberaciones-semana', async (req, res) => {
       'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
       [alumnoId, sid]
     );
-    await invalidateActividadArrastrePortal(db, alumnoId);
     res.status(201).json({ id, turnoId, alumnoId, semana, createdAt: new Date().toISOString() });
+    void invalidateActividadArrastrePortal(db, alumnoId).catch((err) => {
+      console.error('[liberaciones-semana] invalidar arrastre', err);
+    });
+    return;
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

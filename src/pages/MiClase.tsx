@@ -165,6 +165,109 @@ const fetchWithTimeout = (url: string, options: RequestInit = {}, ms = 15000): P
   return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(id));
 };
 
+function ajustarStatsRecuperacion(
+  stats: NonNullable<PortalData['recuperacionStats']>,
+  delta: { fijas?: number; recuperaciones?: number; creditos?: number }
+): NonNullable<PortalData['recuperacionStats']> {
+  const clasesFijasSemana = Math.max(0, stats.clasesFijasSemana + (delta.fijas ?? 0));
+  const recuperacionesSemana = Math.max(0, stats.recuperacionesSemana + (delta.recuperaciones ?? 0));
+  const clasesParaRecuperar = Math.max(0, stats.clasesParaRecuperar + (delta.creditos ?? 0));
+  const clasesUsadasSemana = Math.max(0, clasesFijasSemana + recuperacionesSemana);
+  const cupoPack = stats.cupoPackSemana;
+  const clasesDisponiblesSemana =
+    stats.clasesPorSemana == null
+      ? null
+      : Math.max(0, (cupoPack ?? stats.clasesPorSemana) + clasesParaRecuperar - clasesUsadasSemana);
+  return {
+    ...stats,
+    clasesFijasSemana,
+    recuperacionesSemana,
+    clasesParaRecuperar,
+    clasesUsadasSemana,
+    clasesDisponiblesSemana,
+  };
+}
+
+function aplicarLiberacionSemanaLocal(prev: PortalData, turnoId: string, liberacionId?: string): PortalData {
+  const turnos = prev.turnos.map((t) => {
+    if (t.id !== turnoId) return t;
+    const liberabaCupo = t.esClaseFija && !t.claseLiberada;
+    return {
+      ...t,
+      claseLiberada: true,
+      liberacionId: liberacionId || t.liberacionId || 'local',
+      inscriptos: liberabaCupo ? Math.max(0, t.inscriptos - 1) : t.inscriptos,
+    };
+  });
+  const stats = prev.recuperacionStats
+    ? ajustarStatsRecuperacion(prev.recuperacionStats, { fijas: -1, creditos: 1 })
+    : undefined;
+  return {
+    ...prev,
+    turnos,
+    recuperacionStats: stats,
+    alumno: {
+      ...prev.alumno,
+      clasesParaRecuperar: (prev.alumno.clasesParaRecuperar || 0) + 1,
+    },
+  };
+}
+
+function aplicarRestaurarClaseSemanaLocal(prev: PortalData, turnoId: string): PortalData {
+  const turnos = prev.turnos.map((t) => {
+    if (t.id !== turnoId) return t;
+    const restauraCupo = t.esClaseFija && t.claseLiberada;
+    return {
+      ...t,
+      claseLiberada: false,
+      liberacionId: undefined,
+      inscriptos: restauraCupo ? t.inscriptos + 1 : t.inscriptos,
+    };
+  });
+  const stats = prev.recuperacionStats
+    ? ajustarStatsRecuperacion(prev.recuperacionStats, { fijas: 1, creditos: -1 })
+    : undefined;
+  return {
+    ...prev,
+    turnos,
+    recuperacionStats: stats,
+    alumno: {
+      ...prev.alumno,
+      clasesParaRecuperar: Math.max(0, (prev.alumno.clasesParaRecuperar || 0) - 1),
+    },
+  };
+}
+
+function aplicarLiberarRecuperacionLocal(prev: PortalData, turnoId: string, devolvioCredito: boolean): PortalData {
+  const turnos = prev.turnos.map((t) => {
+    if (t.id !== turnoId) return t;
+    return {
+      ...t,
+      yaInscripto: false,
+      inscriptos: Math.max(0, t.inscriptos - 1),
+      recuperacionId: undefined,
+      usaCredito: undefined,
+    };
+  });
+  const stats = prev.recuperacionStats
+    ? ajustarStatsRecuperacion(prev.recuperacionStats, {
+        recuperaciones: -1,
+        creditos: devolvioCredito ? 1 : 0,
+      })
+    : undefined;
+  return {
+    ...prev,
+    turnos,
+    recuperacionStats: stats,
+    alumno: devolvioCredito
+      ? {
+          ...prev.alumno,
+          clasesParaRecuperar: (prev.alumno.clasesParaRecuperar || 0) + 1,
+        }
+      : prev.alumno,
+  };
+}
+
 type PortalAuth = { type: 'token'; token: string } | { type: 'dni'; dni: string; sucursalId: string };
 
 const DEFAULT_HORARIOS: HorariosPortal = {
@@ -296,9 +399,9 @@ const MiClase = () => {
     }
   };
 
-  const recargarRecuperar = async () => {
+  const recargarRecuperar = async (opts?: { silencioso?: boolean }) => {
     if (!portalAuth || !data || data.modo !== 'recuperar') return;
-    setCargandoSemana(true);
+    if (!opts?.silencioso) setCargandoSemana(true);
     try {
       const base = getBase();
       const semana = semanaElegida === 'actual' ? getSemanaActual() : getSemanaSiguiente(getSemanaActual());
@@ -308,11 +411,11 @@ const MiClase = () => {
       } else {
         url = `${base}/api/alumno-portal?dni=${encodeURIComponent(portalAuth.dni)}&sucursalId=${encodeURIComponent(portalAuth.sucursalId)}&modo=recuperar&semana=${encodeURIComponent(semana)}`;
       }
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, {}, 20000);
       const json = await res.json().catch(() => ({}));
       if (res.ok) setData(json);
     } finally {
-      setCargandoSemana(false);
+      if (!opts?.silencioso) setCargandoSemana(false);
     }
   };
 
@@ -397,7 +500,7 @@ const MiClase = () => {
               }
             : null
         );
-        await recargarRecuperar();
+        void recargarRecuperar({ silencioso: true });
       } else if (!esRecuperar) {
         setData((prev) =>
           prev
@@ -434,23 +537,27 @@ const MiClase = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
         toast.error(json.error || 'No se pudo liberar el cupo.');
         return;
       }
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              turnos: prev.turnos.map((t) =>
-                t.id === turnoId ? { ...t, yaInscripto: false, inscriptos: t.inscriptos - 1, recuperacionId: undefined } : t
-              ),
-            }
-          : null
-      );
       if (esRecuperar) {
-        await recargarRecuperar();
+        const turno = data.turnos.find((t) => t.id === turnoId);
+        const devolvioCredito = !!turno?.usaCredito;
+        setData((prev) => (prev ? aplicarLiberarRecuperacionLocal(prev, turnoId, devolvioCredito) : null));
+        void recargarRecuperar({ silencioso: true });
+      } else {
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                turnos: prev.turnos.map((t) =>
+                  t.id === turnoId ? { ...t, yaInscripto: false, inscriptos: t.inscriptos - 1, recuperacionId: undefined } : t
+                ),
+              }
+            : null
+        );
       }
     } finally {
       setActioning(null);
@@ -476,7 +583,9 @@ const MiClase = () => {
         toast.error(json.error || 'No se pudo liberar la clase.');
         return;
       }
-      await recargarRecuperar();
+      setData((prev) => (prev ? aplicarLiberacionSemanaLocal(prev, turnoId, json.liberacionId) : null));
+      toast.success('Clase liberada para esta semana.');
+      void recargarRecuperar({ silencioso: true });
     } finally {
       setActioning(null);
     }
@@ -501,7 +610,9 @@ const MiClase = () => {
         toast.error(json.error || 'No se pudo volver a tomar la clase.');
         return;
       }
-      await recargarRecuperar();
+      setData((prev) => (prev ? aplicarRestaurarClaseSemanaLocal(prev, turnoId) : null));
+      toast.success('Volviste a tomar la clase de esta semana.');
+      void recargarRecuperar({ silencioso: true });
     } finally {
       setActioning(null);
     }

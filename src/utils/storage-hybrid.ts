@@ -402,9 +402,17 @@ export const storageHybrid = {
       if (useApi()) return await storageApi.liberacionesSemana.getBySemana(semana);
       return storage.liberacionesSemana.getBySemana(semana);
     },
-    add: async (item: LiberacionSemana): Promise<void> => {
-      if (useApi()) await storageApi.liberacionesSemana.add({ turnoId: item.turnoId, alumnoId: item.alumnoId, semana: item.semana });
-      else storage.liberacionesSemana.add(item);
+    add: async (item: LiberacionSemana): Promise<LiberacionSemana> => {
+      if (useApi()) {
+        const created = await storageApi.liberacionesSemana.add({
+          turnoId: item.turnoId,
+          alumnoId: item.alumnoId,
+          semana: item.semana,
+        });
+        return created;
+      }
+      storage.liberacionesSemana.add(item);
+      return item;
     },
     delete: async (id: string): Promise<void> => {
       if (useApi()) await storageApi.liberacionesSemana.delete(id);

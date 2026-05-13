@@ -1186,21 +1186,41 @@ const Calendario = () => {
     if (!ok) return;
     try {
       setSavingLiberacionSemana(true);
-      const liberacionIdLocal = `${Date.now()}`;
-      await storageHybrid.liberacionesSemana.add({
-        id: liberacionIdLocal,
+      const liberacion = await storageHybrid.liberacionesSemana.add({
+        id: `${Date.now()}`,
         turnoId: showPopupAlumno.turnoId,
         alumnoId: showPopupAlumno.alumno.id,
         semana: semanaVista,
         createdAt: new Date().toISOString(),
       });
-      if (!useApi()) {
-        await storageHybrid.alumnos.update(showPopupAlumno.alumno.id, {
-          clasesParaRecuperar: (showPopupAlumno.alumno.clasesParaRecuperar || 0) + 1,
-        });
-      }
-      await loadLiberacionesSemana();
-      await loadAlumnos();
+      setLiberacionesSemana((prev) => {
+        if (prev.some((item) => item.id === liberacion.id)) return prev;
+        if (
+          prev.some(
+            (item) =>
+              item.turnoId === liberacion.turnoId &&
+              item.alumnoId === liberacion.alumnoId &&
+              item.semana === liberacion.semana
+          )
+        ) {
+          return prev;
+        }
+        return [...prev, liberacion];
+      });
+      setAlumnos((prev) =>
+        prev.map((a) =>
+          a.id === showPopupAlumno.alumno.id
+            ? { ...a, clasesParaRecuperar: (a.clasesParaRecuperar || 0) + 1 }
+            : a
+        )
+      );
+      setAlumnosFiltrados((prev) =>
+        prev.map((a) =>
+          a.id === showPopupAlumno.alumno.id
+            ? { ...a, clasesParaRecuperar: (a.clasesParaRecuperar || 0) + 1 }
+            : a
+        )
+      );
       setShowPopupAlumno(null);
       toast.success('Se liberó el cupo de esa clase para esta semana.');
     } catch (error) {
@@ -1220,14 +1240,23 @@ const Calendario = () => {
     if (!ok) return;
     try {
       setSavingLiberacionSemana(true);
-      await storageHybrid.liberacionesSemana.delete(showPopupAlumno.liberacionId);
-      if (!useApi()) {
-        await storageHybrid.alumnos.update(showPopupAlumno.alumno.id, {
-          clasesParaRecuperar: Math.max(0, (showPopupAlumno.alumno.clasesParaRecuperar || 0) - 1),
-        });
-      }
-      await loadLiberacionesSemana();
-      await loadAlumnos();
+      const liberacionId = showPopupAlumno.liberacionId;
+      await storageHybrid.liberacionesSemana.delete(liberacionId);
+      setLiberacionesSemana((prev) => prev.filter((item) => item.id !== liberacionId));
+      setAlumnos((prev) =>
+        prev.map((a) =>
+          a.id === showPopupAlumno.alumno.id
+            ? { ...a, clasesParaRecuperar: Math.max(0, (a.clasesParaRecuperar || 0) - 1) }
+            : a
+        )
+      );
+      setAlumnosFiltrados((prev) =>
+        prev.map((a) =>
+          a.id === showPopupAlumno.alumno.id
+            ? { ...a, clasesParaRecuperar: Math.max(0, (a.clasesParaRecuperar || 0) - 1) }
+            : a
+        )
+      );
       setShowPopupAlumno(null);
       toast.success('La liberación de esa semana se canceló.');
     } catch (error) {

@@ -2968,7 +2968,7 @@ async function computePortalPackWeek(db, alumno, semanaW, turnoRows) {
   const outstandingLiberacionIds = new Set(allLibRows.slice(consumedLiberacionCount).map((r) => r.id));
   const libRows = allLibRows.filter((r) => r.semana === semanaW);
   const outstandingLibRows = libRows.filter((r) => outstandingLiberacionIds.has(r.id));
-  const libByTurno = new Map(outstandingLibRows.map((r) => [r.turno_id, r]));
+  const libByTurno = new Map(libRows.map((r) => [r.turno_id, r]));
   const candidatosClasesFijas = turnoRows.filter((t) => {
     const ids = t.alumno_ids || [];
     if (!ids.includes(alumno.id)) return false;
@@ -3289,7 +3289,7 @@ app.get('/api/alumno-portal', async (req, res) => {
         recRowsPorTurno.get(tid).push(row);
       }
       const recByTurno = new Map(recRows.map((r) => [r.turno_id, r]));
-      const libByTurno = new Map(ctx.liberacionesPendientesSemana.map((r) => [r.turno_id, r]));
+      const libByTurno = new Map(ctx.liberacionesSemana.map((r) => [r.turno_id, r]));
       turnos = turnoRows.map((r) => {
         const cupo = r.cupo != null ? Number(r.cupo) : 6;
         const rec = recByTurno.get(r.id);

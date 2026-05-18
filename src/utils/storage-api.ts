@@ -54,6 +54,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+/** Turnos duplicados unificados en el último GET /api/turnos (se consume una vez). */
+let lastTurnosUnificados = 0;
+export function consumeTurnosUnificados(): number {
+  const n = lastTurnosUnificados;
+  lastTurnosUnificados = 0;
+  return n;
+}
+
 export const storageApi = {
   alumnos: {
     getAll: (includeInactive = false): Promise<Alumno[]> =>
@@ -155,7 +163,17 @@ export const storageApi = {
     delete: (id: string): Promise<void> => request(`/api/profesores/${id}`, { method: 'DELETE' }),
   },
   turnos: {
-    getAll: (): Promise<Turno[]> => request<Turno[]>('/api/turnos'),
+    getAll: async (): Promise<Turno[]> => {
+      const url = getBase() + '/api/turnos?unificar=1';
+      const res = await fetch(url, { headers: { 'Content-Type': 'application/json', ...getAuthHeaders() } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || res.statusText);
+      }
+      const h = res.headers.get('X-Turnos-Unificados');
+      lastTurnosUnificados = h ? Math.max(0, Number(h) || 0) : 0;
+      return res.json();
+    },
     add: (turno: Turno): Promise<void> =>
       request('/api/turnos', { method: 'POST', body: JSON.stringify(turno) }),
     update: (id: string, updates: Partial<Turno>): Promise<void> =>

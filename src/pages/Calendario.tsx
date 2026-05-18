@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno } from '../types';
 import { storage } from '../utils/storage';
-import { storageHybrid } from '../utils/storage-hybrid';
+import { storageHybrid, consumeTurnosUnificados } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
 import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -377,6 +377,14 @@ const Calendario = () => {
     try {
       const data = await storageHybrid.turnos.getAll();
       setTurnos(data);
+      const unificados = consumeTurnosUnificados();
+      if (unificados > 0) {
+        toast.success(
+          unificados === 1
+            ? 'Se corrigió 1 horario duplicado en el calendario.'
+            : `Se corrigieron ${unificados} horarios duplicados en el calendario.`
+        );
+      }
     } catch (error) {
       console.error('Error loading turnos:', error);
       setTurnos(storage.turnos.getAll());
@@ -711,15 +719,26 @@ const Calendario = () => {
     return [...byAlumno.values(), ...recs];
   };
 
-  /** Para agregar fijo o recuperación: turno con cupo libre dentro del slot. */
+  /** Para agregar fijo o recuperación: turno del slot solo si el horario completo (todos los duplicados fusionados) tiene cupo libre. */
   const elegirTurnoConCupoEnSlot = (diaSemana: number, hora: string): Turno | undefined => {
     const ts = getTurnosDelSlot(diaSemana, hora);
-    for (const t of ts) {
-      const occ = contarOcupacionTurno(getAlumnosDelTurno(t));
-      const cap = t.cupo ?? CUPO_DEFAULT;
-      if (occ < cap) return t;
-    }
+    if (ts.length === 0) return undefined;
+    const cupoSlot = cupoDelSlot(diaSemana, hora);
+    const occSlot = contarOcupacionTurno(getAlumnosDelSlot(diaSemana, hora));
+    if (occSlot >= cupoSlot) return undefined;
     return ts[0];
+  };
+
+  const turnosDuplicadosEnSlot = (diaSemana: number, hora: string) => getTurnosDelSlot(diaSemana, hora).length;
+
+  const avisoCupoDuplicadosSlot = (diaSemana: number, hora: string, ocupacion: number, cupo: number) => {
+    const n = turnosDuplicadosEnSlot(diaSemana, hora);
+    if (n <= 1 || ocupacion <= cupo) return null;
+    return (
+      <p className="text-xs text-red-800 font-medium mt-1 leading-snug">
+        Hay {n} clases cargadas a las {hora} (mismo día). Recargá el calendario para unificarlas automáticamente o sacá recuperaciones de más.
+      </p>
+    );
   };
 
   const getActividadDelAlumno = (alumnoId: string) => {
@@ -2143,6 +2162,7 @@ const Calendario = () => {
                                 <Users className="w-4 h-4" />
                                 {ocupacionTurno}/{cupo} alumnos
                               </p>
+                              {avisoCupoDuplicadosSlot(diaIndex, hora, ocupacionTurno, cupo)}
                             </div>
                           )}
                           <div className="space-y-1.5">
@@ -2230,6 +2250,7 @@ const Calendario = () => {
                                 <Users className="w-4 h-4" />
                                 {ocupacionTurno}/{cupo} alumnos
                               </p>
+                              {avisoCupoDuplicadosSlot(diaIndex, hora, ocupacionTurno, cupo)}
                             </div>
                           )}
                           <div className="space-y-1.5">

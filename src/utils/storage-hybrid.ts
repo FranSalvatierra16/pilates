@@ -24,7 +24,8 @@ import { buildCierreRetiro } from './cierre-caja';
 import { horaActualInput } from './date';
 import { storage } from './storage';
 import { storageSupabase } from './storage-supabase';
-import { storageApi } from './storage-api';
+import { storageApi, consumeTurnosUnificados } from './storage-api';
+export { consumeTurnosUnificados };
 import * as finanzasLocal from './finanzas-local';
 import { clearFinanzasSession, getFinanzasExpiresAtMs } from './finanzas-session';
 

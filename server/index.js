@@ -1188,8 +1188,14 @@ app.get('/api/turnos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    const { rows } = await db.query('SELECT * FROM turnos WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]);
-    res.json(rows.map((r) => ({
+    const sid = req.user.sucursalId;
+    const unificar = ['1', 'true', 'yes'].includes(String(req.query.unificar || '1').toLowerCase());
+    let turnosUnificados = 0;
+    if (unificar) {
+      turnosUnificados = await unificarTurnosDuplicadosSucursal(db, sid);
+    }
+    const { rows } = await db.query('SELECT * FROM turnos WHERE sucursal_id = $1 ORDER BY created_at DESC', [sid]);
+    const data = rows.map((r) => ({
       id: r.id,
       diaSemana: r.dia_semana,
       hora: r.hora,
@@ -1199,7 +1205,11 @@ app.get('/api/turnos', async (req, res) => {
       cupo: r.cupo != null ? Number(r.cupo) : 6,
       destacado: !!r.destacado,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
-    })));
+    }));
+    if (turnosUnificados > 0) {
+      res.setHeader('X-Turnos-Unificados', String(turnosUnificados));
+    }
+    res.json(data);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -1210,14 +1220,50 @@ app.post('/api/turnos', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
     const b = req.body;
+    const horaNorm = normalizeHoraTurno(b.hora);
     const cupo = b.cupo != null ? Math.max(1, Number(b.cupo)) : 6;
     const destacado = !!b.destacado;
+    const incomingIds = [...new Set((b.alumnoIds || []).map((x) => String(x)))];
+
+    const existentes = await getTurnosEnSlot(db, sid, b.diaSemana, horaNorm);
+    if (existentes.length > 0) {
+      const sorted = [...existentes].sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (ta !== tb) return ta - tb;
+        return String(a.id).localeCompare(String(b.id));
+      });
+      const canonical = sorted[0];
+      const mergedIds = new Set([...(canonical.alumno_ids || []).map(String), ...incomingIds]);
+      await db.query(
+        `UPDATE turnos SET alumno_ids = $1, cupo = LEAST(cupo, $2),
+          titulo = COALESCE(NULLIF($3, ''), titulo),
+          profesor_id = COALESCE(NULLIF($4, ''), profesor_id),
+          destacado = $5 OR destacado
+         WHERE id = $6 AND sucursal_id = $7`,
+        [
+          [...mergedIds],
+          cupo,
+          b.titulo || '',
+          b.profesorId || '',
+          destacado,
+          canonical.id,
+          sid,
+        ]
+      );
+      if (existentes.length > 1) {
+        await unificarTurnosDuplicadosSucursal(db, sid);
+      }
+      return res.status(200).json({ ok: true, id: canonical.id, mergedIntoExisting: true });
+    }
+
     await db.query(
       'INSERT INTO turnos (id, sucursal_id, dia_semana, hora, titulo, profesor_id, alumno_ids, cupo, destacado, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      [b.id, req.user.sucursalId, b.diaSemana, b.hora, b.titulo || null, b.profesorId || null, b.alumnoIds || [], cupo, destacado, b.createdAt || new Date().toISOString()]
+      [b.id, sid, b.diaSemana, horaNorm, b.titulo || null, b.profesorId || null, incomingIds, cupo, destacado, b.createdAt || new Date().toISOString()]
     );
-    res.status(201).json({ ok: true });
+    res.status(201).json({ ok: true, id: b.id });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -2869,60 +2915,209 @@ async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
   return { error: 400, sucursales, message: 'Hay varias sedes con ese DNI. Elegí tu sede.' };
 }
 
-/**
- * Cuerpos que ocupan cupo en un turno/semana, igual que Calendario (getAlumnosDelTurno + contarOcupacionTurno).
- * excludeLiberacionIds simula filas ya borradas (p. ej. al cancelar una liberación).
- */
-async function ocupacionEfectivaTurnoSemana(db, turnoId, semana, sucursalId, excludeLiberacionIds = []) {
-  const exclude = new Set((excludeLiberacionIds || []).map((x) => String(x)));
+function normalizeHoraTurno(hora) {
+  const m = String(hora || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '00:00';
+  const h = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+  const min = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+function slotKeyTurno(diaSemana, hora) {
+  return `${diaSemana}|${normalizeHoraTurno(hora)}`;
+}
+
+async function getTurnosEnSlot(db, sucursalId, diaSemana, hora) {
+  const horaNorm = normalizeHoraTurno(hora);
   const { rows } = await db.query(
-    'SELECT alumno_ids, cupo FROM turnos WHERE id = $1 AND sucursal_id = $2',
-    [turnoId, sucursalId]
+    'SELECT * FROM turnos WHERE sucursal_id = $1 AND dia_semana = $2',
+    [sucursalId, diaSemana]
   );
-  if (rows.length === 0) return null;
-  const cupo = Number(rows[0].cupo ?? 6);
-  const ids = rows[0].alumno_ids || [];
+  return rows.filter((r) => normalizeHoraTurno(r.hora) === horaNorm);
+}
+
+async function mergeTurnoGroup(client, sucursalId, group) {
+  if (group.length <= 1) return 0;
+  const sorted = [...group].sort((a, b) => {
+    const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (ta !== tb) return ta - tb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+  const canonical = sorted[0];
+  const dups = sorted.slice(1);
+  const mergedIds = new Set((canonical.alumno_ids || []).map((x) => String(x)));
+  for (const d of dups) {
+    for (const aid of d.alumno_ids || []) mergedIds.add(String(aid));
+  }
+  const cupo = Math.min(...sorted.map((t) => Number(t.cupo ?? 6)));
+  const titulo = canonical.titulo || dups.find((d) => d.titulo)?.titulo || null;
+  const profesorId = canonical.profesor_id || dups.find((d) => d.profesor_id)?.profesor_id || null;
+  const destacado = sorted.some((t) => t.destacado === true);
+  const canId = canonical.id;
+
+  await client.query(
+    `UPDATE turnos SET alumno_ids = $1, cupo = $2, titulo = COALESCE($3, titulo),
+      profesor_id = COALESCE($4, profesor_id), destacado = $5
+     WHERE id = $6 AND sucursal_id = $7`,
+    [[...mergedIds], cupo, titulo, profesorId, destacado, canId, sucursalId]
+  );
+
+  for (const dup of dups) {
+    const dupId = dup.id;
+    await client.query(
+      `UPDATE inscripciones_turno SET turno_id = $1
+       WHERE turno_id = $2
+         AND NOT EXISTS (
+           SELECT 1 FROM inscripciones_turno i2
+           WHERE i2.turno_id = $1 AND i2.alumno_id = inscripciones_turno.alumno_id
+         )`,
+      [canId, dupId]
+    );
+    await client.query('DELETE FROM inscripciones_turno WHERE turno_id = $1', [dupId]);
+
+    await client.query('UPDATE recuperaciones SET turno_id = $1 WHERE turno_id = $2', [canId, dupId]);
+    await client.query(
+      `UPDATE liberaciones_semana SET turno_id = $1
+       WHERE turno_id = $2
+         AND NOT EXISTS (
+           SELECT 1 FROM liberaciones_semana l2
+           WHERE l2.turno_id = $1 AND l2.alumno_id = liberaciones_semana.alumno_id AND l2.semana = liberaciones_semana.semana
+         )`,
+      [canId, dupId]
+    );
+    await client.query('DELETE FROM liberaciones_semana WHERE turno_id = $1', [dupId]);
+    await client.query('UPDATE asistencias SET turno_id = $1 WHERE turno_id = $2', [canId, dupId]);
+    await client.query('UPDATE notificaciones SET turno_id = $1 WHERE turno_id = $2', [canId, dupId]);
+    await client.query(
+      `DELETE FROM recuperaciones r1 USING recuperaciones r2
+       WHERE r1.turno_id = $1 AND r2.turno_id = $1
+         AND r1.alumno_id = r2.alumno_id AND r1.semana = r2.semana AND r1.id > r2.id`,
+      [canId]
+    );
+    await client.query('DELETE FROM turnos WHERE id = $1 AND sucursal_id = $2', [dupId, sucursalId]);
+  }
+  return dups.length;
+}
+
+/** Une turnos duplicados (mismo día + hora) en uno solo. Devuelve cuántos registros extra se eliminaron. */
+async function unificarTurnosDuplicadosSucursal(db, sucursalId) {
+  const { rows } = await db.query(
+    'SELECT * FROM turnos WHERE sucursal_id = $1 ORDER BY created_at ASC NULLS LAST, id ASC',
+    [sucursalId]
+  );
+  const groups = new Map();
+  for (const r of rows) {
+    const key = slotKeyTurno(r.dia_semana, r.hora);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  let merged = 0;
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    for (const group of groups.values()) {
+      if (group.length <= 1) continue;
+      merged += await mergeTurnoGroup(client, sucursalId, group);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  return merged;
+}
+
+/**
+ * Cupo del horario (mínimo entre turnos del slot) y ocupación fusionada (fijas sin liberar + recuperaciones).
+ */
+async function ocupacionEfectivaSlotSemana(db, sucursalId, diaSemana, hora, semana, excludeLiberacionIds = []) {
+  const turnos = await getTurnosEnSlot(db, sucursalId, diaSemana, hora);
+  if (!turnos.length) return null;
+  const exclude = new Set((excludeLiberacionIds || []).map((x) => String(x)));
+  const cupo = Math.min(...turnos.map((t) => Number(t.cupo ?? 6)));
+  const turnoIds = turnos.map((t) => t.id);
+
   const { rows: insRows } = await db.query(
-    'SELECT alumno_id, semana_desde FROM inscripciones_turno WHERE turno_id = $1',
-    [turnoId]
+    'SELECT turno_id, alumno_id, semana_desde FROM inscripciones_turno WHERE turno_id = ANY($1::text[])',
+    [turnoIds]
   );
-  const insMap = new Map(insRows.map((r) => [String(r.alumno_id), r.semana_desde]));
+  const insMap = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r.semana_desde]));
+
   const { rows: libRows } = await db.query(
-    'SELECT id, alumno_id FROM liberaciones_semana WHERE turno_id = $1 AND semana = $2',
-    [turnoId, semana]
+    'SELECT id, turno_id, alumno_id FROM liberaciones_semana WHERE turno_id = ANY($1::text[]) AND semana = $2',
+    [turnoIds, semana]
   );
-  const libAlumnos = new Set();
+  const libPorTurnoAlumno = new Set();
   for (const row of libRows) {
     if (exclude.has(String(row.id))) continue;
-    libAlumnos.add(String(row.alumno_id));
+    libPorTurnoAlumno.add(`${row.turno_id}:${row.alumno_id}`);
   }
+
   const { rows: recRows } = await db.query(
-    'SELECT alumno_id FROM recuperaciones WHERE turno_id = $1 AND semana = $2',
-    [turnoId, semana]
+    'SELECT id, alumno_id FROM recuperaciones WHERE turno_id = ANY($1::text[]) AND semana = $2',
+    [turnoIds, semana]
   );
-  const candidateIds = [...new Set([...ids.map((id) => String(id)), ...recRows.map((r) => String(r.alumno_id))])];
+
+  const candidateIds = new Set();
+  for (const t of turnos) {
+    for (const id of t.alumno_ids || []) candidateIds.add(String(id));
+  }
+  for (const r of recRows) candidateIds.add(String(r.alumno_id));
+
   let validAlumnoSet = new Set();
-  if (candidateIds.length > 0) {
+  if (candidateIds.size > 0) {
     const { rows: existRows } = await db.query(
       `SELECT id FROM alumnos
         WHERE sucursal_id = $1 AND id = ANY($2::text[]) AND activo IS DISTINCT FROM false`,
-      [sucursalId, candidateIds]
+      [sucursalId, [...candidateIds]]
     );
     validAlumnoSet = new Set(existRows.map((r) => String(r.id)));
   }
-  const ocupados = new Set();
-  for (const raw of ids) {
-    const aid = String(raw);
-    if (!validAlumnoSet.has(aid)) continue;
-    const desde = insMap.get(aid);
-    if (desde && desde > semana) continue;
-    if (!libAlumnos.has(aid)) ocupados.add(aid);
+
+  const fijosOcupados = new Set();
+  for (const t of turnos) {
+    for (const raw of t.alumno_ids || []) {
+      const aid = String(raw);
+      if (!validAlumnoSet.has(aid)) continue;
+      const desde = insMap.get(`${t.id}:${aid}`);
+      if (desde && String(desde) > String(semana)) continue;
+      if (libPorTurnoAlumno.has(`${t.id}:${aid}`)) continue;
+      fijosOcupados.add(aid);
+    }
   }
+  const recIds = new Set();
+  let recCount = 0;
   for (const r of recRows) {
-    const aid = String(r.alumno_id);
-    if (validAlumnoSet.has(aid)) ocupados.add(aid);
+    if (!validAlumnoSet.has(String(r.alumno_id))) continue;
+    if (recIds.has(r.id)) continue;
+    recIds.add(r.id);
+    recCount += 1;
   }
-  return { ocupacion: ocupados.size, cupo };
+  return { ocupacion: fijosOcupados.size + recCount, cupo, turnoIds };
+}
+
+/**
+ * Cuerpos que ocupan cupo en un turno/semana (usa el horario completo del turno, no un registro duplicado).
+ */
+async function ocupacionEfectivaTurnoSemana(db, turnoId, semana, sucursalId, excludeLiberacionIds = []) {
+  const { rows } = await db.query(
+    'SELECT dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2',
+    [turnoId, sucursalId]
+  );
+  if (!rows.length) return null;
+  const slot = await ocupacionEfectivaSlotSemana(
+    db,
+    sucursalId,
+    rows[0].dia_semana,
+    rows[0].hora,
+    semana,
+    excludeLiberacionIds
+  );
+  if (!slot) return null;
+  return { ocupacion: slot.ocupacion, cupo: slot.cupo };
 }
 
 /**
@@ -4358,15 +4553,47 @@ app.post('/api/recuperaciones', async (req, res) => {
     const sid = req.user?.sucursalId;
     const { turnoId, alumnoId, semana, usaCredito } = req.body || {};
     if (!turnoId || !alumnoId || !semana) return res.status(400).json({ error: 'Faltan turnoId, alumnoId o semana' });
-    const { rows: turnoRows } = await db.query('SELECT id FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, sid]);
+    const { rows: turnoRows } = await db.query(
+      'SELECT id, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2',
+      [turnoId, sid]
+    );
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    const slotTurnos = await getTurnosEnSlot(db, sid, turnoRows[0].dia_semana, turnoRows[0].hora);
+    if (slotTurnos.length > 1) {
+      await unificarTurnosDuplicadosSucursal(db, sid);
+    }
+    const enSlot = await getTurnosEnSlot(db, sid, turnoRows[0].dia_semana, turnoRows[0].hora);
+    const sorted = [...enSlot].sort((a, b) => {
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (ta !== tb) return ta - tb;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    const turnoIdFinal = sorted.length ? sorted[0].id : turnoId;
+    const { rows: dupRec } = await db.query(
+      'SELECT id FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3 LIMIT 1',
+      [alumnoId, turnoIdFinal, semana]
+    );
+    if (dupRec.length > 0) {
+      return res.json({ id: dupRec[0].id, turnoId: turnoIdFinal, alumnoId, semana, usaCredito: !!usaCredito });
+    }
+    const ocupacion = await ocupacionEfectivaSlotSemana(
+      db,
+      sid,
+      turnoRows[0].dia_semana,
+      turnoRows[0].hora,
+      semana
+    );
+    if (ocupacion && ocupacion.ocupacion >= ocupacion.cupo) {
+      return res.status(400).json({ error: 'Esta clase ya tiene el cupo completo para esa semana.' });
+    }
     const id = crypto.randomUUID();
     await db.query(
       'INSERT INTO recuperaciones (id, turno_id, alumno_id, semana, usa_credito, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
-      [id, turnoId, alumnoId, semana, !!usaCredito]
+      [id, turnoIdFinal, alumnoId, semana, !!usaCredito]
     );
     await invalidateActividadArrastrePortal(db, alumnoId);
-    res.status(201).json({ id, turnoId, alumnoId, semana, usaCredito: !!usaCredito, createdAt: new Date().toISOString() });
+    res.status(201).json({ id, turnoId: turnoIdFinal, alumnoId, semana, usaCredito: !!usaCredito, createdAt: new Date().toISOString() });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

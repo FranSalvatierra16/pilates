@@ -40,18 +40,32 @@ function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+const REQUEST_TIMEOUT_MS = 25_000;
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = getBase() + path;
-  const res = await fetch(url, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options?.headers },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options?.headers },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || res.statusText);
+    }
+    if (res.status === 204 || res.headers.get('content-length') === '0') return undefined as T;
+    return res.json();
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('El servidor tardó demasiado en responder. Revisá tu conexión e intentá de nuevo.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
   }
-  if (res.status === 204 || res.headers.get('content-length') === '0') return undefined as T;
-  return res.json();
 }
 
 export const storageApi = {

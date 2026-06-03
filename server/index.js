@@ -46,19 +46,14 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// Asegurar que las tablas existan antes de responder (evita "a veces vacío" en distintos dispositivos)
-app.use('/api', async (req, res, next) => {
+// Asegurar tablas en background al arrancar (no bloquear cada request de la API)
+app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
-  // Login no debe quedar bloqueado si initSchema tarda o falla una vez (el handler igual usa la BDD)
   if (req.path === '/auth/login' && req.method === 'POST') return next();
-  if (!getDatabaseUrl()) return next();
-  try {
-    await ensureSchemaReady();
-    next();
-  } catch (err) {
-    console.error('Schema no listo:', err.message);
-    res.status(503).json({ error: 'Base de datos en preparación. Reintentá en unos segundos.' });
+  if (getDatabaseUrl()) {
+    void ensureSchemaReady().catch((err) => console.error('[schema] background:', err?.message || err));
   }
+  next();
 });
 
 // Auth: exigir JWT en todas las rutas excepto login, health, manifest PWA, registro público y portal alumno
@@ -129,9 +124,9 @@ async function getPool() {
       databaseUrl.includes('railway') || databaseUrl.includes('amazonaws.com') || databaseUrl.includes('neon.tech')
         ? { rejectUnauthorized: false }
         : undefined,
-    max: 20,
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 15_000,
+    max: 10,
+    idleTimeoutMillis: 20_000,
+    connectionTimeoutMillis: 8_000,
     allowExitOnIdle: false,
   });
   pool.on('error', (err) => {
@@ -143,14 +138,32 @@ async function getPool() {
 /** Reintenta consultas cuando la conexión a Postgres se corta (común en Railway / red móvil). */
 async function queryWithRetry(db, text, params, opts = {}) {
   const retries = opts.retries ?? 2;
+  const timeoutMs = opts.timeoutMs ?? 10_000;
   let lastErr;
+  let activeDb = db;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await db.query(text, params);
+      let timer;
+      const queryPromise = activeDb.query(text, params);
+      const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(Object.assign(new Error('Timeout conectando con la base de datos'), { code: 'ETIMEDOUT' })),
+          timeoutMs
+        );
+      });
+      try {
+        return await Promise.race([queryPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timer);
+      }
     } catch (err) {
       lastErr = err;
-      if (attempt < retries && isDbConnectionError(err)) {
+      const retryable = attempt < retries && isDbConnectionError(err);
+      if (retryable) {
         console.warn(`[DB] Reintento ${attempt + 1}/${retries} tras`, err?.code || err?.message);
+        await resetPool();
+        activeDb = await getPool();
+        if (!activeDb) throw lastErr;
         await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
         continue;
       }
@@ -219,9 +232,20 @@ async function initSchema() {
   const db = await getPool();
   if (!db) return;
   try {
+    const { rows } = await queryWithRetry(
+      db,
+      "SELECT to_regclass('public.sucursales') AS reg",
+      [],
+      { retries: 1, timeoutMs: 8000 }
+    );
+    if (rows[0]?.reg) {
+      console.log('Esquema ya existente; se omite schema.sql completo.');
+      await seedAdminAndSucursal(db);
+      return;
+    }
     const schemaPath = join(__dirname, 'schema.sql');
     const schema = readFileSync(schemaPath, 'utf8');
-    await db.query(schema);
+    await queryWithRetry(db, schema, [], { retries: 0, timeoutMs: 120_000 });
     await seedAdminAndSucursal(db);
     console.log('Esquema de base de datos listo.');
   } catch (err) {
@@ -4776,7 +4800,6 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ ok: false, error: 'Base de datos no configurada' });
-    await queryWithRetry(db, 'SELECT 1');
     const { usuario, password } = req.body || {};
     if (!usuario || !password) return res.status(400).json({ ok: false, error: 'Faltan usuario o contraseña' });
     const u = usuario.trim();
@@ -5060,7 +5083,7 @@ app.get('/api/health', async (req, res) => {
       payload.error = 'Sin DATABASE_URL';
       return res.json(payload);
     }
-    await queryWithRetry(db, 'SELECT 1 AS ok', [], { retries: 1 });
+    await queryWithRetry(db, 'SELECT 1 AS ok', [], { retries: 1, timeoutMs: 8000 });
     payload.db = true;
     res.json(payload);
   } catch (e) {

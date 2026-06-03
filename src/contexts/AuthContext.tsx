@@ -145,13 +145,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const body = JSON.stringify({ usuario: username.trim(), password });
       const url = getApiBase() + '/api/auth/login';
       const attemptLogin = async (): Promise<{ role: Role } | { error: string }> => {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok && data.token && data.role) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 25_000);
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            signal: controller.signal,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.ok && data.token && data.role) {
           const role = data.role as Role;
           const planificacionHabilitada = role === 'sucursal' && data.planificacionHabilitada === true;
           setAuthToken(data.token);
@@ -178,10 +182,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return { role };
         }
         const errMsg = typeof data.error === 'string' ? data.error : '';
-        if (res.status === 503 || /conexión|conectar|interrumpió|reintentá/i.test(errMsg)) {
+        if (res.status === 503 || /conexión|conectar|interrumpió|reintentá|base de datos/i.test(errMsg)) {
           return { error: errMsg || 'No se pudo conectar con el servidor. Revisá tu internet e intentá de nuevo.' };
         }
         return { error: errMsg || 'Usuario o contraseña incorrectos' };
+        } finally {
+          clearTimeout(timeout);
+        }
       };
       try {
         const first = await attemptLogin();
@@ -190,13 +197,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           first.error.includes('conectar') ||
           first.error.includes('conexión') ||
           first.error.includes('interrumpió') ||
-          first.error.includes('reintentá');
+          first.error.includes('reintentá') ||
+          first.error.includes('tardó demasiado') ||
+          first.error.includes('base de datos');
         if (retryable) {
           await new Promise((r) => setTimeout(r, 800));
           return attemptLogin();
         }
         return first;
-      } catch {
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') {
+          return { error: 'El servidor tardó demasiado en responder. Revisá tu conexión e intentá de nuevo.' };
+        }
         return { error: 'No se pudo conectar con el servidor. Revisá tu internet e intentá de nuevo.' };
       }
     }

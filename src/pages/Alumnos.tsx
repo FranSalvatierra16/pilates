@@ -267,6 +267,11 @@ const Alumnos = () => {
       setAlumnoIdsConPago(ids);
     } catch (error) {
       console.error('Error loading data:', error);
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : 'No se pudieron cargar los alumnos. Revisá tu conexión e intentá de nuevo.'
+      );
       const alumnosLocal = storage.alumnos.getAll().filter((a) => mostrarInactivos || a.activo !== false);
       setAlumnos(alumnosLocal);
       setAlumnosFiltrados(alumnosLocal);

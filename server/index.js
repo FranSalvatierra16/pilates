@@ -89,6 +89,33 @@ function getDatabaseUrl() {
   );
 }
 
+function isDbConnectionError(err) {
+  const code = err?.code || '';
+  const msg = String(err?.message || err || '').toLowerCase();
+  return (
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ENOTFOUND' ||
+    code === '57P01' ||
+    code === '53300' ||
+    msg.includes('connection terminated') ||
+    msg.includes('econnreset') ||
+    msg.includes('socket hang up')
+  );
+}
+
+async function resetPool() {
+  if (pool) {
+    try {
+      await pool.end();
+    } catch {
+      /* ignore */
+    }
+    pool = null;
+  }
+}
+
 async function getPool() {
   if (pool) return pool;
   const databaseUrl = getDatabaseUrl();
@@ -102,8 +129,46 @@ async function getPool() {
       databaseUrl.includes('railway') || databaseUrl.includes('amazonaws.com') || databaseUrl.includes('neon.tech')
         ? { rejectUnauthorized: false }
         : undefined,
+    max: 20,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 15_000,
+    allowExitOnIdle: false,
+  });
+  pool.on('error', (err) => {
+    console.error('[Pool] Error en cliente idle:', err?.code || err?.message || err);
   });
   return pool;
+}
+
+/** Reintenta consultas cuando la conexión a Postgres se corta (común en Railway / red móvil). */
+async function queryWithRetry(db, text, params, opts = {}) {
+  const retries = opts.retries ?? 2;
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await db.query(text, params);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries && isDbConnectionError(err)) {
+        console.warn(`[DB] Reintento ${attempt + 1}/${retries} tras`, err?.code || err?.message);
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+function mapDbErrorForClient(err) {
+  if (isDbConnectionError(err)) {
+    return 'No se pudo conectar con la base de datos. Revisá tu internet e intentá de nuevo en unos segundos.';
+  }
+  const msg = String(err?.message || err || '');
+  if (/ECONNRESET|ETIMEDOUT|socket hang up/i.test(msg)) {
+    return 'La conexión con el servidor se interrumpió. Intentá de nuevo.';
+  }
+  return msg || 'Error del servidor';
 }
 
 function ensureSchemaReady() {
@@ -1189,13 +1254,8 @@ app.get('/api/turnos', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user.sucursalId;
-    const unificar = ['1', 'true', 'yes'].includes(String(req.query.unificar || '1').toLowerCase());
-    let turnosUnificados = 0;
-    if (unificar) {
-      turnosUnificados = await unificarTurnosDuplicadosSucursal(db, sid);
-    }
     const { rows } = await db.query('SELECT * FROM turnos WHERE sucursal_id = $1 ORDER BY created_at DESC', [sid]);
-    const data = rows.map((r) => ({
+    res.json(rows.map((r) => ({
       id: r.id,
       diaSemana: r.dia_semana,
       hora: r.hora,
@@ -1205,11 +1265,21 @@ app.get('/api/turnos', async (req, res) => {
       cupo: r.cupo != null ? Number(r.cupo) : 6,
       destacado: !!r.destacado,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
-    }));
-    if (turnosUnificados > 0) {
-      res.setHeader('X-Turnos-Unificados', String(turnosUnificados));
-    }
-    res.json(data);
+    })));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Corrige turnos duplicados (mismo día/hora). Ejecutar a demanda, no en cada carga del calendario. */
+app.post('/api/turnos/unificar-duplicados', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const merged = await unificarTurnosDuplicadosSucursal(db, sid);
+    res.json({ ok: true, turnosUnificados: merged });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -4706,12 +4776,13 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ ok: false, error: 'Base de datos no configurada' });
+    await queryWithRetry(db, 'SELECT 1');
     const { usuario, password } = req.body || {};
     if (!usuario || !password) return res.status(400).json({ ok: false, error: 'Faltan usuario o contraseña' });
     const u = usuario.trim();
     const adminUserEnv = (process.env.ADMIN_USER || 'adminF').trim();
     const isAdminUser = u === adminUserEnv;
-    const { rows: adminRows } = await db.query('SELECT id, clave_hash FROM admin WHERE usuario = $1', [u]);
+    const { rows: adminRows } = await queryWithRetry(db, 'SELECT id, clave_hash FROM admin WHERE usuario = $1', [u]);
     if (adminRows.length > 0) {
       const valid = await bcrypt.compare(password, adminRows[0].clave_hash);
       if (!valid) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });
@@ -4724,7 +4795,8 @@ app.post('/api/auth/login', async (req, res) => {
         error: 'Cuenta admin no configurada en la base de datos. Ejecutá: npm run db:schema (con DATABASE_URL). Para actualizar usuario/contraseña: npm run admin:update (con ADMIN_USER y ADMIN_PASSWORD).',
       });
     }
-    const { rows: sucRows } = await db.query(
+    const { rows: sucRows } = await queryWithRetry(
+      db,
       'SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil, activa, fecha_vencimiento_cuenta, planificacion_habilitada FROM sucursales WHERE usuario = $1',
       [u]
     );
@@ -4759,8 +4831,9 @@ app.post('/api/auth/login', async (req, res) => {
       planificacionHabilitada: s.planificacion_habilitada === true,
     });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok: false, error: e.message });
+    console.error('[auth/login]', e);
+    const status = isDbConnectionError(e) ? 503 : 500;
+    res.status(status).json({ ok: false, error: mapDbErrorForClient(e) });
   }
 });
 
@@ -4975,8 +5048,15 @@ app.patch('/api/admin/sucursales/:id', async (req, res) => {
 
 // Health (comprueba si hay DATABASE_URL y conexión)
 app.get('/api/health', async (req, res) => {
-  const db = await getPool();
-  res.json({ ok: true, db: !!db });
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ ok: false, db: false, error: 'Sin DATABASE_URL' });
+    await queryWithRetry(db, 'SELECT 1 AS ok');
+    res.json({ ok: true, db: true });
+  } catch (e) {
+    console.error('[health]', e);
+    res.status(503).json({ ok: false, db: false, error: mapDbErrorForClient(e) });
+  }
 });
 
 function escapeHtml(value = '') {

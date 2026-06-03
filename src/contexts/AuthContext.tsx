@@ -142,11 +142,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = useCallback(async (username: string, password: string): Promise<{ role: Role } | { error: string }> => {
     if (useApi()) {
-      try {
-        const res = await fetch(getApiBase() + '/api/auth/login', {
+      const body = JSON.stringify({ usuario: username.trim(), password });
+      const url = getApiBase() + '/api/auth/login';
+      const attemptLogin = async (): Promise<{ role: Role } | { error: string }> => {
+        const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario: username.trim(), password }),
+          body,
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.ok && data.token && data.role) {
@@ -175,9 +177,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           });
           return { role };
         }
-        return { error: data.error || 'Usuario o contraseña incorrectos' };
+        const errMsg = typeof data.error === 'string' ? data.error : '';
+        if (res.status === 503 || /conexión|conectar|interrumpió|reintentá/i.test(errMsg)) {
+          return { error: errMsg || 'No se pudo conectar con el servidor. Revisá tu internet e intentá de nuevo.' };
+        }
+        return { error: errMsg || 'Usuario o contraseña incorrectos' };
+      };
+      try {
+        const first = await attemptLogin();
+        if ('role' in first) return first;
+        const retryable =
+          first.error.includes('conectar') ||
+          first.error.includes('conexión') ||
+          first.error.includes('interrumpió') ||
+          first.error.includes('reintentá');
+        if (retryable) {
+          await new Promise((r) => setTimeout(r, 800));
+          return attemptLogin();
+        }
+        return first;
       } catch {
-        return { error: 'Usuario o contraseña incorrectos' };
+        return { error: 'No se pudo conectar con el servidor. Revisá tu internet e intentá de nuevo.' };
       }
     }
     if (username === 'Savia' && password === '2286') {

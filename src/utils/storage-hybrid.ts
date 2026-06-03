@@ -24,8 +24,7 @@ import { buildCierreRetiro } from './cierre-caja';
 import { horaActualInput } from './date';
 import { storage } from './storage';
 import { storageSupabase } from './storage-supabase';
-import { storageApi, consumeTurnosUnificados } from './storage-api';
-export { consumeTurnosUnificados };
+import { storageApi } from './storage-api';
 import * as finanzasLocal from './finanzas-local';
 import { clearFinanzasSession, getFinanzasExpiresAtMs } from './finanzas-session';
 
@@ -318,6 +317,10 @@ export const storageHybrid = {
       const b = backend();
       if (b) return await b.turnos.getByAlumnoId(alumnoId);
       return storage.turnos.getByAlumnoId(alumnoId);
+    },
+    unificarDuplicados: async (): Promise<{ ok: boolean; turnosUnificados: number }> => {
+      if (useApi()) return await storageApi.turnos.unificarDuplicados();
+      return { ok: true, turnosUnificados: 0 };
     },
   },
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno } from '../types';
 import { storage } from '../utils/storage';
-import { storageHybrid, consumeTurnosUnificados } from '../utils/storage-hybrid';
+import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
 import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -245,6 +245,7 @@ const Calendario = () => {
   /** Tamaño/posición del viewport visible (teclado móvil). */
   const [notaPlanifViewport, setNotaPlanifViewport] = useState<{ h: number; top: number } | null>(null);
   const notaPlanifTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const unificarTurnosOnce = useRef(false);
 
   type CierreDiaCal = { cerrarTodo: boolean; horasCerradas: string[] };
   const [cierresPorFecha, setCierresPorFecha] = useState<Record<string, CierreDiaCal>>({});
@@ -377,14 +378,6 @@ const Calendario = () => {
     try {
       const data = await storageHybrid.turnos.getAll();
       setTurnos(data);
-      const unificados = consumeTurnosUnificados();
-      if (unificados > 0) {
-        toast.success(
-          unificados === 1
-            ? 'Se corrigió 1 horario duplicado en el calendario.'
-            : `Se corrigieron ${unificados} horarios duplicados en el calendario.`
-        );
-      }
     } catch (error) {
       console.error('Error loading turnos:', error);
       setTurnos(storage.turnos.getAll());
@@ -469,6 +462,28 @@ const Calendario = () => {
       setCierresPorFecha({});
     }
   };
+
+  useEffect(() => {
+    if (!useApi() || unificarTurnosOnce.current) return;
+    unificarTurnosOnce.current = true;
+    void (async () => {
+      try {
+        const r = await storageHybrid.turnos.unificarDuplicados();
+        if (r.turnosUnificados > 0) {
+          toast.success(
+            r.turnosUnificados === 1
+              ? 'Se corrigió 1 horario duplicado en el calendario.'
+              : `Se corrigieron ${r.turnosUnificados} horarios duplicados en el calendario.`
+          );
+          await loadTurnos();
+          await loadRecuperaciones();
+          await loadInscripciones();
+        }
+      } catch {
+        /* no bloquear calendario */
+      }
+    })();
+  }, []);
 
   // Días de la semana: 0 = Lunes, 1 = Martes, ..., 5 = Sábado (sin domingo)
   const diasSemana = [0, 1, 2, 3, 4, 5];

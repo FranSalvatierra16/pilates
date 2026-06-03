@@ -5046,16 +5046,27 @@ app.patch('/api/admin/sucursales/:id', async (req, res) => {
   }
 });
 
-// Health (comprueba si hay DATABASE_URL y conexión)
+// Healthcheck de Railway: debe responder 200 siempre que el proceso esté vivo (sin depender de Postgres).
+app.get('/health', (req, res) => {
+  res.json({ ok: true });
+});
+
+// Health (comprueba si hay DATABASE_URL y conexión; no usar como healthcheck de deploy)
 app.get('/api/health', async (req, res) => {
+  const payload = { ok: true, db: false };
   try {
     const db = await getPool();
-    if (!db) return res.status(503).json({ ok: false, db: false, error: 'Sin DATABASE_URL' });
-    await queryWithRetry(db, 'SELECT 1 AS ok');
-    res.json({ ok: true, db: true });
+    if (!db) {
+      payload.error = 'Sin DATABASE_URL';
+      return res.json(payload);
+    }
+    await queryWithRetry(db, 'SELECT 1 AS ok', [], { retries: 1 });
+    payload.db = true;
+    res.json(payload);
   } catch (e) {
     console.error('[health]', e);
-    res.status(503).json({ ok: false, db: false, error: mapDbErrorForClient(e) });
+    payload.error = mapDbErrorForClient(e);
+    res.json(payload);
   }
 });
 

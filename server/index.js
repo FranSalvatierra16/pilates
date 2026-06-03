@@ -100,16 +100,6 @@ function isDbConnectionError(err) {
   );
 }
 
-async function resetPool() {
-  if (pool) {
-    try {
-      await pool.end();
-    } catch {
-      /* ignore */
-    }
-    pool = null;
-  }
-}
 
 async function getPool() {
   if (pool) return pool;
@@ -136,12 +126,13 @@ async function getPool() {
 }
 
 /** Reintenta consultas cuando la conexión a Postgres se corta (común en Railway / red móvil). */
-async function queryWithRetry(db, text, params, opts = {}) {
+async function queryWithRetry(_db, text, params, opts = {}) {
   const retries = opts.retries ?? 2;
   const timeoutMs = opts.timeoutMs ?? 10_000;
   let lastErr;
-  let activeDb = db;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    const activeDb = await getPool();
+    if (!activeDb) throw new Error('Base de datos no configurada');
     try {
       let timer;
       const queryPromise = activeDb.query(text, params);
@@ -158,12 +149,8 @@ async function queryWithRetry(db, text, params, opts = {}) {
       }
     } catch (err) {
       lastErr = err;
-      const retryable = attempt < retries && isDbConnectionError(err);
-      if (retryable) {
+      if (attempt < retries && isDbConnectionError(err)) {
         console.warn(`[DB] Reintento ${attempt + 1}/${retries} tras`, err?.code || err?.message);
-        await resetPool();
-        activeDb = await getPool();
-        if (!activeDb) throw lastErr;
         await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
         continue;
       }
@@ -174,11 +161,14 @@ async function queryWithRetry(db, text, params, opts = {}) {
 }
 
 function mapDbErrorForClient(err) {
+  const msg = String(err?.message || err || '');
+  if (/pool after calling end/i.test(msg)) {
+    return 'La conexión con la base de datos se interrumpió. Intentá de nuevo en unos segundos.';
+  }
   if (isDbConnectionError(err)) {
     return 'No se pudo conectar con la base de datos. Revisá tu internet e intentá de nuevo en unos segundos.';
   }
-  const msg = String(err?.message || err || '');
-  if (/ECONNRESET|ETIMEDOUT|socket hang up/i.test(msg)) {
+  if (/ECONNRESET|ETIMEDOUT|socket hang up|timeout conectando/i.test(msg)) {
     return 'La conexión con el servidor se interrumpió. Intentá de nuevo.';
   }
   return msg || 'Error del servidor';

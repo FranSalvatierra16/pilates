@@ -1,4 +1,4 @@
-import { getPool } from '../index.js';
+import { getPool } from '../db/index.js';
 
 export async function obtenerSesion(telefono) {
   const db = await getPool();

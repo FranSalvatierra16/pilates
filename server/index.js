@@ -72,6 +72,7 @@ const isAuthSkip = (path) =>
 
 app.use('/api', (req, res, next) => {
   console.log("PATH:", req.path);
+  console.log("SKIP:", isAuthSkip(req.path));
   if (isAuthSkip(req.path)) return next();
   if (req.path.startsWith('/public/')) return next();
   if (req.path.startsWith('/alumno-portal')) return next();
@@ -454,11 +455,17 @@ function buildCierreCajaServer({ descripcion, fechaCierre, horaCierre, montoReti
 
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'No autorizado' });
+
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+
   try {
     const token = auth.slice(7);
     const payload = jwt.verify(token, JWT_SECRET);
+
     req.user = payload;
+
     next();
   } catch {
     return res.status(401).json({ error: 'Sesión inválida' });

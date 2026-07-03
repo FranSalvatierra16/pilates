@@ -1,17 +1,17 @@
-const express = require("express");
+import express from 'express';
 
 const router = express.Router();
 
-router.post("/", async (req, res) => {
-    const { telefono, mensaje } = req.body;
+router.post('/', async (req, res) => {
+  const { telefono, mensaje } = req.body || {};
 
-    console.log("WhatsApp:", telefono);
-    console.log("Mensaje:", mensaje);
+  console.log('WhatsApp:', telefono);
+  console.log('Mensaje:', mensaje);
 
-    return res.json({
-        ok: true,
-        reply: "🌿 Hola! Bienvenido a Savia Pilates."
-    });
+  return res.json({
+    ok: true,
+    reply: '🌿 Hola! Bienvenido a Savia Pilates.',
+  });
 });
 
-module.exports = router;
+export default router;

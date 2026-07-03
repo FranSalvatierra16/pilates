@@ -71,8 +71,6 @@ const isAuthSkip = (path) =>
   authSkip.some((p) => path === p || path.startsWith(p));
 
 app.use('/api', (req, res, next) => {
-  console.log("PATH:", req.path);
-  console.log("SKIP:", isAuthSkip(req.path));
   if (isAuthSkip(req.path)) return next();
   if (req.path.startsWith('/public/')) return next();
   if (req.path.startsWith('/alumno-portal')) return next();

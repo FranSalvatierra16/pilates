@@ -10,6 +10,9 @@ import nodemailer from 'nodemailer';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+const chatbotRouter = require("./chatbot");
+
+
 
 const JWT_SECRET = process.env.JWT_SECRET || 'savia-pilates-secret-cambiar-en-produccion';
 
@@ -57,14 +60,24 @@ app.use('/api', (req, res, next) => {
 });
 
 // Auth: exigir JWT en todas las rutas excepto login, health, manifest PWA, registro público y portal alumno
-const authSkip = ['/health', '/auth/login', '/manifest.webmanifest'];
-const isAuthSkip = (path) => authSkip.some((p) => path === p || path.startsWith(p + '?'));
+const authSkip = [
+  '/health',
+  '/auth/login',
+  '/manifest.webmanifest',
+  '/chatbot'
+];
+
+const isAuthSkip = (path) =>
+  authSkip.some((p) => path === p || path.startsWith(p));
+
 app.use('/api', (req, res, next) => {
+  console.log("PATH:", req.path);
   if (isAuthSkip(req.path)) return next();
   if (req.path.startsWith('/public/')) return next();
-  if (req.path.startsWith('/alumno-portal')) return next(); // Portal alumno: solo sumarse/liberar cupo
+  if (req.path.startsWith('/alumno-portal')) return next();
   if (req.path === '/registro-link' && req.method === 'POST' && !req.path.includes('/agregar')) return next();
   if (req.path === '/actividades' && req.method === 'GET' && !req.headers.authorization) return next();
+
   authMiddleware(req, res, () => {
     if (req.path.startsWith('/admin')) return requireAdmin(req, res, next);
     requireSucursal(req, res, next);
@@ -5353,6 +5366,11 @@ app.post('/api/public/solicitud-prueba', async (req, res) => {
     res.status(500).json({ error: e.message || 'No se pudo enviar el correo.' });
   }
 });
+// Registrar rutas del chatbot
+app.use("/api/chatbot", chatbotRouter);
+
+
+
 
 // Servir frontend estático (después de build)
 const distPath = join(__dirname, '..', 'dist');

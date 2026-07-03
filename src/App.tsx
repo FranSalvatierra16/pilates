@@ -69,6 +69,7 @@ import AdminLayout from './pages/admin/AdminLayout';
 import AdminSucursales from './pages/admin/AdminSucursales';
 import AdminSucursalNueva from './pages/admin/AdminSucursalNueva';
 import AdminSucursalEditar from './pages/admin/AdminSucursalEditar';
+import ApiDocs from './pages/ApiDocs';
 
 /** En Railway: `VITE_PUBLIC_SITE_MODE=landing` para publicar solo la landing (sin rutas de app). */
 function isPublicLandingOnlySite() {
@@ -183,6 +184,7 @@ function App() {
           <DocumentTitle />
           {!landingOnly && <ShareBrandQuerySync />}
           <Routes>
+            <Route path="/docs/api" element={<ApiDocs />} />
             {landingOnly ? (
               <>
                 <Route path="/" element={<Landing />} />

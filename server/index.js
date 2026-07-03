@@ -10,7 +10,7 @@ import nodemailer from 'nodemailer';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-const chatbotRouter = require("./chatbot");
+import chatbotRouter from './chatbot/index.js';  
 
 
 

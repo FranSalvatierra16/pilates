@@ -375,3 +375,19 @@ CREATE TABLE IF NOT EXISTS planificacion_calendario_nota (
   UNIQUE (sucursal_id, fecha)
 );
 CREATE INDEX IF NOT EXISTS idx_planif_cal_nota_suc_fecha ON planificacion_calendario_nota(sucursal_id, fecha);
+
+-- Sesiones del chatbot WhatsApp (estado por teléfono)
+CREATE TABLE IF NOT EXISTS chatbot_sessions (
+  id SERIAL PRIMARY KEY,
+  telefono VARCHAR(30) UNIQUE NOT NULL,
+  estado VARCHAR(60) NOT NULL DEFAULT 'MENU_PRINCIPAL',
+  ultimo_menu VARCHAR(60),
+  contexto JSONB DEFAULT '{}'::jsonb,
+  ultima_interaccion TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+ALTER TABLE chatbot_sessions ADD COLUMN IF NOT EXISTS ultimo_menu VARCHAR(60);
+ALTER TABLE chatbot_sessions ADD COLUMN IF NOT EXISTS contexto JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE chatbot_sessions ADD COLUMN IF NOT EXISTS ultima_interaccion TIMESTAMP DEFAULT NOW();
+ALTER TABLE chatbot_sessions DROP COLUMN IF EXISTS ultima_accion;

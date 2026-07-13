@@ -74,20 +74,50 @@ function normalizarMensaje(mensaje) {
 }
 
 function esMenuOHola(msg) {
-  const m = normalizarMensaje(msg);
-  return (
-    m === '' ||
+  const m = normalizarMensaje(msg)
+    .replace(/[!?¡¿.,…]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!m) return true;
+  if (
     m === '0' ||
     m === 'menu' ||
     m === 'menú' ||
-    m === 'hola' ||
+    m === 'inicio' ||
     m === 'hi' ||
-    m === 'buenas' ||
-    m === 'buen dia' ||
-    m === 'buena tarde' ||
-    m === 'buena noche' ||
-    m === 'inicio'
-  );
+    m === 'hello' ||
+    m === 'ok' ||
+    m === 'oka' ||
+    m === 'okey' ||
+    m === 'okay' ||
+    m === 'dale' ||
+    m === 'listo' ||
+    m === 'gracias' ||
+    m === 'chau' ||
+    m === 'bye'
+  ) {
+    return true;
+  }
+  // "hola", "holaaa", "hola hola", "buenas", "buen dia", etc.
+  if (/^hola+/.test(m)) return true;
+  if (/^(buen\s*as?|buenas|buen\s*dias?|buena\s*tardes?|buena\s*noches?)/.test(m)) return true;
+  return false;
+}
+
+/** ¿Parece una consulta real (no un chat corto / joda)? */
+function pareceConsultaLibre(msg) {
+  const m = normalizarMensaje(msg);
+  if (!m || esMenuOHola(msg)) return false;
+  if (m.length >= 20) return true;
+  if (/[?]/.test(String(msg))) return true;
+  if (
+    /\b(quiero|necesito|consulta|consultar|pregunta|cuando|como|donde|precio|horario|turno|anotar|inscrib|clase|pilates)\b/.test(
+      m
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function identidadGuardada(contexto = {}) {
@@ -339,12 +369,19 @@ async function manejarMenuPrincipal(telefono, mensaje) {
     return irMenuNuevo(telefono);
   }
 
-  await actualizarSesion(telefono, {
-    estado: ESTADOS.MENU_PRINCIPAL,
-    ultimoMenu: ESTADOS.MENU_PRINCIPAL,
-    contexto: { ultimaConsulta: m },
-  });
-  return textoConsultaRecibida();
+  // Solo mensajes que parecen consulta real → profesora.
+  // "bue deja", "jaja", etc. no deben disparar ese aviso en loop.
+  if (pareceConsultaLibre(m)) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_PRINCIPAL,
+      ultimoMenu: ESTADOS.MENU_PRINCIPAL,
+      contexto: { ultimaConsulta: m },
+      mergeContexto: true,
+    });
+    return textoConsultaRecibida();
+  }
+
+  return textoOpcionInvalida(menuPrincipal);
 }
 
 async function manejarMenuNuevo(telefono, mensaje) {
@@ -811,11 +848,16 @@ async function manejarEsperandoConsulta(telefono, mensaje) {
     return irMenuPrincipal(telefono);
   }
 
+  // En este estado (eligió "hablar con profesora") cualquier texto es la consulta.
   await actualizarSesion(telefono, {
     estado: ESTADOS.MENU_PRINCIPAL,
+    ultimoMenu: ESTADOS.MENU_PRINCIPAL,
     contexto: { ultimaConsulta: m },
+    mergeContexto: true,
   });
-  return textoConsultaRecibida();
+  return `${textoConsultaRecibida()}
+
+${menuPrincipal()}`;
 }
 
 /**

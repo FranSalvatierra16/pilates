@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { getPool } from '../db/index.js';
+import { getSucursalChatbot } from './alumnos.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -415,6 +416,65 @@ export async function anotarRecuperacion(alumno, turnoId, semana) {
   }
 
   return { ok: true, recuperacionId: id, yaEstaba: false, turno: t, semana: semanaVista, usoCredito: true };
+}
+
+/**
+ * Cupos libres (esta semana y la próxima) para interesados / clase de prueba.
+ * No requiere alumno existente.
+ */
+export async function listarCuposDisponibles({ limite = 20 } = {}) {
+  const db = await getPool();
+  const sucursal = await getSucursalChatbot();
+  if (!db || !sucursal) {
+    return [];
+  }
+
+  const semanaActual = getSemanaActual();
+  const semanaSiguiente = semanaPortalSiguiente(semanaActual);
+
+  const { rows: turnoRows } = await db.query(
+    `SELECT id, dia_semana, hora, titulo, cupo, alumno_ids
+     FROM turnos
+     WHERE sucursal_id = $1
+     ORDER BY dia_semana, hora`,
+    [sucursal.id]
+  );
+  const turnos = dedupeTurnosPorFranja(turnoRows);
+  const opciones = [];
+
+  for (const semana of [semanaActual, semanaSiguiente]) {
+    const etiquetaSemana = semana === semanaActual ? 'Esta semana' : 'Próxima semana';
+    for (const t of turnos) {
+      const occ = await ocupacionTurnoSemana(db, t, semana, sucursal.id);
+      if (!occ || occ.libres <= 0) continue;
+
+      const fecha = getFechaFromSemanaYDia(semana, t.dia_semana);
+      const dia = DIAS[Number(t.dia_semana)] || `Día ${t.dia_semana}`;
+      const titulo = String(t.titulo || 'Clase').trim() || 'Clase';
+      const hora = String(t.hora || '').slice(0, 5);
+
+      opciones.push({
+        turnoId: t.id,
+        semana,
+        etiquetaSemana,
+        dia,
+        hora,
+        titulo,
+        fecha,
+        libres: occ.libres,
+        cupo: occ.cupo,
+        label: `${etiquetaSemana} · ${dia} ${formatoFechaCorta(fecha)} ${hora} — ${titulo} (${occ.libres} libres)`,
+      });
+    }
+  }
+
+  opciones.sort((a, b) => {
+    if (a.semana !== b.semana) return a.semana < b.semana ? -1 : 1;
+    if (a.fecha !== b.fecha) return a.fecha < b.fecha ? -1 : 1;
+    return String(a.hora).localeCompare(String(b.hora));
+  });
+
+  return opciones.slice(0, Math.max(1, Number(limite) || 20));
 }
 
 export { DIAS };

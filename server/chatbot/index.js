@@ -3,11 +3,16 @@ import { ESTADOS, ACCIONES_DNI } from './estados.js';
 import {
   menuPrincipal,
   menuAlumno,
+  menuNuevo,
   pedirDni,
   textoConocerSavia,
   textoHablarProfesora,
   textoConsultaRecibida,
   textoOpcionInvalida,
+  pedirNombreNuevo,
+  pedirApellidoNuevo,
+  pedirDniNuevo,
+  pedirEmailNuevo,
 } from './menu.js';
 import {
   respuestaVencimiento,
@@ -21,6 +26,11 @@ import {
   respuestaRecuperacionOk,
   respuestaRecuperacionYaHecha,
   lineasOpciones,
+  listaActividadesNuevo,
+  listaHorariosNuevo,
+  listaActividadesParaElegir,
+  listaHorariosParaElegir,
+  respuestaRegistroOk,
 } from './respuestas.js';
 import { obtenerOCrearSesion, actualizarSesion } from './sesiones.js';
 import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni } from '../services/alumnos.js';
@@ -30,6 +40,11 @@ import {
   listarClasesParaRecuperar,
   anotarRecuperacion,
 } from '../services/turnos.js';
+import {
+  listarActividadesChatbot,
+  listarHorariosParaNuevo,
+  registrarAlumnoNuevo,
+} from '../services/registroNuevo.js';
 
 const router = express.Router();
 
@@ -71,6 +86,18 @@ function identidadGuardada(contexto = {}) {
   return null;
 }
 
+function contextoAlta(ctx = {}) {
+  return {
+    altaNombre: ctx.altaNombre || null,
+    altaApellido: ctx.altaApellido || null,
+    altaDni: ctx.altaDni || null,
+    altaEmail: ctx.altaEmail || null,
+    altaActividadId: ctx.altaActividadId || null,
+    opcionesActividades: Array.isArray(ctx.opcionesActividades) ? ctx.opcionesActividades : [],
+    opcionesHorariosNuevo: Array.isArray(ctx.opcionesHorariosNuevo) ? ctx.opcionesHorariosNuevo : [],
+  };
+}
+
 async function irMenuPrincipal(telefono, { resetIdentidad = false } = {}) {
   const sesion = await obtenerOCrearSesion(telefono);
   const identidad = resetIdentidad ? null : identidadGuardada(sesion.contexto);
@@ -93,6 +120,18 @@ async function irMenuAlumno(telefono) {
     mergeContexto: false,
   });
   return menuAlumno();
+}
+
+async function irMenuNuevo(telefono) {
+  const sesion = await obtenerOCrearSesion(telefono);
+  const identidad = identidadGuardada(sesion.contexto);
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.MENU_NUEVO,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+    contexto: identidad ? { dni: identidad.dni, alumnoId: identidad.alumnoId } : {},
+    mergeContexto: false,
+  });
+  return menuNuevo();
 }
 
 async function pedirDniPara(telefono, accion, sesion) {
@@ -211,6 +250,36 @@ async function resolverAccionConAlumno(telefono, alumno, accion) {
   }
 }
 
+async function mostrarActividadesNuevo(telefono) {
+  const actividades = await listarActividadesChatbot();
+  const { texto } = listaActividadesNuevo(actividades);
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.MENU_NUEVO,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+  });
+  return texto;
+}
+
+async function mostrarHorariosNuevo(telefono) {
+  const opciones = await listarHorariosParaNuevo({ limite: 20 });
+  const { texto } = listaHorariosNuevo(opciones);
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.MENU_NUEVO,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+  });
+  return texto;
+}
+
+async function iniciarAltaNuevo(telefono) {
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.NUEVO_NOMBRE,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+    contexto: {},
+    mergeContexto: false,
+  });
+  return pedirNombreNuevo();
+}
+
 async function manejarMenuPrincipal(telefono, mensaje) {
   const m = String(mensaje || '').trim();
 
@@ -223,10 +292,14 @@ async function manejarMenuPrincipal(telefono, mensaje) {
   }
 
   if (m === '2') {
-    return irMenuAlumno(telefono);
+    return irMenuNuevo(telefono);
   }
 
   if (m === '3') {
+    return irMenuAlumno(telefono);
+  }
+
+  if (m === '4') {
     await actualizarSesion(telefono, {
       estado: ESTADOS.ESPERANDO_CONSULTA,
       ultimoMenu: ESTADOS.MENU_PRINCIPAL,
@@ -240,13 +313,249 @@ async function manejarMenuPrincipal(telefono, mensaje) {
     return irMenuPrincipal(telefono);
   }
 
-  // Texto libre desde el menú principal → lo tratamos como consulta
+  const mNorm = normalizarMensaje(m);
+  if (
+    mNorm.includes('anotar') ||
+    mNorm.includes('nuevo') ||
+    mNorm.includes('prueba') ||
+    mNorm.includes('sumarme') ||
+    mNorm.includes('inscrib')
+  ) {
+    return irMenuNuevo(telefono);
+  }
+
   await actualizarSesion(telefono, {
     estado: ESTADOS.MENU_PRINCIPAL,
     ultimoMenu: ESTADOS.MENU_PRINCIPAL,
     contexto: { ultimaConsulta: m },
   });
   return textoConsultaRecibida();
+}
+
+async function manejarMenuNuevo(telefono, mensaje) {
+  const m = String(mensaje || '').trim();
+  const mNorm = normalizarMensaje(m);
+
+  if (m === '0' || esMenuOHola(m) || mNorm === 'menu' || mNorm === 'inicio') {
+    return irMenuPrincipal(telefono);
+  }
+
+  if (m === '1') return mostrarActividadesNuevo(telefono);
+  if (m === '2') return mostrarHorariosNuevo(telefono);
+  if (m === '3') return iniciarAltaNuevo(telefono);
+
+  return textoOpcionInvalida(menuNuevo);
+}
+
+async function manejarNuevoNombre(telefono, mensaje) {
+  const m = String(mensaje || '').trim();
+  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+
+  if (m.length < 2) {
+    return `El nombre es muy corto. Escribilo de nuevo.\n\n0️⃣ Cancelar`;
+  }
+
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.NUEVO_APELLIDO,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+    contexto: { altaNombre: m },
+    mergeContexto: false,
+  });
+  return pedirApellidoNuevo();
+}
+
+async function manejarNuevoApellido(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+
+  if (m.length < 2) {
+    return `El apellido es muy corto. Escribilo de nuevo.\n\n0️⃣ Cancelar`;
+  }
+
+  const alta = contextoAlta(sesion.contexto);
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.NUEVO_DNI,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+    contexto: { ...alta, altaApellido: m },
+    mergeContexto: false,
+  });
+  return pedirDniNuevo();
+}
+
+async function manejarNuevoDni(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+
+  const dni = normalizarDni(m);
+  if (!dni || dni.length < 6) return respuestaDniInvalido();
+
+  const existente = await buscarAlumnoPorDni(dni);
+  if (existente) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: existente.id,
+        dni: normalizarDni(existente.dni) || dni,
+      },
+      mergeContexto: false,
+    });
+    return `Ya estás cargado/a como *${existente.nombre} ${existente.apellido}* 😊
+
+Te paso al menú de alumno:
+
+${menuAlumno()}`;
+  }
+
+  const alta = contextoAlta(sesion.contexto);
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.NUEVO_EMAIL,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+    contexto: { ...alta, altaDni: dni },
+    mergeContexto: false,
+  });
+  return pedirEmailNuevo();
+}
+
+async function manejarNuevoEmail(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+
+  let email = m === '-' || m === '—' || normalizarMensaje(m) === 'no' ? '' : m;
+  if (email && !email.includes('@')) {
+    return `Ese email no parece válido. Escribilo de nuevo (o *-* para omitir).\n\n0️⃣ Cancelar`;
+  }
+
+  const alta = contextoAlta(sesion.contexto);
+  const actividades = await listarActividadesChatbot();
+  const { texto, opciones } = listaActividadesParaElegir(actividades);
+
+  if (!opciones.length) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_NUEVO,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: {},
+      mergeContexto: false,
+    });
+    return texto;
+  }
+
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.NUEVO_ACTIVIDAD,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+    contexto: {
+      ...alta,
+      altaEmail: email,
+      opcionesActividades: opciones.map((a) => ({
+        id: a.id,
+        nombre: a.nombre,
+        labelPrecio: a.labelPrecio,
+        clasesPorSemana: a.clasesPorSemana,
+      })),
+    },
+    mergeContexto: false,
+  });
+  return texto;
+}
+
+async function manejarNuevoActividad(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+
+  const opciones = Array.isArray(sesion.contexto?.opcionesActividades)
+    ? sesion.contexto.opcionesActividades
+    : [];
+  const n = Number.parseInt(m, 10);
+  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
+    return `Elegí un número de la lista:\n\n${lineasOpciones(opciones, (a) => `*${a.nombre}* — ${a.labelPrecio}`)}\n\n0️⃣ Cancelar`;
+  }
+
+  const elegida = opciones[n - 1];
+  const horarios = await listarHorariosParaNuevo({ limite: 20 });
+  const { texto, opciones: opsH } = listaHorariosParaElegir(horarios);
+
+  if (!opsH.length) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_NUEVO,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: {},
+      mergeContexto: false,
+    });
+    return texto;
+  }
+
+  const alta = contextoAlta(sesion.contexto);
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.NUEVO_HORARIO,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+    contexto: {
+      ...alta,
+      altaActividadId: elegida.id,
+      opcionesHorariosNuevo: opsH.map((o) => ({
+        turnoId: o.turnoId,
+        semana: o.semana,
+        label: o.label,
+      })),
+    },
+    mergeContexto: false,
+  });
+  return texto;
+}
+
+async function manejarNuevoHorario(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+
+  const opciones = Array.isArray(sesion.contexto?.opcionesHorariosNuevo)
+    ? sesion.contexto.opcionesHorariosNuevo
+    : [];
+  const n = Number.parseInt(m, 10);
+  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
+    return `Elegí un número de la lista:\n\n${lineasOpciones(opciones)}\n\n0️⃣ Cancelar`;
+  }
+
+  const opcion = opciones[n - 1];
+  const alta = contextoAlta(sesion.contexto);
+
+  try {
+    const result = await registrarAlumnoNuevo({
+      nombre: alta.altaNombre,
+      apellido: alta.altaApellido,
+      dni: alta.altaDni,
+      telefono,
+      email: alta.altaEmail,
+      actividadId: alta.altaActividadId,
+      turnoId: opcion.turnoId,
+      semana: opcion.semana,
+    });
+
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_PRINCIPAL,
+      ultimoMenu: ESTADOS.MENU_PRINCIPAL,
+      contexto: {
+        dni: result.alumno.dni,
+        alumnoId: result.alumno.id,
+      },
+      mergeContexto: false,
+    });
+
+    return respuestaRegistroOk(result);
+  } catch (e) {
+    console.error('[chatbot registro nuevo]', e);
+    if (e.status === 409 && e.alumno) {
+      await actualizarSesion(telefono, {
+        estado: ESTADOS.MENU_ALUMNO,
+        ultimoMenu: ESTADOS.MENU_ALUMNO,
+        contexto: {
+          alumnoId: e.alumno.id,
+          dni: normalizarDni(e.alumno.dni),
+        },
+        mergeContexto: false,
+      });
+      return `${e.message}\n\n${menuAlumno()}`;
+    }
+    return `${e.message || 'No se pudo completar el alta.'}\n\nProbá de nuevo con *3* en el menú nuevo, o *0* para salir.`;
+  }
 }
 
 async function manejarMenuAlumno(telefono, mensaje, sesion) {
@@ -257,7 +566,6 @@ async function manejarMenuAlumno(telefono, mensaje, sesion) {
     return irMenuPrincipal(telefono);
   }
 
-  // "menu" / "hola" reinician todo, incluido el DNI guardado
   if (mNorm === 'menu' || mNorm === 'menú' || mNorm === 'inicio') {
     return irMenuPrincipal(telefono, { resetIdentidad: true });
   }
@@ -265,7 +573,6 @@ async function manejarMenuAlumno(telefono, mensaje, sesion) {
     return irMenuPrincipal(telefono);
   }
 
-  // Escribir otro DNI desde el menú alumno cambia la identidad guardada
   const posibleDni = normalizarDni(m);
   if (posibleDni.length >= 6 && /^\d+$/.test(m.replace(/[.\s-]/g, ''))) {
     const alumno = await buscarAlumnoPorDni(posibleDni);
@@ -448,6 +755,27 @@ router.post('/', async (req, res) => {
     switch (sesion.estado) {
       case ESTADOS.MENU_ALUMNO:
         reply = await manejarMenuAlumno(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.MENU_NUEVO:
+        reply = await manejarMenuNuevo(telefono, mensaje);
+        break;
+      case ESTADOS.NUEVO_NOMBRE:
+        reply = await manejarNuevoNombre(telefono, mensaje);
+        break;
+      case ESTADOS.NUEVO_APELLIDO:
+        reply = await manejarNuevoApellido(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.NUEVO_DNI:
+        reply = await manejarNuevoDni(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.NUEVO_EMAIL:
+        reply = await manejarNuevoEmail(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.NUEVO_ACTIVIDAD:
+        reply = await manejarNuevoActividad(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.NUEVO_HORARIO:
+        reply = await manejarNuevoHorario(telefono, mensaje, sesion);
         break;
       case ESTADOS.ESPERANDO_DNI:
         reply = await manejarEsperandoDni(telefono, mensaje, sesion);

@@ -36,7 +36,7 @@ export function respuestaHorarios(alumno, turnos) {
 
 Todavía no tenés clases fijas cargadas en el sistema.
 
-Consultá con tu estudio o pedí hablar con una profesora (opción 3️⃣ del menú).
+Consultá con tu estudio o pedí hablar con una profesora (opción 4️⃣ del menú principal).
 
 0️⃣ Volver al menú principal`;
   }
@@ -157,7 +157,7 @@ Primero liberá una clase fija (opción 2️⃣ del menú alumno).
 
 No hay cupos libres para recuperar en esta semana ni la próxima.
 
-Probá más tarde o pedí ayuda a una profesora (opción 3️⃣ del menú principal).
+Probá más tarde o pedí ayuda a una profesora (opción 4️⃣ del menú principal).
 
 0️⃣ Volver`,
       opciones: [],
@@ -203,7 +203,9 @@ export function respuestaRecuperacionYaHecha(opcion) {
 export function respuestaDniNoEncontrado() {
   return `No encontré un alumno activo con ese DNI en *Savia3* (prueba) 😕
 
-Revisá el número e intentá de nuevo, o pedí hablar con una profesora (opción 3️⃣ del menú).
+Si sos nuevo/a, volvé al menú (*0*) y elegí *2* para anotarte.
+
+Si ya estás en el estudio, revisá el número o pedí hablar con una profesora (opción *4*).
 
 Escribí tu DNI otra vez, o 0️⃣ para volver.`;
 }
@@ -213,3 +215,135 @@ export function respuestaDniInvalido() {
 
 0️⃣ Cancelar y volver`;
 }
+
+export function listaActividadesNuevo(actividades) {
+  if (!actividades.length) {
+    return {
+      texto: `Todavía no hay actividades cargadas en el sistema.
+
+Pedí hablar con una profesora (opción 4️⃣ del menú).
+
+0️⃣ Volver`,
+      opciones: [],
+    };
+  }
+
+  const lineas = lineasOpciones(actividades, (a) => {
+    const clases =
+      a.clasesPorSemana != null && Number.isFinite(Number(a.clasesPorSemana))
+        ? ` · ${a.clasesPorSemana} clase${Number(a.clasesPorSemana) === 1 ? '' : 's'}/sem`
+        : '';
+    return `*${a.nombre}* — ${a.labelPrecio}${clases}`;
+  });
+
+  return {
+    texto: `📋 Actividades / planes en Savia3:
+
+${lineas}
+
+🎁 La clase de prueba es gratuita. Después el plan se coordina en el estudio.
+
+Para anotarte: volvé al menú nuevo y elegí 3️⃣.
+
+0️⃣ Volver`,
+    opciones: actividades,
+  };
+}
+
+export function listaHorariosNuevo(opciones) {
+  if (!opciones.length) {
+    return {
+      texto: `No hay cupos libres en esta semana ni la próxima 😕
+
+Probá más tarde o pedí hablar con una profesora (opción 4️⃣).
+
+0️⃣ Volver`,
+      opciones: [],
+    };
+  }
+
+  const lineas = lineasOpciones(opciones);
+  return {
+    texto: `🗓️ Horarios con cupo libre:
+
+${lineas}
+
+Para anotarte a una clase de prueba: opción 3️⃣ del menú nuevo.
+
+0️⃣ Volver`,
+    opciones,
+  };
+}
+
+export function listaActividadesParaElegir(actividades) {
+  if (!actividades.length) {
+    return {
+      texto: `No hay actividades cargadas. Avisale a una profesora (opción 4️⃣).
+
+0️⃣ Cancelar`,
+      opciones: [],
+    };
+  }
+
+  const lineas = lineasOpciones(actividades, (a) => {
+    const clases =
+      a.clasesPorSemana != null && Number.isFinite(Number(a.clasesPorSemana))
+        ? ` · ${a.clasesPorSemana} x sem`
+        : '';
+    return `*${a.nombre}* — ${a.labelPrecio}${clases}`;
+  });
+
+  return {
+    texto: `📋 ¿Qué *actividad / plan* te interesa?
+
+${lineas}
+
+(La prueba es gratis; el plan lo confirmás después en el estudio.)
+
+0️⃣ Cancelar`,
+    opciones: actividades,
+  };
+}
+
+export function listaHorariosParaElegir(opciones) {
+  if (!opciones.length) {
+    return {
+      texto: `No quedó ningún cupo libre ahora 😕
+
+Probá más tarde o pedí ayuda con la opción 4️⃣.
+
+0️⃣ Cancelar`,
+      opciones: [],
+    };
+  }
+
+  const lineas = lineasOpciones(opciones);
+  return {
+    texto: `🗓️ Elegí el horario de tu *clase de prueba*:
+
+${lineas}
+
+0️⃣ Cancelar`,
+    opciones,
+  };
+}
+
+export function respuestaRegistroOk(result) {
+  const a = result.alumno;
+  const plan = result.actividad
+    ? `\n📋 Plan de interés: *${result.actividad.nombre}*`
+    : '';
+  return `✅ ¡Listo ${a.nombre}!
+
+Te anotamos como *alumno/a a prueba* en Savia3.${plan}
+
+🎁 Clase de prueba:
+*${result.clase.label}*
+
+El estudio te va a confirmar. Si necesitás cambiar algo, escribí *4* (hablar con una profesora).
+
+Cuando ya figuras como alumno/a, usá la opción *3* del menú.
+
+0️⃣ Menú principal`;
+}
+

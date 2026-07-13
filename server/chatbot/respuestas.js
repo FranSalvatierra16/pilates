@@ -108,7 +108,7 @@ Liberaste: *${opcion.label}*
 
 💳 Créditos para recuperar: *${creditos}*
 
-Podés recuperar desde el portal *Tu clase* o pedir ayuda a una profesora.
+Ahora podés recuperar con la opción 3️⃣ del menú alumno.
 
 0️⃣ Menú alumno`;
 }
@@ -120,19 +120,72 @@ export function respuestaLiberacionYaHecha(opcion) {
 0️⃣ Volver`;
 }
 
-export function respuestaRecuperar(alumno) {
+export function listaRecuperarClases(alumno, opciones, creditos) {
   const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
-  const creditos = Number(alumno.clases_para_recuperar) || 0;
+  const cred = Number(creditos) || 0;
 
-  return `👤 ${nombre}
+  if (cred <= 0) {
+    return {
+      texto: `👤 ${nombre}
 
-Para *recuperar* una clase, entrá a *Tu clase* con tu DNI y anotate en un horario con cupo libre.
+No tenés créditos para recuperar (💳 *0*).
 
-💳 Créditos disponibles: *${creditos}*
+Primero liberá una clase fija (opción 2️⃣ del menú alumno).
 
-Si no tenés créditos, primero liberá una fija o pedí ayuda a una profesora (opción 3️⃣).
+0️⃣ Volver`,
+      opciones: [],
+    };
+  }
 
-0️⃣ Volver al menú principal`;
+  if (!opciones.length) {
+    return {
+      texto: `👤 ${nombre}
+
+💳 Créditos: *${cred}*
+
+No hay cupos libres para recuperar en esta semana ni la próxima.
+
+Probá más tarde o pedí ayuda a una profesora (opción 3️⃣ del menú principal).
+
+0️⃣ Volver`,
+      opciones: [],
+    };
+  }
+
+  const lineas = opciones.map((o, i) => `${i + 1}️⃣ ${o.label}`);
+  return {
+    texto: `👤 ${nombre}
+
+💳 Créditos: *${cred}*
+
+¿En qué clase querés *recuperar*?
+
+${lineas.join('\n')}
+
+Al anotarte se descuenta 1 crédito.
+
+0️⃣ Cancelar y volver`,
+    opciones,
+  };
+}
+
+export function respuestaRecuperacionOk(alumno, opcion, creditos) {
+  const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
+  return `✅ Listo ${nombre}
+
+Te anotaste para recuperar:
+*${opcion.label}*
+
+💳 Créditos restantes: *${creditos}*
+
+0️⃣ Menú alumno`;
+}
+
+export function respuestaRecuperacionYaHecha(opcion) {
+  return `Ya estabas anotada/o en esa recuperación:
+*${opcion.label}*
+
+0️⃣ Volver`;
 }
 
 export function respuestaDniNoEncontrado() {

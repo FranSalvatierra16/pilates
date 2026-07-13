@@ -12,16 +12,23 @@ import {
 import {
   respuestaVencimiento,
   respuestaHorarios,
-  respuestaRecuperar,
   respuestaDniNoEncontrado,
   respuestaDniInvalido,
   listaLiberarClases,
   respuestaLiberacionOk,
   respuestaLiberacionYaHecha,
+  listaRecuperarClases,
+  respuestaRecuperacionOk,
+  respuestaRecuperacionYaHecha,
 } from './respuestas.js';
 import { obtenerOCrearSesion, actualizarSesion } from './sesiones.js';
 import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni } from '../services/alumnos.js';
-import { listarClasesParaLiberar, liberarClaseFija } from '../services/turnos.js';
+import {
+  listarClasesParaLiberar,
+  liberarClaseFija,
+  listarClasesParaRecuperar,
+  anotarRecuperacion,
+} from '../services/turnos.js';
 
 const router = express.Router();
 
@@ -152,6 +159,40 @@ async function iniciarLiberarClases(telefono, alumno) {
   return texto;
 }
 
+async function iniciarRecuperarClases(telefono, alumno) {
+  const { opciones, creditos } = await listarClasesParaRecuperar(alumno);
+  const { texto, opciones: recuperables } = listaRecuperarClases(alumno, opciones, creditos);
+
+  if (!recuperables.length) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: alumno.id,
+        dni: normalizarDni(alumno.dni),
+      },
+      mergeContexto: false,
+    });
+    return texto;
+  }
+
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.ESPERANDO_RECUPERAR,
+    ultimoMenu: ESTADOS.MENU_ALUMNO,
+    contexto: {
+      alumnoId: alumno.id,
+      dni: normalizarDni(alumno.dni),
+      opcionesRecuperar: recuperables.map((o) => ({
+        turnoId: o.turnoId,
+        semana: o.semana,
+        label: o.label,
+      })),
+    },
+    mergeContexto: false,
+  });
+  return texto;
+}
+
 async function resolverAccionConAlumno(telefono, alumno, accion) {
   switch (accion) {
     case ACCIONES_DNI.VENCIMIENTO:
@@ -159,7 +200,7 @@ async function resolverAccionConAlumno(telefono, alumno, accion) {
     case ACCIONES_DNI.CANCELAR:
       return iniciarLiberarClases(telefono, alumno);
     case ACCIONES_DNI.RECUPERAR:
-      return respuestaRecuperar(alumno);
+      return iniciarRecuperarClases(telefono, alumno);
     case ACCIONES_DNI.HORARIOS: {
       const turnos = await horariosFijosAlumno(alumno.id);
       return respuestaHorarios(alumno, turnos);
@@ -328,6 +369,50 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
   }
 }
 
+async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+
+  if (m === '0') {
+    return irMenuAlumno(telefono);
+  }
+
+  const opciones = Array.isArray(sesion.contexto?.opcionesRecuperar) ? sesion.contexto.opcionesRecuperar : [];
+  const n = Number.parseInt(m, 10);
+  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
+    const lineas = opciones.map((o, i) => `${i + 1}️⃣ ${o.label}`).join('\n');
+    return `Elegí un número de la lista:\n\n${lineas}\n\n0️⃣ Cancelar`;
+  }
+
+  const opcion = opciones[n - 1];
+  const dni = sesion.contexto?.dni;
+  const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
+  if (!alumno) {
+    return irMenuAlumno(telefono);
+  }
+
+  try {
+    const result = await anotarRecuperacion(alumno, opcion.turnoId, opcion.semana);
+    const alumnoFresh = await buscarAlumnoPorDni(dni);
+    const creditos = Number(alumnoFresh?.clases_para_recuperar ?? 0) || 0;
+
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: alumno.id,
+        dni: normalizarDni(alumno.dni) || dni,
+      },
+      mergeContexto: false,
+    });
+
+    if (result.yaEstaba) return respuestaRecuperacionYaHecha(opcion);
+    return respuestaRecuperacionOk(alumno, opcion, creditos);
+  } catch (e) {
+    console.error('[chatbot recuperar]', e);
+    return `${e.message || 'No se pudo anotar la recuperación.'}\n\n0️⃣ Volver`;
+  }
+}
+
 async function manejarEsperandoConsulta(telefono, mensaje) {
   const m = String(mensaje || '').trim();
 
@@ -370,6 +455,9 @@ router.post('/', async (req, res) => {
         break;
       case ESTADOS.ESPERANDO_LIBERAR:
         reply = await manejarEsperandoLiberar(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.ESPERANDO_RECUPERAR:
+        reply = await manejarEsperandoRecuperar(telefono, mensaje, sesion);
         break;
       case ESTADOS.ESPERANDO_CONSULTA:
         reply = await manejarEsperandoConsulta(telefono, mensaje);

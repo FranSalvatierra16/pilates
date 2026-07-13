@@ -31,8 +31,18 @@ import {
   listaActividadesParaElegir,
   listaHorariosParaElegir,
   respuestaRegistroOk,
+  renderPaginaOpciones,
+  esPedidoMas,
+  esPedidoAnterior,
+  PAGE_SIZE,
 } from './respuestas.js';
-import { obtenerOCrearSesion, actualizarSesion } from './sesiones.js';
+import {
+  obtenerOCrearSesion,
+  actualizarSesion,
+  guardarDedup,
+  replySiDuplicado,
+  reclamarEstado,
+} from './sesiones.js';
 import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni } from '../services/alumnos.js';
 import {
   listarClasesParaLiberar,
@@ -165,9 +175,17 @@ async function pedirDniPara(telefono, accion, sesion) {
   return pedirDni(LABELS_ACCION[accion] || 'continuar');
 }
 
+function mapOpcionesMin(opciones) {
+  return opciones.map((o) => ({
+    turnoId: o.turnoId,
+    semana: o.semana,
+    label: o.label,
+  }));
+}
+
 async function iniciarLiberarClases(telefono, alumno) {
   const { opciones } = await listarClasesParaLiberar(alumno);
-  const { texto, opciones: liberables } = listaLiberarClases(alumno, opciones);
+  const { texto, opciones: liberables, page } = listaLiberarClases(alumno, opciones, 0);
 
   if (!liberables.length) {
     await actualizarSesion(telefono, {
@@ -188,11 +206,8 @@ async function iniciarLiberarClases(telefono, alumno) {
     contexto: {
       alumnoId: alumno.id,
       dni: normalizarDni(alumno.dni),
-      opcionesLiberar: liberables.map((o) => ({
-        turnoId: o.turnoId,
-        semana: o.semana,
-        label: o.label,
-      })),
+      paginaLista: page || 0,
+      opcionesLiberar: mapOpcionesMin(liberables),
     },
     mergeContexto: false,
   });
@@ -201,7 +216,7 @@ async function iniciarLiberarClases(telefono, alumno) {
 
 async function iniciarRecuperarClases(telefono, alumno) {
   const { opciones, creditos } = await listarClasesParaRecuperar(alumno);
-  const { texto, opciones: recuperables } = listaRecuperarClases(alumno, opciones, creditos);
+  const { texto, opciones: recuperables, page } = listaRecuperarClases(alumno, opciones, creditos, 0);
 
   if (!recuperables.length) {
     await actualizarSesion(telefono, {
@@ -222,11 +237,8 @@ async function iniciarRecuperarClases(telefono, alumno) {
     contexto: {
       alumnoId: alumno.id,
       dni: normalizarDni(alumno.dni),
-      opcionesRecuperar: recuperables.map((o) => ({
-        turnoId: o.turnoId,
-        semana: o.semana,
-        label: o.label,
-      })),
+      paginaLista: page || 0,
+      opcionesRecuperar: mapOpcionesMin(recuperables),
     },
     mergeContexto: false,
   });
@@ -261,8 +273,8 @@ async function mostrarActividadesNuevo(telefono) {
 }
 
 async function mostrarHorariosNuevo(telefono) {
-  const opciones = await listarHorariosParaNuevo({ limite: 20 });
-  const { texto } = listaHorariosNuevo(opciones);
+  const opciones = await listarHorariosParaNuevo({ limite: 80 });
+  const { texto } = listaHorariosNuevo(opciones, 0);
   await actualizarSesion(telefono, {
     estado: ESTADOS.MENU_NUEVO,
     ultimoMenu: ESTADOS.MENU_NUEVO,
@@ -471,8 +483,8 @@ async function manejarNuevoActividad(telefono, mensaje, sesion) {
   }
 
   const elegida = opciones[n - 1];
-  const horarios = await listarHorariosParaNuevo({ limite: 20 });
-  const { texto, opciones: opsH } = listaHorariosParaElegir(horarios);
+  const horarios = await listarHorariosParaNuevo({ limite: 80 });
+  const { texto, opciones: opsH, page } = listaHorariosParaElegir(horarios, 0);
 
   if (!opsH.length) {
     await actualizarSesion(telefono, {
@@ -491,11 +503,8 @@ async function manejarNuevoActividad(telefono, mensaje, sesion) {
     contexto: {
       ...alta,
       altaActividadId: elegida.id,
-      opcionesHorariosNuevo: opsH.map((o) => ({
-        turnoId: o.turnoId,
-        semana: o.semana,
-        label: o.label,
-      })),
+      paginaLista: page || 0,
+      opcionesHorariosNuevo: mapOpcionesMin(opsH),
     },
     mergeContexto: false,
   });
@@ -509,13 +518,35 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
   const opciones = Array.isArray(sesion.contexto?.opcionesHorariosNuevo)
     ? sesion.contexto.opcionesHorariosNuevo
     : [];
-  const n = Number.parseInt(m, 10);
-  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
-    return `Elegí un número de la lista:\n\n${lineasOpciones(opciones)}\n\n0️⃣ Cancelar`;
+  let page = Number(sesion.contexto?.paginaLista) || 0;
+
+  if (esPedidoMas(m) || esPedidoAnterior(m)) {
+    const pages = Math.max(1, Math.ceil(opciones.length / PAGE_SIZE) || 1);
+    page = esPedidoMas(m) ? Math.min(page + 1, pages - 1) : Math.max(page - 1, 0);
+    const { texto } = listaHorariosParaElegir(opciones, page);
+    await actualizarSesion(telefono, {
+      contexto: { paginaLista: page },
+      mergeContexto: true,
+    });
+    return texto;
   }
 
-  const opcion = opciones[n - 1];
-  const alta = contextoAlta(sesion.contexto);
+  const n = Number.parseInt(m, 10);
+  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
+    const pag = renderPaginaOpciones(opciones, page);
+    return `Elegí un número de la lista:\n${pag.header}${pag.lineas}\n${pag.pie ? `${pag.pie}\n` : ''}\n0️⃣ Cancelar`;
+  }
+
+  const ctxClaim = await reclamarEstado(telefono, ESTADOS.NUEVO_HORARIO, {
+    estadoFinal: ESTADOS.MENU_PRINCIPAL,
+  });
+  if (!ctxClaim) {
+    return `Ya procesamos esa anotación ✅\n\n${menuPrincipal()}`;
+  }
+
+  const ops = Array.isArray(ctxClaim.opcionesHorariosNuevo) ? ctxClaim.opcionesHorariosNuevo : opciones;
+  const opcion = ops[n - 1];
+  const alta = contextoAlta(ctxClaim);
 
   try {
     const result = await registrarAlumnoNuevo({
@@ -641,13 +672,38 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
   }
 
   const opciones = Array.isArray(sesion.contexto?.opcionesLiberar) ? sesion.contexto.opcionesLiberar : [];
-  const n = Number.parseInt(m, 10);
-  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
-    return `Elegí un número de la lista:\n\n${lineasOpciones(opciones)}\n\n0️⃣ Cancelar`;
+  let page = Number(sesion.contexto?.paginaLista) || 0;
+
+  if (esPedidoMas(m) || esPedidoAnterior(m)) {
+    const dni = sesion.contexto?.dni;
+    const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
+    if (!alumno) return irMenuAlumno(telefono);
+    const pages = Math.max(1, Math.ceil(opciones.length / PAGE_SIZE) || 1);
+    page = esPedidoMas(m) ? Math.min(page + 1, pages - 1) : Math.max(page - 1, 0);
+    const { texto } = listaLiberarClases(alumno, opciones.map((o) => ({ ...o, yaLiberada: false })), page);
+    await actualizarSesion(telefono, {
+      contexto: { paginaLista: page },
+      mergeContexto: true,
+    });
+    return texto;
   }
 
-  const opcion = opciones[n - 1];
-  const dni = sesion.contexto?.dni;
+  const n = Number.parseInt(m, 10);
+  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
+    const pag = renderPaginaOpciones(opciones, page);
+    return `Elegí un número de la lista:\n${pag.header}${pag.lineas}\n${pag.pie ? `${pag.pie}\n` : ''}\n0️⃣ Cancelar`;
+  }
+
+  const ctxClaim = await reclamarEstado(telefono, ESTADOS.ESPERANDO_LIBERAR);
+  if (!ctxClaim) {
+    return `Ya procesamos esa elección ✅\n\n${menuAlumno()}`;
+  }
+
+  const ops = Array.isArray(ctxClaim.opcionesLiberar) ? ctxClaim.opcionesLiberar : opciones;
+  const opcion = ops[n - 1];
+  if (!opcion) return irMenuAlumno(telefono);
+
+  const dni = ctxClaim.dni || sesion.contexto?.dni;
   const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
   if (!alumno) {
     return irMenuAlumno(telefono);
@@ -668,8 +724,8 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
       mergeContexto: false,
     });
 
-    if (result.yaEstaba) return respuestaLiberacionYaHecha(opcion);
-    return respuestaLiberacionOk(alumno, opcion, creditos);
+    if (result.yaEstaba) return respuestaLiberacionYaHecha(opcion, menuAlumno);
+    return respuestaLiberacionOk(alumno, opcion, creditos, menuAlumno);
   } catch (e) {
     console.error('[chatbot liberar]', e);
     return `${e.message || 'No se pudo liberar la clase.'}\n\n0️⃣ Volver`;
@@ -684,13 +740,39 @@ async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
   }
 
   const opciones = Array.isArray(sesion.contexto?.opcionesRecuperar) ? sesion.contexto.opcionesRecuperar : [];
-  const n = Number.parseInt(m, 10);
-  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
-    return `Elegí un número de la lista:\n\n${lineasOpciones(opciones)}\n\n0️⃣ Cancelar`;
+  let page = Number(sesion.contexto?.paginaLista) || 0;
+  const dniSesion = sesion.contexto?.dni;
+
+  if (esPedidoMas(m) || esPedidoAnterior(m)) {
+    const alumno = dniSesion ? await buscarAlumnoPorDni(dniSesion) : null;
+    if (!alumno) return irMenuAlumno(telefono);
+    const creditos = Number(alumno.clases_para_recuperar) || 0;
+    const pages = Math.max(1, Math.ceil(opciones.length / PAGE_SIZE) || 1);
+    page = esPedidoMas(m) ? Math.min(page + 1, pages - 1) : Math.max(page - 1, 0);
+    const { texto } = listaRecuperarClases(alumno, opciones, creditos, page);
+    await actualizarSesion(telefono, {
+      contexto: { paginaLista: page },
+      mergeContexto: true,
+    });
+    return texto;
   }
 
-  const opcion = opciones[n - 1];
-  const dni = sesion.contexto?.dni;
+  const n = Number.parseInt(m, 10);
+  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
+    const pag = renderPaginaOpciones(opciones, page);
+    return `Elegí un número de la lista:\n${pag.header}${pag.lineas}\n${pag.pie ? `${pag.pie}\n` : ''}\n0️⃣ Cancelar`;
+  }
+
+  const ctxClaim = await reclamarEstado(telefono, ESTADOS.ESPERANDO_RECUPERAR);
+  if (!ctxClaim) {
+    return `Ya procesamos esa elección ✅\n\n${menuAlumno()}`;
+  }
+
+  const ops = Array.isArray(ctxClaim.opcionesRecuperar) ? ctxClaim.opcionesRecuperar : opciones;
+  const opcion = ops[n - 1];
+  if (!opcion) return irMenuAlumno(telefono);
+
+  const dni = ctxClaim.dni || dniSesion;
   const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
   if (!alumno) {
     return irMenuAlumno(telefono);
@@ -711,8 +793,8 @@ async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
       mergeContexto: false,
     });
 
-    if (result.yaEstaba) return respuestaRecuperacionYaHecha(opcion);
-    return respuestaRecuperacionOk(alumno, opcion, creditos);
+    if (result.yaEstaba) return respuestaRecuperacionYaHecha(opcion, menuAlumno);
+    return respuestaRecuperacionOk(alumno, opcion, creditos, menuAlumno);
   } catch (e) {
     console.error('[chatbot recuperar]', e);
     return `${e.message || 'No se pudo anotar la recuperación.'}\n\n0️⃣ Volver`;
@@ -750,6 +832,13 @@ router.post('/', async (req, res) => {
     console.log('[chatbot]', String(telefono).slice(-6), '|', String(mensaje || '').slice(0, 80));
 
     const sesion = await obtenerOCrearSesion(telefono);
+
+    const dup = replySiDuplicado(sesion, mensaje);
+    if (dup) {
+      console.log('[chatbot] dedup hit', String(telefono).slice(-6));
+      return res.json({ ok: true, reply: dup, estado: sesion.estado, dedup: true });
+    }
+
     let reply;
 
     switch (sesion.estado) {
@@ -793,6 +882,12 @@ router.post('/', async (req, res) => {
       default:
         reply = await manejarMenuPrincipal(telefono, mensaje);
         break;
+    }
+
+    try {
+      await guardarDedup(telefono, mensaje, sesion.estado, reply);
+    } catch (err) {
+      console.warn('[chatbot dedup]', err?.message || err);
     }
 
     const actualizada = await obtenerOCrearSesion(telefono);

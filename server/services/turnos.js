@@ -245,6 +245,104 @@ async function ocupacionTurnoSemana(db, turno, semana, sucursalId) {
 }
 
 /**
+ * Ocupación de muchos turnos × semanas en pocas queries (para el chatbot).
+ */
+async function ocupacionBulk(db, turnos, semanas, sucursalId) {
+  const turnoIds = turnos.map((t) => t.id);
+  const mapa = new Map(); // `${turnoId}|${semana}` → { libres, cupo }
+
+  if (!turnoIds.length || !semanas.length) return mapa;
+
+  const { rows: insRows } = await db.query(
+    `SELECT turno_id, alumno_id, semana_desde
+     FROM inscripciones_turno WHERE turno_id = ANY($1::text[])`,
+    [turnoIds]
+  );
+  const insByTurno = new Map();
+  for (const r of insRows) {
+    if (!insByTurno.has(r.turno_id)) insByTurno.set(r.turno_id, new Map());
+    insByTurno.get(r.turno_id).set(String(r.alumno_id), r.semana_desde);
+  }
+
+  const { rows: libRows } = await db.query(
+    `SELECT turno_id, semana, alumno_id
+     FROM liberaciones_semana
+     WHERE turno_id = ANY($1::text[]) AND semana = ANY($2::text[])`,
+    [turnoIds, semanas]
+  );
+  const libs = new Set(libRows.map((r) => `${r.turno_id}|${r.semana}|${r.alumno_id}`));
+
+  const { rows: recRows } = await db.query(
+    `SELECT id, turno_id, semana, alumno_id
+     FROM recuperaciones
+     WHERE turno_id = ANY($1::text[]) AND semana = ANY($2::text[])`,
+    [turnoIds, semanas]
+  );
+  const recsByKey = new Map();
+  for (const r of recRows) {
+    const k = `${r.turno_id}|${r.semana}`;
+    if (!recsByKey.has(k)) recsByKey.set(k, []);
+    recsByKey.get(k).push(r);
+  }
+
+  const candidateIds = new Set();
+  for (const t of turnos) {
+    for (const id of t.alumno_ids || []) candidateIds.add(String(id));
+  }
+  for (const r of recRows) candidateIds.add(String(r.alumno_id));
+
+  let valid = new Set();
+  if (candidateIds.size > 0) {
+    const { rows: act } = await db.query(
+      `SELECT id FROM alumnos
+       WHERE sucursal_id = $1 AND id = ANY($2::text[]) AND activo IS DISTINCT FROM false`,
+      [sucursalId, [...candidateIds]]
+    );
+    valid = new Set(act.map((r) => String(r.id)));
+  }
+
+  for (const t of turnos) {
+    const cupo = Math.max(1, Number(t.cupo ?? 6));
+    const ids = (t.alumno_ids || []).map(String);
+    const insMap = insByTurno.get(t.id) || new Map();
+
+    for (const semana of semanas) {
+      const liberados = new Set();
+      for (const aid of ids) {
+        if (libs.has(`${t.id}|${semana}|${aid}`)) liberados.add(aid);
+      }
+
+      const fijos = new Set();
+      for (const aid of ids) {
+        if (!valid.has(aid)) continue;
+        const desde = insMap.get(aid);
+        if (desde && String(desde) > String(semana)) continue;
+        if (liberados.has(aid)) continue;
+        fijos.add(aid);
+      }
+
+      const recs = recsByKey.get(`${t.id}|${semana}`) || [];
+      let recCount = 0;
+      const seenRec = new Set();
+      for (const r of recs) {
+        if (!valid.has(String(r.alumno_id))) continue;
+        if (seenRec.has(r.id)) continue;
+        seenRec.add(r.id);
+        recCount += 1;
+      }
+
+      mapa.set(`${t.id}|${semana}`, {
+        cupo,
+        ocupacion: fijos.size + recCount,
+        libres: Math.max(0, cupo - (fijos.size + recCount)),
+      });
+    }
+  }
+
+  return mapa;
+}
+
+/**
  * Turnos con cupo libre para recuperar (esta semana y la próxima).
  * Excluye fijas propias no liberadas y slots donde ya está anotado.
  */
@@ -257,6 +355,7 @@ export async function listarClasesParaRecuperar(alumno) {
   const creditos = Number(alumno.clases_para_recuperar) || 0;
   const semanaActual = getSemanaActual();
   const semanaSiguiente = semanaPortalSiguiente(semanaActual);
+  const semanas = [semanaActual, semanaSiguiente];
 
   const { rows: turnoRows } = await db.query(
     `SELECT id, dia_semana, hora, titulo, cupo, alumno_ids
@@ -266,6 +365,7 @@ export async function listarClasesParaRecuperar(alumno) {
     [alumno.sucursal_id]
   );
   const turnos = dedupeTurnosPorFranja(turnoRows);
+  const turnoIds = turnos.map((t) => t.id);
 
   const { rows: insRows } = await db.query(
     'SELECT turno_id, semana_desde FROM inscripciones_turno WHERE alumno_id = $1',
@@ -273,9 +373,24 @@ export async function listarClasesParaRecuperar(alumno) {
   );
   const insByTurno = new Map(insRows.map((r) => [r.turno_id, r.semana_desde]));
 
+  const { rows: libPropiaRows } = await db.query(
+    `SELECT turno_id, semana FROM liberaciones_semana
+     WHERE alumno_id = $1 AND turno_id = ANY($2::text[]) AND semana = ANY($3::text[])`,
+    [alumno.id, turnoIds.length ? turnoIds : ['__none__'], semanas]
+  );
+  const libPropia = new Set(libPropiaRows.map((r) => `${r.turno_id}|${r.semana}`));
+
+  const { rows: yaRecRows } = await db.query(
+    `SELECT turno_id, semana FROM recuperaciones
+     WHERE alumno_id = $1 AND turno_id = ANY($2::text[]) AND semana = ANY($3::text[])`,
+    [alumno.id, turnoIds.length ? turnoIds : ['__none__'], semanas]
+  );
+  const yaRec = new Set(yaRecRows.map((r) => `${r.turno_id}|${r.semana}`));
+
+  const occMap = await ocupacionBulk(db, turnos, semanas, alumno.sucursal_id);
   const opciones = [];
 
-  for (const semana of [semanaActual, semanaSiguiente]) {
+  for (const semana of semanas) {
     const etiquetaSemana = semana === semanaActual ? 'Esta semana' : 'Próxima semana';
 
     for (const t of turnos) {
@@ -283,21 +398,10 @@ export async function listarClasesParaRecuperar(alumno) {
         (t.alumno_ids || []).includes(alumno.id) &&
         (!insByTurno.has(t.id) || insByTurno.get(t.id) <= semana);
 
-      if (esFija) {
-        const { rows: libPropia } = await db.query(
-          'SELECT id FROM liberaciones_semana WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3 LIMIT 1',
-          [t.id, alumno.id, semana]
-        );
-        if (libPropia.length === 0) continue; // fija propia sin liberar → no aparece para recuperar
-      }
+      if (esFija && !libPropia.has(`${t.id}|${semana}`)) continue;
+      if (yaRec.has(`${t.id}|${semana}`)) continue;
 
-      const { rows: yaRec } = await db.query(
-        'SELECT id FROM recuperaciones WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3 LIMIT 1',
-        [t.id, alumno.id, semana]
-      );
-      if (yaRec.length > 0) continue;
-
-      const occ = await ocupacionTurnoSemana(db, t, semana, alumno.sucursal_id);
+      const occ = occMap.get(`${t.id}|${semana}`);
       if (!occ || occ.libres <= 0) continue;
 
       const fecha = getFechaFromSemanaYDia(semana, t.dia_semana);
@@ -329,7 +433,7 @@ export async function listarClasesParaRecuperar(alumno) {
   return {
     semanaActual,
     semanaSiguiente,
-    opciones: opciones.slice(0, 20),
+    opciones,
     creditos,
   };
 }
@@ -422,7 +526,7 @@ export async function anotarRecuperacion(alumno, turnoId, semana) {
  * Cupos libres (esta semana y la próxima) para interesados / clase de prueba.
  * No requiere alumno existente.
  */
-export async function listarCuposDisponibles({ limite = 20 } = {}) {
+export async function listarCuposDisponibles({ limite = 80 } = {}) {
   const db = await getPool();
   const sucursal = await getSucursalChatbot();
   if (!db || !sucursal) {
@@ -431,6 +535,7 @@ export async function listarCuposDisponibles({ limite = 20 } = {}) {
 
   const semanaActual = getSemanaActual();
   const semanaSiguiente = semanaPortalSiguiente(semanaActual);
+  const semanas = [semanaActual, semanaSiguiente];
 
   const { rows: turnoRows } = await db.query(
     `SELECT id, dia_semana, hora, titulo, cupo, alumno_ids
@@ -440,12 +545,13 @@ export async function listarCuposDisponibles({ limite = 20 } = {}) {
     [sucursal.id]
   );
   const turnos = dedupeTurnosPorFranja(turnoRows);
+  const occMap = await ocupacionBulk(db, turnos, semanas, sucursal.id);
   const opciones = [];
 
-  for (const semana of [semanaActual, semanaSiguiente]) {
+  for (const semana of semanas) {
     const etiquetaSemana = semana === semanaActual ? 'Esta semana' : 'Próxima semana';
     for (const t of turnos) {
-      const occ = await ocupacionTurnoSemana(db, t, semana, sucursal.id);
+      const occ = occMap.get(`${t.id}|${semana}`);
       if (!occ || occ.libres <= 0) continue;
 
       const fecha = getFechaFromSemanaYDia(semana, t.dia_semana);
@@ -474,7 +580,7 @@ export async function listarCuposDisponibles({ limite = 20 } = {}) {
     return String(a.hora).localeCompare(String(b.hora));
   });
 
-  return opciones.slice(0, Math.max(1, Number(limite) || 20));
+  return opciones.slice(0, Math.max(1, Number(limite) || 80));
 }
 
 export { DIAS };

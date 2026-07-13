@@ -78,4 +78,88 @@ export async function actualizarSesion(telefono, { estado, ultimoMenu, contexto,
   };
 }
 
+/**
+ * Guarda la última reply para filtrar duplicados de n8n/WhatsApp (mismo mensaje en pocos segundos).
+ */
+export async function guardarDedup(telefono, mensaje, estado, reply) {
+  const now = Date.now();
+  await actualizarSesion(telefono, {
+    contexto: {
+      dedup: {
+        key: `${estado}|${String(mensaje || '').trim()}`,
+        ts: now,
+        reply: String(reply || '').slice(0, 3500),
+      },
+    },
+    mergeContexto: true,
+  });
+}
+
+export function replySiDuplicado(sesion, mensaje, ventanaMs = 10000) {
+  const dedup = sesion?.contexto?.dedup;
+  if (!dedup?.key || !dedup?.reply) return null;
+  const key = `${sesion.estado}|${String(mensaje || '').trim()}`;
+  if (dedup.key !== key) return null;
+  if (Date.now() - Number(dedup.ts || 0) > ventanaMs) return null;
+  return dedup.reply;
+}
+
+/**
+ * Toma la selección en curso (evita doble anotación / doble respuesta de n8n).
+ * Devuelve el contexto PREVIO (con opciones) si ganó el lock; null si ya estaba tomado.
+ */
+export async function reclamarEstado(telefono, estadoEsperado, { estadoFinal = ESTADOS.MENU_ALUMNO } = {}) {
+  const db = await getPool();
+  if (!db) return null;
+  const tel = normalizarTelefono(telefono);
+  const client = await db.connect();
+
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT estado, contexto FROM chatbot_sessions WHERE telefono = $1 FOR UPDATE`,
+      [tel]
+    );
+    const row = rows[0];
+    if (!row || row.estado !== estadoEsperado) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const ctx = row.contexto && typeof row.contexto === 'object' ? row.contexto : {};
+    if (ctx.seleccionEnCurso) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(
+      `UPDATE chatbot_sessions SET
+         estado = $2,
+         contexto = $3::jsonb,
+         updated_at = NOW(),
+         ultima_interaccion = NOW()
+       WHERE telefono = $1`,
+      [
+        tel,
+        estadoFinal,
+        JSON.stringify({
+          alumnoId: ctx.alumnoId || null,
+          dni: ctx.dni || null,
+          seleccionEnCurso: true,
+        }),
+      ]
+    );
+    await client.query('COMMIT');
+    return ctx;
+  } catch (e) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export { normalizarTelefono };

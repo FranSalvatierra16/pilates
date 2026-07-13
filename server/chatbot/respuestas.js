@@ -2,6 +2,9 @@ import { formatoFecha } from './menu.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
+/** Cuántas opciones mostrar por mensaje (WhatsApp trunca listas largas). */
+export const PAGE_SIZE = 8;
+
 /** Números de opción legibles en WhatsApp (10️⃣ se ve mal / “repetido”). */
 export function numOpcion(n) {
   const i = Number(n);
@@ -10,8 +13,41 @@ export function numOpcion(n) {
   return `*${i}.*`;
 }
 
-export function lineasOpciones(opciones, getLabel = (o) => o.label) {
-  return opciones.map((o, i) => `${numOpcion(i + 1)} ${getLabel(o)}`).join('\n');
+export function lineasOpciones(opciones, getLabel = (o) => o.label, offset = 0) {
+  return opciones.map((o, i) => `${numOpcion(offset + i + 1)} ${getLabel(o)}`).join('\n');
+}
+
+/**
+ * Página de opciones con numeración global (1..N) y pie “más / anterior”.
+ */
+export function renderPaginaOpciones(opciones, page = 0, pageSize = PAGE_SIZE, getLabel = (o) => o.label) {
+  const total = opciones.length;
+  const pages = Math.max(1, Math.ceil(total / pageSize) || 1);
+  const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+  const offset = p * pageSize;
+  const slice = opciones.slice(offset, offset + pageSize);
+  const lineas = lineasOpciones(slice, getLabel, offset);
+  const pie = [];
+  if (p < pages - 1) pie.push(`${numOpcion(98)} Ver más horarios`);
+  if (p > 0) pie.push(`${numOpcion(97)} Página anterior`);
+  return {
+    lineas,
+    pie: pie.join('\n'),
+    page: p,
+    pages,
+    total,
+    header: pages > 1 ? `📄 Página ${p + 1} de ${pages} · ${total} horarios\n\n` : '',
+  };
+}
+
+export function esPedidoMas(m) {
+  const t = String(m || '').trim().toLowerCase();
+  return t === '98' || t === 'mas' || t === 'más' || t === 'siguiente' || t === 'm';
+}
+
+export function esPedidoAnterior(m) {
+  const t = String(m || '').trim().toLowerCase();
+  return t === '97' || t === 'anterior' || t === 'atras' || t === 'atrás';
 }
 
 export function respuestaVencimiento(alumno) {
@@ -55,20 +91,7 @@ ${lineas.join('\n')}
 0️⃣ Volver al menú principal`;
 }
 
-export function respuestaCancelar(alumno) {
-  const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
-  const creditos = Number(alumno.clases_para_recuperar) || 0;
-
-  return `👤 ${nombre}
-
-Para liberar una clase, elegí una de la lista (esta semana y la próxima).
-
-💳 Créditos actuales: *${creditos}*
-
-0️⃣ Volver al menú alumno`;
-}
-
-export function listaLiberarClases(alumno, opciones) {
+export function listaLiberarClases(alumno, opciones, page = 0) {
   const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
   const liberables = opciones.filter((o) => !o.yaLiberada);
 
@@ -97,42 +120,41 @@ ${ya}
     };
   }
 
-  const lineas = lineasOpciones(liberables);
+  const pag = renderPaginaOpciones(liberables, page);
   return {
     texto: `👤 ${nombre}
 
 ¿Qué clase querés *liberar*?
-
-${lineas}
+${pag.header}${pag.lineas}
+${pag.pie ? `\n${pag.pie}` : ''}
 
 Se suma 1 crédito para recuperar.
 
 0️⃣ Cancelar y volver`,
     opciones: liberables,
+    page: pag.page,
   };
 }
 
-export function respuestaLiberacionOk(alumno, opcion, creditos) {
+export function respuestaLiberacionOk(alumno, opcion, creditos, menuFn) {
   const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
+  const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '';
   return `✅ Listo ${nombre}
 
 Liberaste: *${opcion.label}*
 
 💳 Créditos para recuperar: *${creditos}*
 
-Ahora podés recuperar con la opción 3️⃣ del menú alumno.
-
-0️⃣ Menú alumno`;
+Ahora podés recuperar con la opción 3️⃣ del menú alumno.${menu}`;
 }
 
-export function respuestaLiberacionYaHecha(opcion) {
+export function respuestaLiberacionYaHecha(opcion, menuFn) {
+  const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '\n\n0️⃣ Volver';
   return `Esa clase ya estaba liberada:
-*${opcion.label}*
-
-0️⃣ Volver`;
+*${opcion.label}*${menu}`;
 }
 
-export function listaRecuperarClases(alumno, opciones, creditos) {
+export function listaRecuperarClases(alumno, opciones, creditos, page = 0) {
   const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
   const cred = Number(creditos) || 0;
 
@@ -164,40 +186,39 @@ Probá más tarde o pedí ayuda a una profesora (opción 4️⃣ del menú princ
     };
   }
 
-  const lineas = lineasOpciones(opciones);
+  const pag = renderPaginaOpciones(opciones, page);
   return {
     texto: `👤 ${nombre}
 
 💳 Créditos: *${cred}*
 
 ¿En qué clase querés *recuperar*?
-
-${lineas}
+${pag.header}${pag.lineas}
+${pag.pie ? `\n${pag.pie}` : ''}
 
 Al anotarte se descuenta 1 crédito.
 
 0️⃣ Cancelar y volver`,
     opciones,
+    page: pag.page,
   };
 }
 
-export function respuestaRecuperacionOk(alumno, opcion, creditos) {
+export function respuestaRecuperacionOk(alumno, opcion, creditos, menuFn) {
   const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
+  const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '';
   return `✅ Listo ${nombre}
 
 Te anotaste para recuperar:
 *${opcion.label}*
 
-💳 Créditos restantes: *${creditos}*
-
-0️⃣ Menú alumno`;
+💳 Créditos restantes: *${creditos}*${menu}`;
 }
 
-export function respuestaRecuperacionYaHecha(opcion) {
+export function respuestaRecuperacionYaHecha(opcion, menuFn) {
+  const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '\n\n0️⃣ Volver';
   return `Ya estabas anotada/o en esa recuperación:
-*${opcion.label}*
-
-0️⃣ Volver`;
+*${opcion.label}*${menu}`;
 }
 
 export function respuestaDniNoEncontrado() {
@@ -250,7 +271,7 @@ Para anotarte: volvé al menú nuevo y elegí 3️⃣.
   };
 }
 
-export function listaHorariosNuevo(opciones) {
+export function listaHorariosNuevo(opciones, page = 0) {
   if (!opciones.length) {
     return {
       texto: `No hay cupos libres en esta semana ni la próxima 😕
@@ -262,16 +283,24 @@ Probá más tarde o pedí hablar con una profesora (opción 4️⃣).
     };
   }
 
-  const lineas = lineasOpciones(opciones);
-  return {
-    texto: `🗓️ Horarios con cupo libre:
+  // Solo consulta: listado compacto (sin numeración de elección)
+  const maxShow = 25;
+  const lineas = opciones.slice(0, maxShow).map((o) => `• ${o.label}`).join('\n');
+  const extra =
+    opciones.length > maxShow
+      ? `\n… y ${opciones.length - maxShow} más.`
+      : '';
 
-${lineas}
+  return {
+    texto: `🗓️ Horarios con cupo libre (${opciones.length}):
+
+${lineas}${extra}
 
 Para anotarte a una clase de prueba: opción 3️⃣ del menú nuevo.
 
 0️⃣ Volver`,
     opciones,
+    page: 0,
   };
 }
 
@@ -305,7 +334,7 @@ ${lineas}
   };
 }
 
-export function listaHorariosParaElegir(opciones) {
+export function listaHorariosParaElegir(opciones, page = 0) {
   if (!opciones.length) {
     return {
       texto: `No quedó ningún cupo libre ahora 😕
@@ -317,14 +346,15 @@ Probá más tarde o pedí ayuda con la opción 4️⃣.
     };
   }
 
-  const lineas = lineasOpciones(opciones);
+  const pag = renderPaginaOpciones(opciones, page);
   return {
     texto: `🗓️ Elegí el horario de tu *clase de prueba*:
-
-${lineas}
+${pag.header}${pag.lineas}
+${pag.pie ? `\n${pag.pie}` : ''}
 
 0️⃣ Cancelar`,
     opciones,
+    page: pag.page,
   };
 }
 
@@ -346,4 +376,3 @@ Cuando ya figuras como alumno/a, usá la opción *3* del menú.
 
 0️⃣ Menú principal`;
 }
-

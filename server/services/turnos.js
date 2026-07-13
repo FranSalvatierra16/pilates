@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { getPool } from '../db/index.js';
 import { getSucursalChatbot } from './alumnos.js';
+import { avisarProfesorChatbot } from './whatsapp.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -182,6 +183,14 @@ export async function liberarClaseFija(alumno, turnoId, semana) {
   } catch (err) {
     console.error('[chatbot liberar] notificación', err?.message || err);
   }
+
+  // Aviso WhatsApp al profe (async, no bloquea)
+  avisarProfesorChatbot({
+    tipo: 'liberar',
+    alumno,
+    turno: t,
+    semana: semanaVista,
+  }).catch((e) => console.error('[whatsapp liberar]', e?.message || e));
 
   return { ok: true, liberacionId: id, yaEstaba: false, turno: t, semana: semanaVista };
 }
@@ -518,6 +527,13 @@ export async function anotarRecuperacion(alumno, turnoId, semana) {
   } catch (err) {
     console.error('[chatbot recuperar] notificación', err?.message || err);
   }
+
+  avisarProfesorChatbot({
+    tipo: 'recuperar',
+    alumno,
+    turno: t,
+    semana: semanaVista,
+  }).catch((e) => console.error('[whatsapp recuperar]', e?.message || e));
 
   return { ok: true, recuperacionId: id, yaEstaba: false, turno: t, semana: semanaVista, usoCredito: true };
 }

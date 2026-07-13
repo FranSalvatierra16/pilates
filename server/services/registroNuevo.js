@@ -7,6 +7,7 @@ import {
   getFechaFromSemanaYDia,
   listarCuposDisponibles,
 } from './turnos.js';
+import { avisarProfesorChatbot } from './whatsapp.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -163,7 +164,7 @@ export async function registrarAlumnoNuevo({
   const fecha = getFechaFromSemanaYDia(semanaVista, turno.dia_semana);
   const etiquetaSemana = semanaVista === getSemanaActual() ? 'Esta semana' : 'Próxima semana';
 
-  return {
+  const result = {
     ok: true,
     alumno: {
       id: alumnoId,
@@ -194,6 +195,16 @@ export async function registrarAlumnoNuevo({
       label: `${etiquetaSemana} · ${dia} ${String(fecha).slice(8, 10)}/${String(fecha).slice(5, 7)} ${hora} — ${titulo}`,
     },
   };
+
+  avisarProfesorChatbot({
+    tipo: 'nuevo',
+    alumno: result.alumno,
+    turno,
+    semana: etiquetaSemana,
+    extraLabel: result.clase.label,
+  }).catch((e) => console.error('[whatsapp registro]', e?.message || e));
+
+  return result;
 }
 
 export { getSemanaActual, semanaPortalSiguiente };

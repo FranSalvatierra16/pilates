@@ -618,6 +618,30 @@ const Alumnos = () => {
     }
   };
 
+  const handleEliminarPagoHistorial = async (pago: Pago) => {
+    const ok = await toast.confirm(
+      `¿Eliminar el pago de ${formatCurrency(pago.monto)} del ${formatDate(pago.fecha)}? Esta acción no se puede deshacer.`,
+      {
+        title: 'Eliminar pago',
+        confirmText: 'Eliminar',
+      }
+    );
+    if (!ok) return;
+    try {
+      await storageHybrid.pagos.delete(pago.id);
+      setHistorialPagos((prev) => prev.filter((p) => p.id !== pago.id));
+      toast.success('Pago eliminado.');
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : '';
+      if (/desbloqueá finanzas|finanzas/i.test(msg)) {
+        toast.error('Desbloqueá finanzas con el PIN en Caja para poder eliminar pagos.');
+      } else {
+        toast.error(msg || 'No se pudo eliminar el pago.');
+      }
+    }
+  };
+
   const handleOpenHistorial = async (alumno: Alumno) => {
     setAlumnoHistorial(alumno);
     setShowModalHistorial(true);
@@ -1697,7 +1721,18 @@ const Alumnos = () => {
                             {pago.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
                           </span>
                         </div>
-                        <span className="text-sm font-semibold text-gray-900 flex-shrink-0">{formatCurrency(pago.monto)}</span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <span className="text-sm font-semibold text-gray-900">{formatCurrency(pago.monto)}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarPagoHistorial(pago)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 touch-manipulation"
+                            title="Eliminar pago"
+                            aria-label="Eliminar pago"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </li>
                     ))}
                   </ul>

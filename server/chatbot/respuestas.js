@@ -49,15 +49,75 @@ export function respuestaCancelar(alumno) {
 
   return `👤 ${nombre}
 
-Para *cancelar / liberar* una clase de esta semana, usá el link *Tu clase* que te dio el estudio (portal del alumno).
+Para liberar una clase, elegí una de la lista (esta semana y la próxima).
 
-Ahí podés liberar tu fija y generar crédito para recuperar.
+💳 Créditos actuales: *${creditos}*
+
+0️⃣ Volver al menú alumno`;
+}
+
+export function listaLiberarClases(alumno, opciones) {
+  const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
+  const liberables = opciones.filter((o) => !o.yaLiberada);
+
+  if (!opciones.length) {
+    return {
+      texto: `👤 ${nombre}
+
+No tenés clases fijas para liberar en esta semana ni la próxima.
+
+0️⃣ Volver`,
+      opciones: [],
+    };
+  }
+
+  if (!liberables.length) {
+    const ya = opciones.map((o, i) => `${i + 1}️⃣ ${o.label}`).join('\n');
+    return {
+      texto: `👤 ${nombre}
+
+Todas tus clases de esta semana y la próxima ya están liberadas:
+
+${ya}
+
+0️⃣ Volver`,
+      opciones: [],
+    };
+  }
+
+  const lineas = liberables.map((o, i) => `${i + 1}️⃣ ${o.label}`);
+  return {
+    texto: `👤 ${nombre}
+
+¿Qué clase querés *liberar*?
+
+${lineas.join('\n')}
+
+Se suma 1 crédito para recuperar.
+
+0️⃣ Cancelar y volver`,
+    opciones: liberables,
+  };
+}
+
+export function respuestaLiberacionOk(alumno, opcion, creditos) {
+  const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
+  return `✅ Listo ${nombre}
+
+Liberaste: *${opcion.label}*
 
 💳 Créditos para recuperar: *${creditos}*
 
-Si no tenés el link, pedilo a tu estudio (opción 3️⃣).
+Podés recuperar desde el portal *Tu clase* o pedir ayuda a una profesora.
 
-0️⃣ Volver al menú principal`;
+0️⃣ Menú alumno`;
+}
+
+export function respuestaLiberacionYaHecha(opcion) {
+  return `Esa clase ya estaba liberada:
+*${opcion.label}*
+
+0️⃣ Volver`;
 }
 
 export function respuestaRecuperar(alumno) {

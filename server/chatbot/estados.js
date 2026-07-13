@@ -4,6 +4,7 @@ export const ESTADOS = {
   MENU_ALUMNO: 'MENU_ALUMNO',
   ESPERANDO_DNI: 'ESPERANDO_DNI',
   ESPERANDO_CONSULTA: 'ESPERANDO_CONSULTA',
+  ESPERANDO_LIBERAR: 'ESPERANDO_LIBERAR',
 };
 
 /** Acciones pendientes cuando el usuario ingresa el DNI */

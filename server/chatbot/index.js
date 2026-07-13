@@ -12,13 +12,16 @@ import {
 import {
   respuestaVencimiento,
   respuestaHorarios,
-  respuestaCancelar,
   respuestaRecuperar,
   respuestaDniNoEncontrado,
   respuestaDniInvalido,
+  listaLiberarClases,
+  respuestaLiberacionOk,
+  respuestaLiberacionYaHecha,
 } from './respuestas.js';
 import { obtenerOCrearSesion, actualizarSesion } from './sesiones.js';
 import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni } from '../services/alumnos.js';
+import { listarClasesParaLiberar, liberarClaseFija } from '../services/turnos.js';
 
 const router = express.Router();
 
@@ -99,7 +102,7 @@ async function pedirDniPara(telefono, accion, sesion) {
         },
         mergeContexto: false,
       });
-      return resolverAccionConAlumno(alumno, accion);
+      return resolverAccionConAlumno(telefono, alumno, accion);
     }
   }
 
@@ -115,12 +118,46 @@ async function pedirDniPara(telefono, accion, sesion) {
   return pedirDni(LABELS_ACCION[accion] || 'continuar');
 }
 
-async function resolverAccionConAlumno(alumno, accion) {
+async function iniciarLiberarClases(telefono, alumno) {
+  const { opciones } = await listarClasesParaLiberar(alumno);
+  const { texto, opciones: liberables } = listaLiberarClases(alumno, opciones);
+
+  if (!liberables.length) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: alumno.id,
+        dni: normalizarDni(alumno.dni),
+      },
+      mergeContexto: false,
+    });
+    return texto;
+  }
+
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.ESPERANDO_LIBERAR,
+    ultimoMenu: ESTADOS.MENU_ALUMNO,
+    contexto: {
+      alumnoId: alumno.id,
+      dni: normalizarDni(alumno.dni),
+      opcionesLiberar: liberables.map((o) => ({
+        turnoId: o.turnoId,
+        semana: o.semana,
+        label: o.label,
+      })),
+    },
+    mergeContexto: false,
+  });
+  return texto;
+}
+
+async function resolverAccionConAlumno(telefono, alumno, accion) {
   switch (accion) {
     case ACCIONES_DNI.VENCIMIENTO:
       return respuestaVencimiento(alumno);
     case ACCIONES_DNI.CANCELAR:
-      return respuestaCancelar(alumno);
+      return iniciarLiberarClases(telefono, alumno);
     case ACCIONES_DNI.RECUPERAR:
       return respuestaRecuperar(alumno);
     case ACCIONES_DNI.HORARIOS: {
@@ -244,7 +281,51 @@ async function manejarEsperandoDni(telefono, mensaje, sesion) {
     mergeContexto: false,
   });
 
-  return resolverAccionConAlumno(alumno, accion);
+  return resolverAccionConAlumno(telefono, alumno, accion);
+}
+
+async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+
+  if (m === '0') {
+    return irMenuAlumno(telefono);
+  }
+
+  const opciones = Array.isArray(sesion.contexto?.opcionesLiberar) ? sesion.contexto.opcionesLiberar : [];
+  const n = Number.parseInt(m, 10);
+  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
+    const lineas = opciones.map((o, i) => `${i + 1}️⃣ ${o.label}`).join('\n');
+    return `Elegí un número de la lista:\n\n${lineas}\n\n0️⃣ Cancelar`;
+  }
+
+  const opcion = opciones[n - 1];
+  const dni = sesion.contexto?.dni;
+  const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
+  if (!alumno) {
+    return irMenuAlumno(telefono);
+  }
+
+  try {
+    const result = await liberarClaseFija(alumno, opcion.turnoId, opcion.semana);
+    const alumnoFresh = await buscarAlumnoPorDni(dni);
+    const creditos = Number(alumnoFresh?.clases_para_recuperar ?? alumno.clases_para_recuperar) || 0;
+
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: alumno.id,
+        dni: normalizarDni(alumno.dni) || dni,
+      },
+      mergeContexto: false,
+    });
+
+    if (result.yaEstaba) return respuestaLiberacionYaHecha(opcion);
+    return respuestaLiberacionOk(alumno, opcion, creditos);
+  } catch (e) {
+    console.error('[chatbot liberar]', e);
+    return `${e.message || 'No se pudo liberar la clase.'}\n\n0️⃣ Volver`;
+  }
 }
 
 async function manejarEsperandoConsulta(telefono, mensaje) {
@@ -286,6 +367,9 @@ router.post('/', async (req, res) => {
         break;
       case ESTADOS.ESPERANDO_DNI:
         reply = await manejarEsperandoDni(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.ESPERANDO_LIBERAR:
+        reply = await manejarEsperandoLiberar(telefono, mensaje, sesion);
         break;
       case ESTADOS.ESPERANDO_CONSULTA:
         reply = await manejarEsperandoConsulta(telefono, mensaje);

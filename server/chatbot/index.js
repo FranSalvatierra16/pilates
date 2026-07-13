@@ -213,6 +213,8 @@ function mapOpcionesMin(opciones) {
     dia: o.dia || null,
     hora: o.hora || null,
     etiquetaSemana: o.etiquetaSemana || null,
+    tipo: o.tipo || 'fija',
+    recuperacionId: o.recuperacionId || null,
   }));
 }
 
@@ -750,7 +752,10 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
   }
 
   try {
-    const result = await liberarClaseFija(alumno, opcion.turnoId, opcion.semana);
+    const result = await liberarClaseFija(alumno, opcion.turnoId, opcion.semana, {
+      tipo: opcion.tipo,
+      recuperacionId: opcion.recuperacionId,
+    });
     const alumnoFresh = await buscarAlumnoPorDni(dni);
     const creditos = Number(alumnoFresh?.clases_para_recuperar ?? alumno.clases_para_recuperar) || 0;
 
@@ -765,7 +770,7 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
     });
 
     if (result.yaEstaba) return respuestaLiberacionYaHecha(opcion, menuAlumno);
-    return respuestaLiberacionOk(alumno, opcion, creditos, menuAlumno);
+    return respuestaLiberacionOk(alumno, opcion, creditos, menuAlumno, result);
   } catch (e) {
     console.error('[chatbot liberar]', e);
     return `${e.message || 'No se pudo liberar la clase.'}\n\n0️⃣ Volver`;

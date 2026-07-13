@@ -93,7 +93,14 @@ export function textoHorariosPorDia(opciones, { numerados = false, offset = 0 } 
       const corto = diaCortoFromName(dia);
       if (numerados) {
         const ordenados = [...slots].sort((a, b) => a.__n - b.__n);
-        bloques.push(`${corto}: ${ordenados.map((o) => `${o.__n})${horaOk(o)}`).join(' | ')}`);
+        bloques.push(
+          `${corto}: ${ordenados
+            .map((o) => {
+              const marca = o.tipo === 'recuperacion' ? 'R' : '';
+              return `${o.__n})${horaOk(o)}${marca}`;
+            })
+            .join(' | ')}`
+        );
       } else {
         const horas = [...new Set([...slots].sort((a, b) => horaOk(a).localeCompare(horaOk(b))).map(horaOk))];
         bloques.push(`${corto}: ${horas.join(' | ')}`);
@@ -217,11 +224,15 @@ ${textoHorariosPorDia(opciones, { numerados: false })}
     texto: `👤 ${nombre}
 
 ¿Qué clase querés *liberar*?
+(R = recuperación que anotaste)
 
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
-Se suma 1 crédito para recuperar. Escribí el número.
+• Fija → suma 1 crédito
+• Recuperación (R) → se cancela y te devuelve el crédito
+
+Escribí el número.
 
 0️⃣ Cancelar y volver`,
     opciones: liberables,
@@ -229,9 +240,18 @@ Se suma 1 crédito para recuperar. Escribí el número.
   };
 }
 
-export function respuestaLiberacionOk(alumno, opcion, creditos, menuFn) {
+export function respuestaLiberacionOk(alumno, opcion, creditos, menuFn, result = {}) {
   const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
   const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '';
+  const esRecup = result.tipo === 'recuperacion' || opcion.tipo === 'recuperacion';
+  if (esRecup) {
+    return `✅ Listo ${nombre}
+
+Cancelaste la *recuperación*:
+*${labelHorarioCorto(opcion)}*
+
+💳 Créditos para recuperar: *${creditos}*${menu}`;
+  }
   return `✅ Listo ${nombre}
 
 Liberaste: *${labelHorarioCorto(opcion)}*

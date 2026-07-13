@@ -57,7 +57,7 @@ function dedupeTurnosPorFranja(turnoRows) {
 }
 
 /**
- * Clases fijas del alumno en esta semana y la próxima, con estado liberado o no.
+ * Clases fijas + recuperaciones del alumno (esta y próxima semana) para liberar/cancelar.
  */
 export async function listarClasesParaLiberar(alumno) {
   const db = await getPool();
@@ -65,6 +65,7 @@ export async function listarClasesParaLiberar(alumno) {
 
   const semanaActual = getSemanaActual();
   const semanaSiguiente = semanaPortalSiguiente(semanaActual);
+  const semanas = [semanaActual, semanaSiguiente];
 
   const { rows: turnoRows } = await db.query(
     `SELECT id, dia_semana, hora, titulo, alumno_ids
@@ -84,7 +85,7 @@ export async function listarClasesParaLiberar(alumno) {
   const turnos = dedupeTurnosPorFranja(turnoRows);
   const opciones = [];
 
-  for (const semana of [semanaActual, semanaSiguiente]) {
+  for (const semana of semanas) {
     const etiquetaSemana = semana === semanaActual ? 'Esta semana' : 'Próxima semana';
     for (const t of turnos) {
       const desde = insByTurno.get(t.id);
@@ -110,28 +111,155 @@ export async function listarClasesParaLiberar(alumno) {
         fecha,
         yaLiberada,
         liberacionId: yaLiberada ? lib[0].id : null,
-        label: `${etiquetaSemana} · ${dia} ${formatoFechaCorta(fecha)} ${hora} — ${titulo}${yaLiberada ? ' (ya liberada)' : ''}`,
+        tipo: 'fija',
+        recuperacionId: null,
+        label: `${etiquetaSemana} · ${dia} ${formatoFechaCorta(fecha)} ${hora} — fija${yaLiberada ? ' (ya liberada)' : ''}`,
       });
     }
+  }
+
+  // Recuperaciones anotadas (para poder cancelarlas / "liberarlas")
+  const { rows: recRows } = await db.query(
+    `SELECT r.id AS recuperacion_id, r.turno_id, r.semana, r.usa_credito,
+            t.dia_semana, t.hora, t.titulo
+     FROM recuperaciones r
+     JOIN turnos t ON t.id = r.turno_id
+     WHERE r.alumno_id = $1
+       AND r.semana = ANY($2::text[])
+       AND t.sucursal_id = $3
+     ORDER BY r.semana, t.dia_semana, t.hora`,
+    [alumno.id, semanas, alumno.sucursal_id]
+  );
+
+  for (const r of recRows) {
+    const semana = r.semana;
+    const etiquetaSemana = semana === semanaActual ? 'Esta semana' : 'Próxima semana';
+    const fecha = getFechaFromSemanaYDia(semana, r.dia_semana);
+    const dia = DIAS[Number(r.dia_semana)] || `Día ${r.dia_semana}`;
+    const titulo = String(r.titulo || 'Clase').trim() || 'Clase';
+    const hora = String(r.hora || '').slice(0, 5);
+
+    opciones.push({
+      turnoId: r.turno_id,
+      semana,
+      etiquetaSemana,
+      dia,
+      hora,
+      titulo,
+      fecha,
+      yaLiberada: false,
+      liberacionId: null,
+      tipo: 'recuperacion',
+      recuperacionId: r.recuperacion_id,
+      usaCredito: !!r.usa_credito,
+      label: `${etiquetaSemana} · ${dia} ${formatoFechaCorta(fecha)} ${hora} — recup`,
+    });
   }
 
   opciones.sort((a, b) => {
     if (a.semana !== b.semana) return a.semana < b.semana ? -1 : 1;
     if (a.fecha !== b.fecha) return a.fecha < b.fecha ? -1 : 1;
-    return String(a.hora).localeCompare(String(b.hora));
+    const hc = String(a.hora).localeCompare(String(b.hora));
+    if (hc !== 0) return hc;
+    // Fijas antes que recup en mismo horario
+    if (a.tipo !== b.tipo) return a.tipo === 'fija' ? -1 : 1;
+    return 0;
   });
 
   return { semanaActual, semanaSiguiente, opciones };
 }
 
 /**
- * Libera una clase fija de una semana y suma 1 crédito (misma lógica que el portal).
+ * Libera una clase fija O cancela una recuperación (chatbot).
+ * @param {object} alumno
+ * @param {string} turnoId
+ * @param {string} semana
+ * @param {{ tipo?: string, recuperacionId?: string }} [meta]
  */
-export async function liberarClaseFija(alumno, turnoId, semana) {
+export async function liberarClaseFija(alumno, turnoId, semana, meta = {}) {
   const db = await getPool();
   if (!db) throw new Error('Base de datos no configurada');
 
   const semanaVista = String(semana || '').trim() || getSemanaActual();
+  const tipo = meta.tipo === 'recuperacion' || meta.recuperacionId ? 'recuperacion' : 'fija';
+
+  if (tipo === 'recuperacion') {
+    let rec = null;
+    if (meta.recuperacionId) {
+      const { rows } = await db.query(
+        `SELECT id, turno_id, semana, usa_credito FROM recuperaciones
+         WHERE id = $1 AND alumno_id = $2`,
+        [meta.recuperacionId, alumno.id]
+      );
+      rec = rows[0] || null;
+    } else {
+      const { rows } = await db.query(
+        `SELECT id, turno_id, semana, usa_credito FROM recuperaciones
+         WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3
+         LIMIT 1`,
+        [alumno.id, turnoId, semanaVista]
+      );
+      rec = rows[0] || null;
+    }
+    if (!rec) {
+      throw Object.assign(new Error('No encontré esa recuperación para liberar.'), { status: 404 });
+    }
+
+    const { rows: turnoRows } = await db.query(
+      'SELECT id, dia_semana, hora, titulo FROM turnos WHERE id = $1 AND sucursal_id = $2',
+      [rec.turno_id, alumno.sucursal_id]
+    );
+    if (turnoRows.length === 0) throw Object.assign(new Error('Turno no encontrado'), { status: 404 });
+    const t = turnoRows[0];
+
+    const { rowCount } = await db.query(
+      'DELETE FROM recuperaciones WHERE id = $1 AND alumno_id = $2',
+      [rec.id, alumno.id]
+    );
+    if (rowCount === 0) {
+      return { ok: true, yaEstaba: true, tipo: 'recuperacion', turno: t, semana: rec.semana };
+    }
+
+    if (rec.usa_credito) {
+      await db.query(
+        'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + 1 WHERE id = $1 AND sucursal_id = $2',
+        [alumno.id, alumno.sucursal_id]
+      );
+    }
+
+    try {
+      await db.query('UPDATE alumnos SET actividad_arrastre_procesado_hasta = NULL WHERE id = $1', [alumno.id]);
+    } catch {
+      /* ignore */
+    }
+
+    try {
+      await db.query(
+        'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+        [crypto.randomUUID(), alumno.sucursal_id, 'liberar', alumno.id, rec.turno_id]
+      );
+    } catch (err) {
+      console.error('[chatbot liberar recup] notificación', err?.message || err);
+    }
+
+    avisarProfesorChatbot({
+      tipo: 'liberar',
+      alumno,
+      turno: t,
+      semana: rec.semana,
+      extraLabel: `Recuperación cancelada · ${rec.semana}`,
+    }).catch((e) => console.error('[whatsapp liberar recup]', e?.message || e));
+
+    return {
+      ok: true,
+      yaEstaba: false,
+      tipo: 'recuperacion',
+      devolvioCredito: !!rec.usa_credito,
+      turno: t,
+      semana: rec.semana,
+    };
+  }
+
   const { rows: turnoRows } = await db.query(
     'SELECT id, alumno_ids, dia_semana, hora, titulo FROM turnos WHERE id = $1 AND sucursal_id = $2',
     [turnoId, alumno.sucursal_id]
@@ -156,7 +284,7 @@ export async function liberarClaseFija(alumno, turnoId, semana) {
     [turnoId, alumno.id, semanaVista]
   );
   if (libRows.length > 0) {
-    return { ok: true, liberacionId: libRows[0].id, yaEstaba: true, turno: t, semana: semanaVista };
+    return { ok: true, liberacionId: libRows[0].id, yaEstaba: true, tipo: 'fija', turno: t, semana: semanaVista };
   }
 
   const id = crypto.randomUUID();
@@ -184,7 +312,6 @@ export async function liberarClaseFija(alumno, turnoId, semana) {
     console.error('[chatbot liberar] notificación', err?.message || err);
   }
 
-  // Aviso WhatsApp al profe (async, no bloquea)
   avisarProfesorChatbot({
     tipo: 'liberar',
     alumno,
@@ -192,7 +319,7 @@ export async function liberarClaseFija(alumno, turnoId, semana) {
     semana: semanaVista,
   }).catch((e) => console.error('[whatsapp liberar]', e?.message || e));
 
-  return { ok: true, liberacionId: id, yaEstaba: false, turno: t, semana: semanaVista };
+  return { ok: true, liberacionId: id, yaEstaba: false, tipo: 'fija', turno: t, semana: semanaVista };
 }
 
 /**

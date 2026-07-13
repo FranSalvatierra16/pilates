@@ -20,7 +20,7 @@ export function menuAlumno() {
 Elegí una opción:
 
 1️⃣ Ver vencimiento
-2️⃣ Liberar una clase (esta / próxima semana)
+2️⃣ Liberar una clase (fija o recuperación)
 3️⃣ Recuperar una clase
 4️⃣ Ver mis horarios
 

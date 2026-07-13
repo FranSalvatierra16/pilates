@@ -180,6 +180,9 @@ function mapOpcionesMin(opciones) {
     turnoId: o.turnoId,
     semana: o.semana,
     label: o.label,
+    dia: o.dia || null,
+    hora: o.hora || null,
+    etiquetaSemana: o.etiquetaSemana || null,
   }));
 }
 

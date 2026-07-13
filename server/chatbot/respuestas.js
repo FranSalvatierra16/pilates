@@ -1,11 +1,11 @@
 import { formatoFecha } from './menu.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const DIAS_CORTO = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
 
-/** Cuántas opciones mostrar por mensaje (WhatsApp trunca listas largas). */
-export const PAGE_SIZE = 8;
+/** Página grande: el formato por día ya es compacto. */
+export const PAGE_SIZE = 40;
 
-/** Números de opción legibles en WhatsApp (10️⃣ se ve mal / “repetido”). */
 export function numOpcion(n) {
   const i = Number(n);
   const key = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
@@ -17,26 +17,117 @@ export function lineasOpciones(opciones, getLabel = (o) => o.label, offset = 0) 
   return opciones.map((o, i) => `${numOpcion(offset + i + 1)} ${getLabel(o)}`).join('\n');
 }
 
+function horaOk(o) {
+  return String(o.hora || '').slice(0, 5);
+}
+
+function diaCortoFromName(dia) {
+  const d = String(dia || '').trim();
+  const idx = DIAS.findIndex((x) => x === d || x.toLowerCase().startsWith(d.slice(0, 3).toLowerCase()));
+  if (idx >= 0) return DIAS_CORTO[idx];
+  if (d.length >= 3) return d.slice(0, 3);
+  return d || 'Día';
+}
+
+/** Etiqueta corta sin cupo, ej. "Esta semana · Lun 09:00" */
+export function labelHorarioCorto(o) {
+  if (!o) return '';
+  if (o.dia || o.hora) {
+    const sem = o.etiquetaSemana ? `${o.etiquetaSemana} · ` : '';
+    return `${sem}${diaCortoFromName(o.dia)} ${horaOk(o)}`.trim();
+  }
+  return String(o.label || '')
+    .replace(/\s*\(\d+\s*libres?\)\s*/gi, '')
+    .trim();
+}
+
 /**
- * Página de opciones con numeración global (1..N) y pie “más / anterior”.
+ * Formato tipo:
+ * *Esta semana*
+ * Lun: 08:00 | 09:00 | 10:00
+ * Mar: 09:00 | 11:00
+ *
+ * Con numerados (elige índice = posición en `opciones`):
+ * Lun: 1)08:00 | 2)09:00
  */
-export function renderPaginaOpciones(opciones, page = 0, pageSize = PAGE_SIZE, getLabel = (o) => o.label) {
+export function textoHorariosPorDia(opciones, { numerados = false, offset = 0 } = {}) {
+  if (!opciones.length) return '';
+
+  const tagged = opciones.map((o, i) => ({ ...o, __n: offset + i + 1 }));
+
+  const ordenSemana = [];
+  const porSemana = new Map();
+  for (const o of tagged) {
+    const sem = o.etiquetaSemana || (o.semana ? String(o.semana) : 'Disponibles');
+    if (!porSemana.has(sem)) {
+      porSemana.set(sem, []);
+      ordenSemana.push(sem);
+    }
+    porSemana.get(sem).push(o);
+  }
+
+  const bloques = [];
+  for (const sem of ordenSemana) {
+    const items = porSemana.get(sem) || [];
+    bloques.push(`*${sem}*`);
+
+    const diasOrden = [];
+    const porDia = new Map();
+    for (const o of items) {
+      const dia = o.dia || 'Día';
+      if (!porDia.has(dia)) {
+        porDia.set(dia, []);
+        diasOrden.push(dia);
+      }
+      porDia.get(dia).push(o);
+    }
+
+    diasOrden.sort((a, b) => {
+      const ia = DIAS.indexOf(a);
+      const ib = DIAS.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+
+    for (const dia of diasOrden) {
+      const slots = porDia.get(dia) || [];
+      const corto = diaCortoFromName(dia);
+      if (numerados) {
+        const ordenados = [...slots].sort((a, b) => a.__n - b.__n);
+        bloques.push(`${corto}: ${ordenados.map((o) => `${o.__n})${horaOk(o)}`).join(' | ')}`);
+      } else {
+        const horas = [...new Set([...slots].sort((a, b) => horaOk(a).localeCompare(horaOk(b))).map(horaOk))];
+        bloques.push(`${corto}: ${horas.join(' | ')}`);
+      }
+    }
+    bloques.push('');
+  }
+
+  return bloques.join('\n').trim();
+}
+
+export function renderPaginaOpciones(opciones, page = 0, pageSize = PAGE_SIZE, getLabel = null) {
   const total = opciones.length;
   const pages = Math.max(1, Math.ceil(total / pageSize) || 1);
   const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
   const offset = p * pageSize;
   const slice = opciones.slice(offset, offset + pageSize);
-  const lineas = lineasOpciones(slice, getLabel, offset);
+
+  const usaPorDia = !getLabel && slice.some((o) => o && (o.dia || o.hora));
+  const lineas = usaPorDia
+    ? textoHorariosPorDia(slice, { numerados: true, offset })
+    : lineasOpciones(slice, getLabel || ((o) => labelHorarioCorto(o) || o.label), offset);
+
   const pie = [];
   if (p < pages - 1) pie.push(`${numOpcion(98)} Ver más horarios`);
   if (p > 0) pie.push(`${numOpcion(97)} Página anterior`);
+
   return {
     lineas,
     pie: pie.join('\n'),
     page: p,
     pages,
     total,
-    header: pages > 1 ? `📄 Página ${p + 1} de ${pages} · ${total} horarios\n\n` : '',
+    header: pages > 1 ? `📄 Página ${p + 1} de ${pages}\n\n` : '',
   };
 }
 
@@ -77,16 +168,18 @@ Consultá con tu estudio o pedí hablar con una profesora (opción 4️⃣ del m
 0️⃣ Volver al menú principal`;
   }
 
-  const lineas = turnos.map((t) => {
-    const dia = DIAS[Number(t.dia_semana)] || `Día ${t.dia_semana}`;
-    return `• ${dia} ${t.hora} — ${t.titulo}`;
-  });
+  const comoOpciones = turnos.map((t) => ({
+    dia: DIAS[Number(t.dia_semana)] || `Día ${t.dia_semana}`,
+    hora: String(t.hora || '').slice(0, 5),
+    etiquetaSemana: 'Tus fijos',
+  }));
+  const cuerpo = textoHorariosPorDia(comoOpciones, { numerados: false });
 
   return `👤 ${nombre}
 
 🗓️ Tus horarios fijos:
 
-${lineas.join('\n')}
+${cuerpo}
 
 0️⃣ Volver al menú principal`;
 }
@@ -107,13 +200,12 @@ No tenés clases fijas para liberar en esta semana ni la próxima.
   }
 
   if (!liberables.length) {
-    const ya = lineasOpciones(opciones);
     return {
       texto: `👤 ${nombre}
 
 Todas tus clases de esta semana y la próxima ya están liberadas:
 
-${ya}
+${textoHorariosPorDia(opciones, { numerados: false })}
 
 0️⃣ Volver`,
       opciones: [],
@@ -125,10 +217,11 @@ ${ya}
     texto: `👤 ${nombre}
 
 ¿Qué clase querés *liberar*?
+
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
-Se suma 1 crédito para recuperar.
+Se suma 1 crédito para recuperar. Escribí el número.
 
 0️⃣ Cancelar y volver`,
     opciones: liberables,
@@ -141,7 +234,7 @@ export function respuestaLiberacionOk(alumno, opcion, creditos, menuFn) {
   const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '';
   return `✅ Listo ${nombre}
 
-Liberaste: *${opcion.label}*
+Liberaste: *${labelHorarioCorto(opcion)}*
 
 💳 Créditos para recuperar: *${creditos}*
 
@@ -151,7 +244,7 @@ Ahora podés recuperar con la opción 3️⃣ del menú alumno.${menu}`;
 export function respuestaLiberacionYaHecha(opcion, menuFn) {
   const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '\n\n0️⃣ Volver';
   return `Esa clase ya estaba liberada:
-*${opcion.label}*${menu}`;
+*${labelHorarioCorto(opcion)}*${menu}`;
 }
 
 export function listaRecuperarClases(alumno, opciones, creditos, page = 0) {
@@ -177,7 +270,7 @@ Primero liberá una clase fija (opción 2️⃣ del menú alumno).
 
 💳 Créditos: *${cred}*
 
-No hay cupos libres para recuperar en esta semana ni la próxima.
+No hay horarios disponibles en esta semana ni la próxima.
 
 Probá más tarde o pedí ayuda a una profesora (opción 4️⃣ del menú principal).
 
@@ -192,11 +285,12 @@ Probá más tarde o pedí ayuda a una profesora (opción 4️⃣ del menú princ
 
 💳 Créditos: *${cred}*
 
-¿En qué clase querés *recuperar*?
+¿En qué horario querés *recuperar*?
+
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
-Al anotarte se descuenta 1 crédito.
+Al anotarte se descuenta 1 crédito. Escribí el número.
 
 0️⃣ Cancelar y volver`,
     opciones,
@@ -210,7 +304,7 @@ export function respuestaRecuperacionOk(alumno, opcion, creditos, menuFn) {
   return `✅ Listo ${nombre}
 
 Te anotaste para recuperar:
-*${opcion.label}*
+*${labelHorarioCorto(opcion)}*
 
 💳 Créditos restantes: *${creditos}*${menu}`;
 }
@@ -218,7 +312,7 @@ Te anotaste para recuperar:
 export function respuestaRecuperacionYaHecha(opcion, menuFn) {
   const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '\n\n0️⃣ Volver';
   return `Ya estabas anotada/o en esa recuperación:
-*${opcion.label}*${menu}`;
+*${labelHorarioCorto(opcion)}*${menu}`;
 }
 
 export function respuestaDniNoEncontrado() {
@@ -271,10 +365,10 @@ Para anotarte: volvé al menú nuevo y elegí 3️⃣.
   };
 }
 
-export function listaHorariosNuevo(opciones, page = 0) {
+export function listaHorariosNuevo(opciones) {
   if (!opciones.length) {
     return {
-      texto: `No hay cupos libres en esta semana ni la próxima 😕
+      texto: `No hay horarios disponibles en esta semana ni la próxima 😕
 
 Probá más tarde o pedí hablar con una profesora (opción 4️⃣).
 
@@ -283,18 +377,10 @@ Probá más tarde o pedí hablar con una profesora (opción 4️⃣).
     };
   }
 
-  // Solo consulta: listado compacto (sin numeración de elección)
-  const maxShow = 25;
-  const lineas = opciones.slice(0, maxShow).map((o) => `• ${o.label}`).join('\n');
-  const extra =
-    opciones.length > maxShow
-      ? `\n… y ${opciones.length - maxShow} más.`
-      : '';
-
   return {
-    texto: `🗓️ Horarios con cupo libre (${opciones.length}):
+    texto: `🗓️ Disponibles
 
-${lineas}${extra}
+${textoHorariosPorDia(opciones, { numerados: false })}
 
 Para anotarte a una clase de prueba: opción 3️⃣ del menú nuevo.
 
@@ -337,7 +423,7 @@ ${lineas}
 export function listaHorariosParaElegir(opciones, page = 0) {
   if (!opciones.length) {
     return {
-      texto: `No quedó ningún cupo libre ahora 😕
+      texto: `No quedó ningún horario disponible ahora 😕
 
 Probá más tarde o pedí ayuda con la opción 4️⃣.
 
@@ -349,8 +435,11 @@ Probá más tarde o pedí ayuda con la opción 4️⃣.
   const pag = renderPaginaOpciones(opciones, page);
   return {
     texto: `🗓️ Elegí el horario de tu *clase de prueba*:
+
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
+
+Escribí el número.
 
 0️⃣ Cancelar`,
     opciones,
@@ -363,12 +452,13 @@ export function respuestaRegistroOk(result) {
   const plan = result.actividad
     ? `\n📋 Plan de interés: *${result.actividad.nombre}*`
     : '';
+  const claseLabel = labelHorarioCorto(result.clase) || result.clase?.label || '';
   return `✅ ¡Listo ${a.nombre}!
 
 Te anotamos como *alumno/a a prueba* en Savia3.${plan}
 
 🎁 Clase de prueba:
-*${result.clase.label}*
+*${claseLabel}*
 
 El estudio te va a confirmar. Si necesitás cambiar algo, escribí *4* (hablar con una profesora).
 

@@ -54,31 +54,62 @@ function esMenuOHola(msg) {
   );
 }
 
-async function irMenuPrincipal(telefono) {
+function identidadGuardada(contexto = {}) {
+  const dni = normalizarDni(contexto.dni);
+  if (dni && dni.length >= 6) return { dni, alumnoId: contexto.alumnoId || null };
+  return null;
+}
+
+async function irMenuPrincipal(telefono, { resetIdentidad = false } = {}) {
+  const sesion = await obtenerOCrearSesion(telefono);
+  const identidad = resetIdentidad ? null : identidadGuardada(sesion.contexto);
   await actualizarSesion(telefono, {
     estado: ESTADOS.MENU_PRINCIPAL,
     ultimoMenu: ESTADOS.MENU_PRINCIPAL,
-    contexto: {},
+    contexto: identidad ? { dni: identidad.dni, alumnoId: identidad.alumnoId } : {},
     mergeContexto: false,
   });
   return menuPrincipal();
 }
 
 async function irMenuAlumno(telefono) {
+  const sesion = await obtenerOCrearSesion(telefono);
+  const identidad = identidadGuardada(sesion.contexto);
   await actualizarSesion(telefono, {
     estado: ESTADOS.MENU_ALUMNO,
     ultimoMenu: ESTADOS.MENU_ALUMNO,
-    contexto: {},
+    contexto: identidad ? { dni: identidad.dni, alumnoId: identidad.alumnoId } : {},
     mergeContexto: false,
   });
   return menuAlumno();
 }
 
-async function pedirDniPara(telefono, accion) {
+async function pedirDniPara(telefono, accion, sesion) {
+  const identidad = identidadGuardada(sesion?.contexto);
+  if (identidad) {
+    const alumno = await buscarAlumnoPorDni(identidad.dni);
+    if (alumno) {
+      await actualizarSesion(telefono, {
+        estado: ESTADOS.MENU_ALUMNO,
+        ultimoMenu: ESTADOS.MENU_ALUMNO,
+        contexto: {
+          alumnoId: alumno.id,
+          dni: normalizarDni(alumno.dni) || identidad.dni,
+          ultimaAccion: accion,
+        },
+        mergeContexto: false,
+      });
+      return resolverAccionConAlumno(alumno, accion);
+    }
+  }
+
   await actualizarSesion(telefono, {
     estado: ESTADOS.ESPERANDO_DNI,
     ultimoMenu: ESTADOS.MENU_ALUMNO,
-    contexto: { accionDni: accion },
+    contexto: {
+      accionDni: accion,
+      ...(identidad ? { dni: identidad.dni, alumnoId: identidad.alumnoId } : {}),
+    },
     mergeContexto: false,
   });
   return pedirDni(LABELS_ACCION[accion] || 'continuar');
@@ -139,17 +170,46 @@ async function manejarMenuPrincipal(telefono, mensaje) {
   return textoConsultaRecibida();
 }
 
-async function manejarMenuAlumno(telefono, mensaje) {
+async function manejarMenuAlumno(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
+  const mNorm = normalizarMensaje(m);
 
-  if (m === '0' || esMenuOHola(m)) {
+  if (m === '0') {
     return irMenuPrincipal(telefono);
   }
 
-  if (m === '1') return pedirDniPara(telefono, ACCIONES_DNI.VENCIMIENTO);
-  if (m === '2') return pedirDniPara(telefono, ACCIONES_DNI.CANCELAR);
-  if (m === '3') return pedirDniPara(telefono, ACCIONES_DNI.RECUPERAR);
-  if (m === '4') return pedirDniPara(telefono, ACCIONES_DNI.HORARIOS);
+  // "menu" / "hola" reinician todo, incluido el DNI guardado
+  if (mNorm === 'menu' || mNorm === 'menú' || mNorm === 'inicio') {
+    return irMenuPrincipal(telefono, { resetIdentidad: true });
+  }
+  if (esMenuOHola(m)) {
+    return irMenuPrincipal(telefono);
+  }
+
+  // Escribir otro DNI desde el menú alumno cambia la identidad guardada
+  const posibleDni = normalizarDni(m);
+  if (posibleDni.length >= 6 && /^\d+$/.test(m.replace(/[.\s-]/g, ''))) {
+    const alumno = await buscarAlumnoPorDni(posibleDni);
+    if (alumno) {
+      await actualizarSesion(telefono, {
+        estado: ESTADOS.MENU_ALUMNO,
+        ultimoMenu: ESTADOS.MENU_ALUMNO,
+        contexto: {
+          alumnoId: alumno.id,
+          dni: normalizarDni(alumno.dni) || posibleDni,
+        },
+        mergeContexto: false,
+      });
+      return `✅ Listo, te reconocí como *${alumno.nombre} ${alumno.apellido}*.
+
+${menuAlumno()}`;
+    }
+  }
+
+  if (m === '1') return pedirDniPara(telefono, ACCIONES_DNI.VENCIMIENTO, sesion);
+  if (m === '2') return pedirDniPara(telefono, ACCIONES_DNI.CANCELAR, sesion);
+  if (m === '3') return pedirDniPara(telefono, ACCIONES_DNI.RECUPERAR, sesion);
+  if (m === '4') return pedirDniPara(telefono, ACCIONES_DNI.HORARIOS, sesion);
 
   return textoOpcionInvalida(menuAlumno);
 }
@@ -178,7 +238,7 @@ async function manejarEsperandoDni(telefono, mensaje, sesion) {
     ultimoMenu: ESTADOS.MENU_ALUMNO,
     contexto: {
       alumnoId: alumno.id,
-      dni: alumno.dni,
+      dni: normalizarDni(alumno.dni) || dni,
       ultimaAccion: accion,
     },
     mergeContexto: false,
@@ -222,7 +282,7 @@ router.post('/', async (req, res) => {
 
     switch (sesion.estado) {
       case ESTADOS.MENU_ALUMNO:
-        reply = await manejarMenuAlumno(telefono, mensaje);
+        reply = await manejarMenuAlumno(telefono, mensaje, sesion);
         break;
       case ESTADOS.ESPERANDO_DNI:
         reply = await manejarEsperandoDni(telefono, mensaje, sesion);

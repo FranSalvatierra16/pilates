@@ -76,7 +76,7 @@ Si no tenés créditos, primero liberá una fija o pedí ayuda a una profesora (
 }
 
 export function respuestaDniNoEncontrado() {
-  return `No encontré un alumno activo con ese DNI 😕
+  return `No encontré un alumno activo con ese DNI en *Savia3* (prueba) 😕
 
 Revisá el número e intentá de nuevo, o pedí hablar con una profesora (opción 3️⃣ del menú).
 

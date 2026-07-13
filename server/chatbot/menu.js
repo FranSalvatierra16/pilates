@@ -1,5 +1,5 @@
 export function menuPrincipal() {
-  return `🌿 ¡Hola! Bienvenido a Savia Pilates!
+  return `🌿 ¡Hola! Bienvenido a Savia Pilates (Savia3 — prueba)!
 
 Soy el asistente del estudio 😊
 

@@ -2,6 +2,18 @@ import { formatoFecha } from './menu.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
+/** Números de opción legibles en WhatsApp (10️⃣ se ve mal / “repetido”). */
+export function numOpcion(n) {
+  const i = Number(n);
+  const key = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+  if (i >= 0 && i <= 9) return key[i];
+  return `*${i}.*`;
+}
+
+export function lineasOpciones(opciones, getLabel = (o) => o.label) {
+  return opciones.map((o, i) => `${numOpcion(i + 1)} ${getLabel(o)}`).join('\n');
+}
+
 export function respuestaVencimiento(alumno) {
   const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
   const fecha = formatoFecha(alumno.fecha_vencimiento_cuota);
@@ -72,7 +84,7 @@ No tenés clases fijas para liberar en esta semana ni la próxima.
   }
 
   if (!liberables.length) {
-    const ya = opciones.map((o, i) => `${i + 1}️⃣ ${o.label}`).join('\n');
+    const ya = lineasOpciones(opciones);
     return {
       texto: `👤 ${nombre}
 
@@ -85,13 +97,13 @@ ${ya}
     };
   }
 
-  const lineas = liberables.map((o, i) => `${i + 1}️⃣ ${o.label}`);
+  const lineas = lineasOpciones(liberables);
   return {
     texto: `👤 ${nombre}
 
 ¿Qué clase querés *liberar*?
 
-${lineas.join('\n')}
+${lineas}
 
 Se suma 1 crédito para recuperar.
 
@@ -152,7 +164,7 @@ Probá más tarde o pedí ayuda a una profesora (opción 3️⃣ del menú princ
     };
   }
 
-  const lineas = opciones.map((o, i) => `${i + 1}️⃣ ${o.label}`);
+  const lineas = lineasOpciones(opciones);
   return {
     texto: `👤 ${nombre}
 
@@ -160,7 +172,7 @@ Probá más tarde o pedí ayuda a una profesora (opción 3️⃣ del menú princ
 
 ¿En qué clase querés *recuperar*?
 
-${lineas.join('\n')}
+${lineas}
 
 Al anotarte se descuenta 1 crédito.
 

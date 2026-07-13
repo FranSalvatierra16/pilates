@@ -20,6 +20,7 @@ import {
   listaRecuperarClases,
   respuestaRecuperacionOk,
   respuestaRecuperacionYaHecha,
+  lineasOpciones,
 } from './respuestas.js';
 import { obtenerOCrearSesion, actualizarSesion } from './sesiones.js';
 import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni } from '../services/alumnos.js';
@@ -328,15 +329,14 @@ async function manejarEsperandoDni(telefono, mensaje, sesion) {
 async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
 
-  if (m === '0') {
+  if (m === '0' || esMenuOHola(m) || normalizarMensaje(m).startsWith('hola')) {
     return irMenuAlumno(telefono);
   }
 
   const opciones = Array.isArray(sesion.contexto?.opcionesLiberar) ? sesion.contexto.opcionesLiberar : [];
   const n = Number.parseInt(m, 10);
   if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
-    const lineas = opciones.map((o, i) => `${i + 1}️⃣ ${o.label}`).join('\n');
-    return `Elegí un número de la lista:\n\n${lineas}\n\n0️⃣ Cancelar`;
+    return `Elegí un número de la lista:\n\n${lineasOpciones(opciones)}\n\n0️⃣ Cancelar`;
   }
 
   const opcion = opciones[n - 1];
@@ -372,15 +372,14 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
 async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
 
-  if (m === '0') {
+  if (m === '0' || esMenuOHola(m) || normalizarMensaje(m).startsWith('hola')) {
     return irMenuAlumno(telefono);
   }
 
   const opciones = Array.isArray(sesion.contexto?.opcionesRecuperar) ? sesion.contexto.opcionesRecuperar : [];
   const n = Number.parseInt(m, 10);
   if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
-    const lineas = opciones.map((o, i) => `${i + 1}️⃣ ${o.label}`).join('\n');
-    return `Elegí un número de la lista:\n\n${lineas}\n\n0️⃣ Cancelar`;
+    return `Elegí un número de la lista:\n\n${lineasOpciones(opciones)}\n\n0️⃣ Cancelar`;
   }
 
   const opcion = opciones[n - 1];

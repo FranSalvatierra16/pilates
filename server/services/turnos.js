@@ -113,6 +113,12 @@ export async function listarClasesParaLiberar(alumno) {
     }
   }
 
+  opciones.sort((a, b) => {
+    if (a.semana !== b.semana) return a.semana < b.semana ? -1 : 1;
+    if (a.fecha !== b.fecha) return a.fecha < b.fecha ? -1 : 1;
+    return String(a.hora).localeCompare(String(b.hora));
+  });
+
   return { semanaActual, semanaSiguiente, opciones };
 }
 
@@ -310,14 +316,21 @@ export async function listarClasesParaRecuperar(alumno) {
         cupo: occ.cupo,
         label: `${etiquetaSemana} · ${dia} ${formatoFechaCorta(fecha)} ${hora} — ${titulo} (${occ.libres} libres)`,
       });
-
-      if (opciones.length >= 20) {
-        return { semanaActual, semanaSiguiente, opciones, creditos };
-      }
     }
   }
 
-  return { semanaActual, semanaSiguiente, opciones, creditos };
+  opciones.sort((a, b) => {
+    if (a.semana !== b.semana) return a.semana < b.semana ? -1 : 1;
+    if (a.fecha !== b.fecha) return a.fecha < b.fecha ? -1 : 1;
+    return String(a.hora).localeCompare(String(b.hora));
+  });
+
+  return {
+    semanaActual,
+    semanaSiguiente,
+    opciones: opciones.slice(0, 20),
+    creditos,
+  };
 }
 
 /**

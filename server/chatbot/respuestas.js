@@ -102,7 +102,13 @@ export function textoHorariosPorDia(opciones, { numerados = false, offset = 0 } 
             .join(' | ')}`
         );
       } else {
-        const horas = [...new Set([...slots].sort((a, b) => horaOk(a).localeCompare(horaOk(b))).map(horaOk))];
+        const horas = [
+          ...new Set(
+            [...slots]
+              .sort((a, b) => horaOk(a).localeCompare(horaOk(b)))
+              .map((o) => `${horaOk(o)}${o.tipo === 'recuperacion' ? 'R' : ''}`)
+          ),
+        ];
         bloques.push(`${corto}: ${horas.join(' | ')}`);
       }
     }
@@ -120,8 +126,9 @@ export function renderPaginaOpciones(opciones, page = 0, pageSize = PAGE_SIZE, g
   const slice = opciones.slice(offset, offset + pageSize);
 
   const usaPorDia = !getLabel && slice.some((o) => o && (o.dia || o.hora));
+  // Lista limpia por día (sin números); la elección es por "Martes 18:00"
   const lineas = usaPorDia
-    ? textoHorariosPorDia(slice, { numerados: true, offset })
+    ? textoHorariosPorDia(slice, { numerados: false, offset })
     : lineasOpciones(slice, getLabel || ((o) => labelHorarioCorto(o) || o.label), offset);
 
   const pie = [];
@@ -224,15 +231,16 @@ ${textoHorariosPorDia(opciones, { numerados: false })}
     texto: `👤 ${nombre}
 
 ¿Qué clase querés *liberar*?
-(R = recuperación que anotaste)
+(R = recuperación)
 
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
-• Fija → suma 1 crédito
-• Recuperación (R) → se cancela y te devuelve el crédito
+✏️ Escribí *día y hora*, ej: *Martes 18:00*
+(si hay dos iguales: *Martes 18:00 próxima* o *Martes 18:00 recup*)
 
-Escribí el número.
+• Fija → suma 1 crédito
+• Recuperación (R) → cancela y te devuelve el crédito
 
 0️⃣ Cancelar y volver`,
     opciones: liberables,
@@ -310,7 +318,10 @@ Probá más tarde o pedí ayuda a una profesora (opción 4️⃣ del menú princ
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
-Al anotarte se descuenta 1 crédito. Escribí el número.
+✏️ Escribí *día y hora*, ej: *Martes 18:00*
+(o *Martes 18:00 próxima* si querés la semana que viene)
+
+Al anotarte se descuenta 1 crédito.
 
 0️⃣ Cancelar y volver`,
     opciones,
@@ -459,7 +470,7 @@ Probá más tarde o pedí ayuda con la opción 4️⃣.
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
-Escribí el número.
+✏️ Escribí *día y hora*, ej: *Martes 18:00*
 
 0️⃣ Cancelar`,
     opciones,

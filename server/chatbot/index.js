@@ -55,6 +55,7 @@ import {
   listarHorariosParaNuevo,
   registrarAlumnoNuevo,
 } from '../services/registroNuevo.js';
+import { resolverEleccionHorario } from './matchHorario.js';
 
 const router = express.Router();
 
@@ -573,10 +574,9 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
     return texto;
   }
 
-  const n = Number.parseInt(m, 10);
-  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
-    const pag = renderPaginaOpciones(opciones, page);
-    return `Elegí un número de la lista:\n${pag.header}${pag.lineas}\n${pag.pie ? `${pag.pie}\n` : ''}\n0️⃣ Cancelar`;
+  const resolved = resolverEleccionHorario(m, opciones);
+  if (!resolved.ok) {
+    return textoErrorEleccion(resolved, opciones, page);
   }
 
   const ctxClaim = await reclamarEstado(telefono, ESTADOS.NUEVO_HORARIO, {
@@ -587,7 +587,7 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
   }
 
   const ops = Array.isArray(ctxClaim.opcionesHorariosNuevo) ? ctxClaim.opcionesHorariosNuevo : opciones;
-  const opcion = ops[n - 1];
+  const opcion = ops[resolved.index] || resolved.opcion;
   const alta = contextoAlta(ctxClaim);
 
   try {
@@ -706,6 +706,25 @@ async function manejarEsperandoDni(telefono, mensaje, sesion) {
   return resolverAccionConAlumno(telefono, alumno, accion);
 }
 
+function textoErrorEleccion(resolved, opciones, page = 0) {
+  const pag = renderPaginaOpciones(opciones, page);
+  const hint = resolved?.hint || 'Escribí *día y hora*, ej: *Martes 18:00*';
+  let extra = '';
+  if (resolved?.reason === 'ambiguous' && Array.isArray(resolved.matches)) {
+    extra =
+      '\n' +
+      resolved.matches
+        .map((o) => `• ${o.etiquetaSemana || ''} ${o.dia} ${String(o.hora || '').slice(0, 5)}${o.tipo === 'recuperacion' ? ' (recup)' : ''}`)
+        .join('\n');
+  }
+  return `${hint}${extra}
+
+${pag.header}${pag.lineas}
+${pag.pie ? `\n${pag.pie}` : ''}
+
+0️⃣ Cancelar`;
+}
+
 async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
 
@@ -730,10 +749,9 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
     return texto;
   }
 
-  const n = Number.parseInt(m, 10);
-  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
-    const pag = renderPaginaOpciones(opciones, page);
-    return `Elegí un número de la lista:\n${pag.header}${pag.lineas}\n${pag.pie ? `${pag.pie}\n` : ''}\n0️⃣ Cancelar`;
+  const resolved = resolverEleccionHorario(m, opciones);
+  if (!resolved.ok) {
+    return textoErrorEleccion(resolved, opciones, page);
   }
 
   const ctxClaim = await reclamarEstado(telefono, ESTADOS.ESPERANDO_LIBERAR);
@@ -742,7 +760,7 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
   }
 
   const ops = Array.isArray(ctxClaim.opcionesLiberar) ? ctxClaim.opcionesLiberar : opciones;
-  const opcion = ops[n - 1];
+  const opcion = ops[resolved.index] || resolved.opcion;
   if (!opcion) return irMenuAlumno(telefono);
 
   const dni = ctxClaim.dni || sesion.contexto?.dni;
@@ -802,10 +820,9 @@ async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
     return texto;
   }
 
-  const n = Number.parseInt(m, 10);
-  if (!Number.isFinite(n) || n < 1 || n > opciones.length) {
-    const pag = renderPaginaOpciones(opciones, page);
-    return `Elegí un número de la lista:\n${pag.header}${pag.lineas}\n${pag.pie ? `${pag.pie}\n` : ''}\n0️⃣ Cancelar`;
+  const resolved = resolverEleccionHorario(m, opciones);
+  if (!resolved.ok) {
+    return textoErrorEleccion(resolved, opciones, page);
   }
 
   const ctxClaim = await reclamarEstado(telefono, ESTADOS.ESPERANDO_RECUPERAR);
@@ -814,7 +831,7 @@ async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
   }
 
   const ops = Array.isArray(ctxClaim.opcionesRecuperar) ? ctxClaim.opcionesRecuperar : opciones;
-  const opcion = ops[n - 1];
+  const opcion = ops[resolved.index] || resolved.opcion;
   if (!opcion) return irMenuAlumno(telefono);
 
   const dni = ctxClaim.dni || dniSesion;

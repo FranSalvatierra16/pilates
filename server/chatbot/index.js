@@ -31,7 +31,14 @@ import {
   listaHorariosNuevo,
   listaActividadesParaElegir,
   listaHorariosParaElegir,
+  listaHorariosActividadPaso,
   respuestaRegistroOk,
+  respuestaRegistroActividadOk,
+  listaTurnosParaCambiar,
+  listaDestinosCambiar,
+  textoConfirmarCambio,
+  respuestaCambioOk,
+  labelHorarioCorto,
   renderPaginaOpciones,
   esPedidoMas,
   esPedidoAnterior,
@@ -50,11 +57,14 @@ import {
   liberarClaseFija,
   listarClasesParaRecuperar,
   anotarRecuperacion,
+  cambiarTurnoFijo,
 } from '../services/turnos.js';
 import {
   listarActividadesChatbot,
   listarHorariosParaNuevo,
+  listarHorariosFijosParaAlta,
   registrarAlumnoNuevo,
+  registrarAlumnoActividad,
 } from '../services/registroNuevo.js';
 import { avisarProfesorChatbot } from '../services/whatsapp.js';
 import { resolverEleccionHorario } from './matchHorario.js';
@@ -66,6 +76,7 @@ const LABELS_ACCION = {
   [ACCIONES_DNI.CANCELAR]: 'cancelar / liberar una clase',
   [ACCIONES_DNI.RECUPERAR]: 'recuperar una clase',
   [ACCIONES_DNI.HORARIOS]: 'ver tus horarios',
+  [ACCIONES_DNI.CAMBIAR]: 'cambiar un turno fijo',
 };
 
 function normalizarMensaje(mensaje) {
@@ -141,14 +152,28 @@ function identidadGuardada(contexto = {}) {
 
 function contextoAlta(ctx = {}) {
   return {
+    modoAlta: ctx.modoAlta === 'actividad' ? 'actividad' : 'prueba',
     altaNombre: ctx.altaNombre || null,
     altaApellido: ctx.altaApellido || null,
     altaDni: ctx.altaDni || null,
     altaEmail: ctx.altaEmail || null,
     altaActividadId: ctx.altaActividadId || null,
+    altaActividadNombre: ctx.altaActividadNombre || null,
+    clasesNecesarias: Number(ctx.clasesNecesarias) || 1,
+    turnosElegidos: Array.isArray(ctx.turnosElegidos) ? ctx.turnosElegidos : [],
     opcionesActividades: Array.isArray(ctx.opcionesActividades) ? ctx.opcionesActividades : [],
     opcionesHorariosNuevo: Array.isArray(ctx.opcionesHorariosNuevo) ? ctx.opcionesHorariosNuevo : [],
   };
+}
+
+function esConfirmacionSi(msg) {
+  const m = normalizarMensaje(msg);
+  return m === '1' || m === 'si' || m === 'sí' || m === 'confirmo' || m === 'cambiar';
+}
+
+function esConfirmacionNo(msg) {
+  const m = normalizarMensaje(msg);
+  return m === '2' || m === 'no' || m === 'cancelar' || m === 'nada';
 }
 
 async function irMenuPrincipal(telefono, { resetIdentidad = false } = {}) {
@@ -293,6 +318,36 @@ async function iniciarRecuperarClases(telefono, alumno) {
   return texto;
 }
 
+async function iniciarCambiarTurno(telefono, alumno) {
+  const turnos = await horariosFijosAlumno(alumno.id);
+  const { texto, opciones } = listaTurnosParaCambiar(alumno, turnos);
+
+  if (!opciones.length) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: alumno.id,
+        dni: normalizarDni(alumno.dni),
+      },
+      mergeContexto: false,
+    });
+    return texto;
+  }
+
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.ESPERANDO_CAMBIAR_ORIGEN,
+    ultimoMenu: ESTADOS.MENU_ALUMNO,
+    contexto: {
+      alumnoId: alumno.id,
+      dni: normalizarDni(alumno.dni),
+      opcionesCambiarOrigen: opciones,
+    },
+    mergeContexto: false,
+  });
+  return texto;
+}
+
 async function resolverAccionConAlumno(telefono, alumno, accion) {
   switch (accion) {
     case ACCIONES_DNI.VENCIMIENTO:
@@ -305,6 +360,8 @@ async function resolverAccionConAlumno(telefono, alumno, accion) {
       const turnos = await horariosFijosAlumno(alumno.id);
       return respuestaHorarios(alumno, turnos);
     }
+    case ACCIONES_DNI.CAMBIAR:
+      return iniciarCambiarTurno(telefono, alumno);
     default:
       return menuAlumno();
   }
@@ -330,11 +387,11 @@ async function mostrarHorariosNuevo(telefono) {
   return texto;
 }
 
-async function iniciarAltaNuevo(telefono) {
+async function iniciarAltaNuevo(telefono, modoAlta = 'prueba') {
   await actualizarSesion(telefono, {
     estado: ESTADOS.NUEVO_NOMBRE,
     ultimoMenu: ESTADOS.MENU_NUEVO,
-    contexto: {},
+    contexto: { modoAlta: modoAlta === 'actividad' ? 'actividad' : 'prueba' },
     mergeContexto: false,
   });
   return pedirNombreNuevo();
@@ -427,12 +484,13 @@ async function manejarMenuNuevo(telefono, mensaje) {
 
   if (m === '1') return mostrarActividadesNuevo(telefono);
   if (m === '2') return mostrarHorariosNuevo(telefono);
-  if (m === '3') return iniciarAltaNuevo(telefono);
+  if (m === '3') return iniciarAltaNuevo(telefono, 'prueba');
+  if (m === '4') return iniciarAltaNuevo(telefono, 'actividad');
 
   return textoOpcionInvalida(menuNuevo);
 }
 
-async function manejarNuevoNombre(telefono, mensaje) {
+async function manejarNuevoNombre(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
   if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
   if (esVolverAtras(m)) return irMenuNuevo(telefono);
@@ -441,10 +499,11 @@ async function manejarNuevoNombre(telefono, mensaje) {
     return conNav(`El nombre es muy corto. Escribilo de nuevo.`, { atrasLabel: 'Menú nuevo' });
   }
 
+  const alta = contextoAlta(sesion?.contexto);
   await actualizarSesion(telefono, {
     estado: ESTADOS.NUEVO_APELLIDO,
     ultimoMenu: ESTADOS.MENU_NUEVO,
-    contexto: { altaNombre: m },
+    contexto: { modoAlta: alta.modoAlta, altaNombre: m },
     mergeContexto: false,
   });
   return pedirApellidoNuevo();
@@ -454,10 +513,11 @@ async function manejarNuevoApellido(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
   if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
   if (esVolverAtras(m)) {
+    const alta = contextoAlta(sesion.contexto);
     await actualizarSesion(telefono, {
       estado: ESTADOS.NUEVO_NOMBRE,
       ultimoMenu: ESTADOS.MENU_NUEVO,
-      contexto: {},
+      contexto: { modoAlta: alta.modoAlta },
       mergeContexto: false,
     });
     return pedirNombreNuevo();
@@ -471,7 +531,7 @@ async function manejarNuevoApellido(telefono, mensaje, sesion) {
   await actualizarSesion(telefono, {
     estado: ESTADOS.NUEVO_DNI,
     ultimoMenu: ESTADOS.MENU_NUEVO,
-    contexto: { ...alta, altaApellido: m },
+    contexto: { modoAlta: alta.modoAlta, altaNombre: alta.altaNombre, altaApellido: m },
     mergeContexto: false,
   });
   return pedirDniNuevo();
@@ -485,7 +545,7 @@ async function manejarNuevoDni(telefono, mensaje, sesion) {
     await actualizarSesion(telefono, {
       estado: ESTADOS.NUEVO_APELLIDO,
       ultimoMenu: ESTADOS.MENU_NUEVO,
-      contexto: { altaNombre: alta.altaNombre },
+      contexto: { modoAlta: alta.modoAlta, altaNombre: alta.altaNombre },
       mergeContexto: false,
     });
     return pedirApellidoNuevo();
@@ -516,7 +576,12 @@ ${menuAlumno()}`;
   await actualizarSesion(telefono, {
     estado: ESTADOS.NUEVO_EMAIL,
     ultimoMenu: ESTADOS.MENU_NUEVO,
-    contexto: { ...alta, altaDni: dni },
+    contexto: {
+      modoAlta: alta.modoAlta,
+      altaNombre: alta.altaNombre,
+      altaApellido: alta.altaApellido,
+      altaDni: dni,
+    },
     mergeContexto: false,
   });
   return pedirEmailNuevo();
@@ -531,6 +596,7 @@ async function manejarNuevoEmail(telefono, mensaje, sesion) {
       estado: ESTADOS.NUEVO_DNI,
       ultimoMenu: ESTADOS.MENU_NUEVO,
       contexto: {
+        modoAlta: alta.modoAlta,
         altaNombre: alta.altaNombre,
         altaApellido: alta.altaApellido,
         altaDni: alta.altaDni,
@@ -547,7 +613,7 @@ async function manejarNuevoEmail(telefono, mensaje, sesion) {
 
   const alta = contextoAlta(sesion.contexto);
   const actividades = await listarActividadesChatbot();
-  const { texto, opciones } = listaActividadesParaElegir(actividades);
+  const { texto, opciones } = listaActividadesParaElegir(actividades, { modoAlta: alta.modoAlta });
 
   if (!opciones.length) {
     await actualizarSesion(telefono, {
@@ -586,6 +652,7 @@ async function manejarNuevoActividad(telefono, mensaje, sesion) {
       estado: ESTADOS.NUEVO_EMAIL,
       ultimoMenu: ESTADOS.MENU_NUEVO,
       contexto: {
+        modoAlta: alta.modoAlta,
         altaNombre: alta.altaNombre,
         altaApellido: alta.altaApellido,
         altaDni: alta.altaDni,
@@ -605,8 +672,21 @@ async function manejarNuevoActividad(telefono, mensaje, sesion) {
   }
 
   const elegida = opciones[n - 1];
-  const horarios = await listarHorariosParaNuevo({ limite: 80 });
-  const { texto, opciones: opsH, page } = listaHorariosParaElegir(horarios, 0);
+  const alta = contextoAlta(sesion.contexto);
+  const esActividad = alta.modoAlta === 'actividad';
+  const clasesNecesarias = esActividad
+    ? Math.max(1, Number(elegida.clasesPorSemana) || 1)
+    : 1;
+
+  const horarios = esActividad
+    ? await listarHorariosFijosParaAlta({ limite: 80 })
+    : await listarHorariosParaNuevo({ limite: 80 });
+
+  const listaFn = esActividad
+    ? listaHorariosActividadPaso(horarios, 0, { paso: 1, total: clasesNecesarias, elegidosLabels: [] })
+    : listaHorariosParaElegir(horarios, 0);
+
+  const { texto, opciones: opsH, page } = listaFn;
 
   if (!opsH.length) {
     await actualizarSesion(telefono, {
@@ -618,13 +698,21 @@ async function manejarNuevoActividad(telefono, mensaje, sesion) {
     return texto;
   }
 
-  const alta = contextoAlta(sesion.contexto);
+  if (esActividad && opsH.length < clasesNecesarias) {
+    return `Este plan pide *${clasesNecesarias}* horarios, pero ahora solo hay *${opsH.length}* con cupo 😕
+
+Pedí ayuda con la opción 4️⃣ del menú principal, o elegí otro plan (0️⃣).`;
+  }
+
   await actualizarSesion(telefono, {
     estado: ESTADOS.NUEVO_HORARIO,
     ultimoMenu: ESTADOS.MENU_NUEVO,
     contexto: {
       ...alta,
       altaActividadId: elegida.id,
+      altaActividadNombre: elegida.nombre,
+      clasesNecesarias,
+      turnosElegidos: [],
       paginaLista: page || 0,
       opcionesHorariosNuevo: mapOpcionesMin(opsH),
     },
@@ -637,16 +725,16 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
   if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
   if (esVolverAtras(m)) {
-    // Volver a elegir actividad
     const alta = contextoAlta(sesion.contexto);
     const actividades = await listarActividadesChatbot();
-    const { texto, opciones } = listaActividadesParaElegir(actividades);
+    const { texto, opciones } = listaActividadesParaElegir(actividades, { modoAlta: alta.modoAlta });
     if (!opciones.length) return irMenuNuevo(telefono);
     await actualizarSesion(telefono, {
       estado: ESTADOS.NUEVO_ACTIVIDAD,
       ultimoMenu: ESTADOS.MENU_NUEVO,
       contexto: {
         ...alta,
+        turnosElegidos: [],
         opcionesActividades: opciones.map((a) => ({
           id: a.id,
           nombre: a.nombre,
@@ -663,21 +751,129 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
     ? sesion.contexto.opcionesHorariosNuevo
     : [];
   let page = Number(sesion.contexto?.paginaLista) || 0;
+  const alta = contextoAlta(sesion.contexto);
+  const esActividad = alta.modoAlta === 'actividad';
+  const total = Math.max(1, Number(alta.clasesNecesarias) || 1);
+  const elegidos = Array.isArray(alta.turnosElegidos) ? alta.turnosElegidos : [];
 
   if (esPedidoMas(m) || esPedidoAnterior(m)) {
     const pages = Math.max(1, Math.ceil(opciones.length / PAGE_SIZE) || 1);
     page = esPedidoMas(m) ? Math.min(page + 1, pages - 1) : Math.max(page - 1, 0);
-    const { texto } = listaHorariosParaElegir(opciones, page);
+    const lista = esActividad
+      ? listaHorariosActividadPaso(opciones, page, {
+          paso: elegidos.length + 1,
+          total,
+          elegidosLabels: elegidos.map((t) => labelHorarioCorto(t) || t.label),
+        })
+      : listaHorariosParaElegir(opciones, page);
     await actualizarSesion(telefono, {
       contexto: { paginaLista: page },
       mergeContexto: true,
     });
-    return texto;
+    return lista.texto;
   }
 
   const resolved = resolverEleccionHorario(m, opciones);
   if (!resolved.ok) {
     return textoErrorEleccion(resolved, opciones, page);
+  }
+
+  const opcion = opciones[resolved.index] || resolved.opcion;
+  if (!opcion) {
+    return textoErrorEleccion({ ok: false, hint: 'No encontré ese horario.' }, opciones, page);
+  }
+
+  if (esActividad) {
+    const ya = elegidos.some((t) => String(t.turnoId) === String(opcion.turnoId));
+    if (ya) {
+      return `Ese horario ya lo elegiste. Probá con otro día/hora.\n\n0️⃣ Volver`;
+    }
+
+    const nuevosElegidos = [
+      ...elegidos,
+      {
+        turnoId: opcion.turnoId,
+        semana: opcion.semana,
+        dia: opcion.dia,
+        hora: opcion.hora,
+        etiquetaSemana: opcion.etiquetaSemana,
+        label: labelHorarioCorto(opcion) || opcion.label,
+      },
+    ];
+
+    if (nuevosElegidos.length < total) {
+      const restantes = await listarHorariosFijosParaAlta({
+        limite: 80,
+        excluirTurnoIds: nuevosElegidos.map((t) => t.turnoId),
+      });
+      const lista = listaHorariosActividadPaso(restantes, 0, {
+        paso: nuevosElegidos.length + 1,
+        total,
+        elegidosLabels: nuevosElegidos.map((t) => t.label),
+      });
+      if (!lista.opciones.length) {
+        return `No hay más horarios con cupo para completar tu plan (${nuevosElegidos.length}/${total}) 😕
+
+Pedí ayuda con la opción 4️⃣, o volvé (0️⃣) para elegir otro plan.`;
+      }
+      await actualizarSesion(telefono, {
+        estado: ESTADOS.NUEVO_HORARIO,
+        contexto: {
+          turnosElegidos: nuevosElegidos,
+          paginaLista: 0,
+          opcionesHorariosNuevo: mapOpcionesMin(lista.opciones),
+        },
+        mergeContexto: true,
+      });
+      return lista.texto;
+    }
+
+    const ctxClaim = await reclamarEstado(telefono, ESTADOS.NUEVO_HORARIO, {
+      estadoFinal: ESTADOS.MENU_PRINCIPAL,
+    });
+    if (!ctxClaim) {
+      return `Ya procesamos esa anotación ✅\n\n${menuPrincipal()}`;
+    }
+
+    const altaClaim = contextoAlta(ctxClaim);
+    try {
+      const result = await registrarAlumnoActividad({
+        nombre: altaClaim.altaNombre,
+        apellido: altaClaim.altaApellido,
+        dni: altaClaim.altaDni,
+        telefono,
+        email: altaClaim.altaEmail,
+        actividadId: altaClaim.altaActividadId,
+        turnos: nuevosElegidos,
+      });
+
+      await actualizarSesion(telefono, {
+        estado: ESTADOS.MENU_PRINCIPAL,
+        ultimoMenu: ESTADOS.MENU_PRINCIPAL,
+        contexto: {
+          dni: result.alumno.dni,
+          alumnoId: result.alumno.id,
+        },
+        mergeContexto: false,
+      });
+
+      return respuestaRegistroActividadOk(result);
+    } catch (e) {
+      console.error('[chatbot registro actividad]', e);
+      if (e.status === 409 && e.alumno) {
+        await actualizarSesion(telefono, {
+          estado: ESTADOS.MENU_ALUMNO,
+          ultimoMenu: ESTADOS.MENU_ALUMNO,
+          contexto: {
+            alumnoId: e.alumno.id,
+            dni: normalizarDni(e.alumno.dni),
+          },
+          mergeContexto: false,
+        });
+        return `${e.message}\n\n${menuAlumno()}`;
+      }
+      return `${e.message || 'No se pudo completar el alta.'}\n\nProbá de nuevo con *4* en el menú nuevo, o *0* para salir.`;
+    }
   }
 
   const ctxClaim = await reclamarEstado(telefono, ESTADOS.NUEVO_HORARIO, {
@@ -688,19 +884,19 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
   }
 
   const ops = Array.isArray(ctxClaim.opcionesHorariosNuevo) ? ctxClaim.opcionesHorariosNuevo : opciones;
-  const opcion = ops[resolved.index] || resolved.opcion;
-  const alta = contextoAlta(ctxClaim);
+  const opcionClaim = ops[resolved.index] || resolved.opcion || opcion;
+  const altaClaim = contextoAlta(ctxClaim);
 
   try {
     const result = await registrarAlumnoNuevo({
-      nombre: alta.altaNombre,
-      apellido: alta.altaApellido,
-      dni: alta.altaDni,
+      nombre: altaClaim.altaNombre,
+      apellido: altaClaim.altaApellido,
+      dni: altaClaim.altaDni,
       telefono,
-      email: alta.altaEmail,
-      actividadId: alta.altaActividadId,
-      turnoId: opcion.turnoId,
-      semana: opcion.semana,
+      email: altaClaim.altaEmail,
+      actividadId: altaClaim.altaActividadId,
+      turnoId: opcionClaim.turnoId,
+      semana: opcionClaim.semana,
     });
 
     await actualizarSesion(telefono, {
@@ -765,6 +961,7 @@ ${menuAlumno()}`;
   if (m === '2') return pedirDniPara(telefono, ACCIONES_DNI.CANCELAR, sesion);
   if (m === '3') return pedirDniPara(telefono, ACCIONES_DNI.RECUPERAR, sesion);
   if (m === '4') return pedirDniPara(telefono, ACCIONES_DNI.HORARIOS, sesion);
+  if (m === '5') return pedirDniPara(telefono, ACCIONES_DNI.CAMBIAR, sesion);
 
   return textoOpcionInvalida(menuAlumno);
 }
@@ -969,9 +1166,177 @@ async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
   }
 }
 
-async function manejarEsperandoConsulta(telefono, mensaje) {
-  // Compat: estados viejos ESPERANDO_CONSULTA → misma lógica que CON_PROFESORA
-  return manejarConProfesora(telefono, mensaje);
+async function manejarEsperandoCambiarOrigen(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) return irMenuAlumno(telefono);
+
+  const opciones = Array.isArray(sesion.contexto?.opcionesCambiarOrigen)
+    ? sesion.contexto.opcionesCambiarOrigen
+    : [];
+  const n = Number.parseInt(m, 10);
+  let origen = null;
+  if (Number.isFinite(n) && n >= 1 && n <= opciones.length) {
+    origen = opciones[n - 1];
+  } else {
+    const resolved = resolverEleccionHorario(m, opciones);
+    if (resolved.ok) origen = opciones[resolved.index] || resolved.opcion;
+  }
+
+  if (!origen) {
+    return `Elegí el número del turno que querés cambiar:\n\n${lineasOpciones(opciones, (o) => `*${o.dia}* ${o.hora}`)}\n\n0️⃣ Volver`;
+  }
+
+  const destinos = await listarHorariosFijosParaAlta({
+    limite: 80,
+    excluirTurnoIds: [origen.turnoId],
+  });
+  const origenLabel = labelHorarioCorto(origen) || `${origen.dia} ${origen.hora}`;
+  const { texto, opciones: opsDest, page } = listaDestinosCambiar(destinos, 0, origenLabel);
+
+  if (!opsDest.length) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: sesion.contexto?.alumnoId,
+        dni: sesion.contexto?.dni,
+      },
+      mergeContexto: false,
+    });
+    return texto;
+  }
+
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.ESPERANDO_CAMBIAR_DESTINO,
+    ultimoMenu: ESTADOS.MENU_ALUMNO,
+    contexto: {
+      alumnoId: sesion.contexto?.alumnoId,
+      dni: sesion.contexto?.dni,
+      cambiarOrigen: origen,
+      origenLabel,
+      paginaLista: page || 0,
+      opcionesCambiarDestino: mapOpcionesMin(opsDest),
+    },
+    mergeContexto: false,
+  });
+  return texto;
+}
+
+async function manejarEsperandoCambiarDestino(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) {
+    const dni = sesion.contexto?.dni;
+    const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
+    if (!alumno) return irMenuAlumno(telefono);
+    return iniciarCambiarTurno(telefono, alumno);
+  }
+
+  const opciones = Array.isArray(sesion.contexto?.opcionesCambiarDestino)
+    ? sesion.contexto.opcionesCambiarDestino
+    : [];
+  let page = Number(sesion.contexto?.paginaLista) || 0;
+  const origenLabel = sesion.contexto?.origenLabel || 'turno actual';
+
+  if (esPedidoMas(m) || esPedidoAnterior(m)) {
+    const pages = Math.max(1, Math.ceil(opciones.length / PAGE_SIZE) || 1);
+    page = esPedidoMas(m) ? Math.min(page + 1, pages - 1) : Math.max(page - 1, 0);
+    const { texto } = listaDestinosCambiar(opciones, page, origenLabel);
+    await actualizarSesion(telefono, {
+      contexto: { paginaLista: page },
+      mergeContexto: true,
+    });
+    return texto;
+  }
+
+  const resolved = resolverEleccionHorario(m, opciones);
+  if (!resolved.ok) {
+    return textoErrorEleccion(resolved, opciones, page);
+  }
+
+  const destino = opciones[resolved.index] || resolved.opcion;
+  if (!destino) return irMenuAlumno(telefono);
+
+  const destinoLabel = labelHorarioCorto(destino) || destino.label || `${destino.dia} ${destino.hora}`;
+
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.ESPERANDO_CAMBIAR_CONFIRM,
+    ultimoMenu: ESTADOS.MENU_ALUMNO,
+    contexto: {
+      alumnoId: sesion.contexto?.alumnoId,
+      dni: sesion.contexto?.dni,
+      cambiarOrigen: sesion.contexto?.cambiarOrigen,
+      origenLabel,
+      cambiarDestino: destino,
+      destinoLabel,
+    },
+    mergeContexto: false,
+  });
+
+  return textoConfirmarCambio(origenLabel, destinoLabel);
+}
+
+async function manejarEsperandoCambiarConfirm(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (esIrMenuPrincipal(m)) return irMenuPrincipal(telefono);
+
+  if (esConfirmacionNo(m) || esVolverAtras(m)) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: sesion.contexto?.alumnoId,
+        dni: sesion.contexto?.dni,
+      },
+      mergeContexto: false,
+    });
+    return `Cancelado. No cambiaste el turno.\n\n${menuAlumno()}`;
+  }
+
+  if (!esConfirmacionSi(m)) {
+    return textoConfirmarCambio(
+      sesion.contexto?.origenLabel || 'turno actual',
+      sesion.contexto?.destinoLabel || 'nuevo horario'
+    );
+  }
+
+  const ctxClaim = await reclamarEstado(telefono, ESTADOS.ESPERANDO_CAMBIAR_CONFIRM);
+  if (!ctxClaim) {
+    return `Ya procesamos ese cambio ✅\n\n${menuAlumno()}`;
+  }
+
+  const dni = ctxClaim.dni || sesion.contexto?.dni;
+  const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
+  if (!alumno) return irMenuAlumno(telefono);
+
+  const origen = ctxClaim.cambiarOrigen;
+  const destino = ctxClaim.cambiarDestino;
+  if (!origen?.turnoId || !destino?.turnoId) {
+    return `Faltó algún dato del cambio. Probá de nuevo.\n\n${menuAlumno()}`;
+  }
+
+  try {
+    const result = await cambiarTurnoFijo(alumno, origen.turnoId, destino.turnoId);
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: alumno.id,
+        dni: normalizarDni(alumno.dni) || dni,
+      },
+      mergeContexto: false,
+    });
+    return respuestaCambioOk(
+      alumno,
+      result.origenLabel || ctxClaim.origenLabel,
+      result.destinoLabel || ctxClaim.destinoLabel,
+      menuAlumno
+    );
+  } catch (e) {
+    console.error('[chatbot cambiar]', e);
+    return `${e.message || 'No se pudo cambiar el turno.'}\n\n0️⃣ Volver`;
+  }
 }
 
 /**
@@ -1047,7 +1412,7 @@ router.post('/', async (req, res) => {
         reply = await manejarMenuNuevo(telefono, mensaje);
         break;
       case ESTADOS.NUEVO_NOMBRE:
-        reply = await manejarNuevoNombre(telefono, mensaje);
+        reply = await manejarNuevoNombre(telefono, mensaje, sesion);
         break;
       case ESTADOS.NUEVO_APELLIDO:
         reply = await manejarNuevoApellido(telefono, mensaje, sesion);
@@ -1072,6 +1437,15 @@ router.post('/', async (req, res) => {
         break;
       case ESTADOS.ESPERANDO_RECUPERAR:
         reply = await manejarEsperandoRecuperar(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.ESPERANDO_CAMBIAR_ORIGEN:
+        reply = await manejarEsperandoCambiarOrigen(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.ESPERANDO_CAMBIAR_DESTINO:
+        reply = await manejarEsperandoCambiarDestino(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.ESPERANDO_CAMBIAR_CONFIRM:
+        reply = await manejarEsperandoCambiarConfirm(telefono, mensaje, sesion);
         break;
       case ESTADOS.ESPERANDO_CONSULTA:
       case ESTADOS.CON_PROFESORA:

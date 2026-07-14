@@ -41,14 +41,22 @@ export function labelHorarioCorto(o) {
     .trim();
 }
 
+function fechaCortaDeOpcion(o) {
+  const f = o?.fecha ? String(o.fecha).slice(0, 10) : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return '';
+  return `${f.slice(8, 10)}/${f.slice(5, 7)}`;
+}
+
 /**
- * Formato tipo:
- * *Esta semana*
- * Lun: 08:00 | 09:00 | 10:00
- * Mar: 09:00 | 11:00
+ * Formato prolijo para WhatsApp:
  *
- * Con numerados (elige índice = posición en `opciones`):
- * Lun: 1)08:00 | 2)09:00
+ * 🗓️ *Esta semana*
+ *
+ * *Lunes* (14/07)
+ * 08:00 · 09:00 · 10:00
+ *
+ * *Martes*
+ * 09:00 · 11:00 🔁
  */
 export function textoHorariosPorDia(opciones, { numerados = false, offset = 0 } = {}) {
   if (!opciones.length) return '';
@@ -69,7 +77,7 @@ export function textoHorariosPorDia(opciones, { numerados = false, offset = 0 } 
   const bloques = [];
   for (const sem of ordenSemana) {
     const items = porSemana.get(sem) || [];
-    bloques.push(`*${sem}*`);
+    bloques.push(`🗓️ *${sem}*`);
 
     const diasOrden = [];
     const porDia = new Map();
@@ -90,26 +98,29 @@ export function textoHorariosPorDia(opciones, { numerados = false, offset = 0 } 
 
     for (const dia of diasOrden) {
       const slots = porDia.get(dia) || [];
-      const corto = diaCortoFromName(dia);
+      const fechaTxt = fechaCortaDeOpcion(slots[0]);
+      bloques.push('');
+      bloques.push(`*${dia}*${fechaTxt ? ` (${fechaTxt})` : ''}`);
+
       if (numerados) {
         const ordenados = [...slots].sort((a, b) => a.__n - b.__n);
         bloques.push(
-          `${corto}: ${ordenados
+          ordenados
             .map((o) => {
-              const marca = o.tipo === 'recuperacion' ? 'R' : '';
-              return `${o.__n})${horaOk(o)}${marca}`;
+              const marca = o.tipo === 'recuperacion' ? ' 🔁' : '';
+              return `${o.__n}) ${horaOk(o)}${marca}`;
             })
-            .join(' | ')}`
+            .join('  ·  ')
         );
       } else {
         const horas = [
           ...new Set(
             [...slots]
               .sort((a, b) => horaOk(a).localeCompare(horaOk(b)))
-              .map((o) => `${horaOk(o)}${o.tipo === 'recuperacion' ? 'R' : ''}`)
+              .map((o) => `${horaOk(o)}${o.tipo === 'recuperacion' ? ' 🔁' : ''}`)
           ),
         ];
-        bloques.push(`${corto}: ${horas.join(' | ')}`);
+        bloques.push(horas.join('  ·  '));
       }
     }
     bloques.push('');
@@ -231,7 +242,7 @@ ${textoHorariosPorDia(opciones, { numerados: false })}
     texto: `👤 ${nombre}
 
 ¿Qué clase querés *liberar*?
-(R = recuperación)
+(🔁 = recuperación)
 
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
@@ -389,7 +400,7 @@ ${lineas}
 
 🎁 La clase de prueba es gratuita. Después el plan se coordina en el estudio.
 
-Para anotarte: volvé al menú nuevo y elegí 3️⃣.
+Para anotarte: volvé al menú nuevo y elegí 3️⃣ (prueba) o 4️⃣ (actividad).
 
 0️⃣ Volver`,
     opciones: actividades,
@@ -409,11 +420,13 @@ Probá más tarde o pedí hablar con una profesora (opción 4️⃣).
   }
 
   return {
-    texto: `🗓️ Disponibles
+    texto: `🗓️ Horarios con cupo libre
 
 ${textoHorariosPorDia(opciones, { numerados: false })}
 
-Para anotarte a una clase de prueba: opción 3️⃣ del menú nuevo.
+Para anotarte:
+• 3️⃣ clase de prueba
+• 4️⃣ actividad / plan
 
 0️⃣ Volver`,
     opciones,
@@ -421,7 +434,7 @@ Para anotarte a una clase de prueba: opción 3️⃣ del menú nuevo.
   };
 }
 
-export function listaActividadesParaElegir(actividades) {
+export function listaActividadesParaElegir(actividades, { modoAlta = 'prueba' } = {}) {
   if (!actividades.length) {
     return {
       texto: `No hay actividades cargadas. Avisale a una profesora (opción 4️⃣).
@@ -439,19 +452,24 @@ export function listaActividadesParaElegir(actividades) {
     return `*${a.nombre}* — ${a.labelPrecio}${clases}`;
   });
 
+  const esAct = modoAlta === 'actividad';
+  const tip = esAct
+    ? `Vas a armar tu plan fijo. Si el plan es *2 x sem*, elegís *2* horarios.`
+    : `(La prueba es gratis; el plan lo confirmás después en el estudio.)`;
+
   return {
     texto: `📋 ¿Qué *actividad / plan* te interesa?
 
 ${lineas}
 
-(La prueba es gratis; el plan lo confirmás después en el estudio.)
+${tip}
 
 0️⃣ Cancelar`,
     opciones: actividades,
   };
 }
 
-export function listaHorariosParaElegir(opciones, page = 0) {
+export function listaHorariosParaElegir(opciones, page = 0, { titulo = null } = {}) {
   if (!opciones.length) {
     return {
       texto: `No quedó ningún horario disponible ahora 😕
@@ -464,9 +482,42 @@ Probá más tarde o pedí ayuda con la opción 4️⃣.
   }
 
   const pag = renderPaginaOpciones(opciones, page);
+  const head = titulo || '🗓️ Elegí el horario de tu *clase de prueba*:';
   return {
-    texto: `🗓️ Elegí el horario de tu *clase de prueba*:
+    texto: `${head}
 
+${pag.header}${pag.lineas}
+${pag.pie ? `\n${pag.pie}` : ''}
+
+✏️ Escribí *día y hora*, ej: *Martes 18:00*
+
+${PIE_NAV}`,
+    opciones,
+    page: pag.page,
+  };
+}
+
+export function listaHorariosActividadPaso(opciones, page = 0, { paso = 1, total = 1, elegidosLabels = [] } = {}) {
+  if (!opciones.length) {
+    return {
+      texto: `No hay más horarios con cupo para completar tu plan 😕
+
+Pedí ayuda con la opción 4️⃣ del menú principal.
+
+0️⃣ Cancelar`,
+      opciones: [],
+    };
+  }
+
+  const pag = renderPaginaOpciones(opciones, page);
+  const ya =
+    elegidosLabels.length > 0
+      ? `\n✅ Ya elegiste:\n${elegidosLabels.map((l) => `• ${l}`).join('\n')}\n`
+      : '';
+
+  return {
+    texto: `🗓️ Elegí el horario *${paso} de ${total}* de tu plan
+${ya}
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
@@ -496,4 +547,113 @@ El estudio te va a confirmar. Si necesitás cambiar algo, escribí *4* (hablar c
 Cuando ya figuras como alumno/a, usá la opción *3* del menú.
 
 0️⃣ Menú principal`;
+}
+
+export function respuestaRegistroActividadOk(result) {
+  const a = result.alumno;
+  const plan = result.actividad ? `📋 Plan: *${result.actividad.nombre}*\n` : '';
+  const clases = Array.isArray(result.clases) ? result.clases : [];
+  const lista = clases
+    .map((c) => `• ${labelHorarioCorto(c) || c.label || `${c.dia} ${c.hora}`}`)
+    .join('\n');
+
+  return `✅ ¡Listo ${a.nombre}!
+
+Te anotamos en Savia3 con tu plan semanal.
+${plan}
+🗓️ Tus turnos fijos:
+${lista || '• (sin detalle)'}
+
+El estudio te va a confirmar. Si necesitás cambiar un día, entrando como alumno/a usá la opción *5*.
+
+0️⃣ Menú principal`;
+}
+
+export function listaTurnosParaCambiar(alumno, turnos) {
+  const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
+  if (!turnos.length) {
+    return {
+      texto: `👤 ${nombre}
+
+No tenés turnos fijos cargados para cambiar.
+
+0️⃣ Volver`,
+      opciones: [],
+    };
+  }
+
+  const opciones = turnos.map((t) => {
+    const dia = DIAS[Number(t.dia_semana)] || `Día ${t.dia_semana}`;
+    const hora = String(t.hora || '').slice(0, 5);
+    return {
+      turnoId: t.id,
+      dia,
+      hora,
+      titulo: t.titulo || 'Clase',
+      etiquetaSemana: 'Tu fijo',
+      label: `${dia} ${hora}`,
+    };
+  });
+
+  const lineas = lineasOpciones(opciones, (o) => `*${o.dia}* ${o.hora}`);
+  return {
+    texto: `👤 ${nombre}
+
+¿Qué turno fijo querés *cambiar*?
+
+${lineas}
+
+0️⃣ Volver`,
+    opciones,
+  };
+}
+
+export function listaDestinosCambiar(opciones, page = 0, origenLabel = '') {
+  if (!opciones.length) {
+    return {
+      texto: `No hay otros horarios con cupo ahora 😕
+
+Probá más tarde o pedí ayuda (opción 4️⃣).
+
+0️⃣ Volver`,
+      opciones: [],
+    };
+  }
+
+  const pag = renderPaginaOpciones(opciones, page);
+  return {
+    texto: `🔄 Cambiar: *${origenLabel}*
+
+Elegí el *nuevo* horario:
+
+${pag.header}${pag.lineas}
+${pag.pie ? `\n${pag.pie}` : ''}
+
+✏️ Escribí *día y hora*, ej: *Miércoles 19:00*
+
+${PIE_NAV}`,
+    opciones,
+    page: pag.page,
+  };
+}
+
+export function textoConfirmarCambio(origenLabel, destinoLabel) {
+  return `⚠️ ¿Estás seguro/a de cambiar?
+
+❌ *${origenLabel}*
+➡️ *${destinoLabel}*
+
+1️⃣ Sí, cambiar
+2️⃣ No, cancelar
+
+${PIE_NAV}`;
+}
+
+export function respuestaCambioOk(alumno, origenLabel, destinoLabel, menuFn) {
+  const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
+  const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '';
+  return `✅ Listo ${nombre}
+
+Cambiaste tu turno fijo:
+*${origenLabel}* → *${destinoLabel}*${menu}`;
 }

@@ -38,6 +38,7 @@ Elegí una opción:
 2️⃣ Liberar una clase (fija o recuperación)
 3️⃣ Recuperar una clase
 4️⃣ Ver mis horarios
+5️⃣ Cambiar un turno fijo
 
 ${PIE_NAV}`;
 }
@@ -49,7 +50,8 @@ Elegí una opción:
 
 1️⃣ Ver actividades / planes
 2️⃣ Ver horarios con cupo libre
-3️⃣ Anotarme a una clase de prueba
+3️⃣ Anotarme a una *clase de prueba*
+4️⃣ Anotarme a una *actividad* (plan semanal)
 
 ${PIE_NAV}`;
 }

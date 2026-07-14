@@ -85,7 +85,7 @@ export async function horariosFijosAlumno(alumnoId) {
   const sucursal = await getSucursalChatbot();
 
   const { rows } = await db.query(
-    `SELECT t.dia_semana, t.hora, COALESCE(NULLIF(TRIM(t.titulo), ''), 'Clase') AS titulo
+    `SELECT t.id, t.dia_semana, t.hora, COALESCE(NULLIF(TRIM(t.titulo), ''), 'Clase') AS titulo
      FROM turnos t
      WHERE t.sucursal_id = COALESCE($2, t.sucursal_id)
        AND (

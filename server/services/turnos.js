@@ -726,4 +726,106 @@ export async function listarCuposDisponibles({ limite = 80 } = {}) {
   return opciones.slice(0, Math.max(1, Number(limite) || 80));
 }
 
+/**
+ * Cambia un turno fijo permanente: saca del origen y anota en el destino.
+ */
+export async function cambiarTurnoFijo(alumno, turnoOrigenId, turnoDestinoId) {
+  const db = await getPool();
+  if (!db) throw new Error('Base de datos no configurada');
+  if (!alumno?.id || !alumno?.sucursal_id) {
+    throw Object.assign(new Error('Alumno inválido'), { status: 400 });
+  }
+  if (!turnoOrigenId || !turnoDestinoId) {
+    throw Object.assign(new Error('Faltan turnos'), { status: 400 });
+  }
+  if (String(turnoOrigenId) === String(turnoDestinoId)) {
+    throw Object.assign(new Error('Elegí un horario distinto al actual'), { status: 400 });
+  }
+
+  const { rows: origenRows } = await db.query(
+    'SELECT id, dia_semana, hora, titulo, cupo, alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2',
+    [turnoOrigenId, alumno.sucursal_id]
+  );
+  if (!origenRows.length) {
+    throw Object.assign(new Error('No encontré el turno actual'), { status: 404 });
+  }
+  const origen = origenRows[0];
+  const idsOrigen = (origen.alumno_ids || []).map(String);
+  if (!idsOrigen.includes(String(alumno.id))) {
+    throw Object.assign(new Error('Ese no es un turno fijo tuyo'), { status: 400 });
+  }
+
+  const { rows: destRows } = await db.query(
+    'SELECT id, dia_semana, hora, titulo, cupo, alumno_ids FROM turnos WHERE id = $1 AND sucursal_id = $2',
+    [turnoDestinoId, alumno.sucursal_id]
+  );
+  if (!destRows.length) {
+    throw Object.assign(new Error('No encontré el nuevo turno'), { status: 404 });
+  }
+  const destino = destRows[0];
+  const idsDest = (destino.alumno_ids || []).map(String);
+  if (idsDest.includes(String(alumno.id))) {
+    throw Object.assign(new Error('Ya estás en ese horario'), { status: 400 });
+  }
+
+  const semanaVista = getSemanaActual();
+  const occ = await ocupacionTurnoSemana(db, destino, semanaVista, alumno.sucursal_id);
+  if (!occ || occ.libres <= 0) {
+    throw Object.assign(new Error('Ese horario ya no tiene cupo libre'), { status: 400 });
+  }
+
+  const nuevosOrigen = idsOrigen.filter((id) => id !== String(alumno.id));
+  await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [
+    nuevosOrigen,
+    turnoOrigenId,
+    alumno.sucursal_id,
+  ]);
+  await db.query(
+    'DELETE FROM inscripciones_turno WHERE turno_id = $1 AND alumno_id = $2',
+    [turnoOrigenId, alumno.id]
+  );
+
+  const nuevosDest = [...idsDest, String(alumno.id)];
+  await db.query('UPDATE turnos SET alumno_ids = $1 WHERE id = $2 AND sucursal_id = $3', [
+    nuevosDest,
+    turnoDestinoId,
+    alumno.sucursal_id,
+  ]);
+  await db.query(
+    `INSERT INTO inscripciones_turno (id, turno_id, alumno_id, semana_desde, a_prueba, created_at)
+     VALUES ($1, $2, $3, $4, false, NOW())`,
+    [crypto.randomUUID(), turnoDestinoId, alumno.id, semanaVista]
+  );
+
+  try {
+    await db.query(
+      'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+      [crypto.randomUUID(), alumno.sucursal_id, 'liberar', alumno.id, turnoOrigenId]
+    );
+    await db.query(
+      'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+      [crypto.randomUUID(), alumno.sucursal_id, 'inscribio', alumno.id, turnoDestinoId]
+    );
+  } catch (err) {
+    console.error('[chatbot cambiar] notificación', err?.message || err);
+  }
+
+  const origenLabel = `${DIAS[Number(origen.dia_semana)] || 'Día'} ${String(origen.hora || '').slice(0, 5)}`;
+  const destinoLabel = `${DIAS[Number(destino.dia_semana)] || 'Día'} ${String(destino.hora || '').slice(0, 5)}`;
+
+  avisarProfesorChatbot({
+    tipo: 'cambiar',
+    alumno,
+    extraLabel: `${origenLabel} → ${destinoLabel}`,
+  }).catch((e) => console.error('[whatsapp cambiar]', e?.message || e));
+
+  return {
+    ok: true,
+    origen: { ...origen, label: origenLabel },
+    destino: { ...destino, label: destinoLabel },
+    origenLabel,
+    destinoLabel,
+  };
+}
+
 export { DIAS };

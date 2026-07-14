@@ -135,6 +135,10 @@ export async function avisarProfesorChatbot({
     mensaje = `🔔 *Se anotó a una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
   } else if (tipo === 'prueba' || tipo === 'nuevo') {
     mensaje = `🌱 *Alumno/a nuevo a prueba*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+  } else if (tipo === 'actividad') {
+    mensaje = `📋 *Alta a actividad / plan*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+  } else if (tipo === 'cambiar') {
+    mensaje = `🔄 *Cambió turno fijo*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
   } else if (tipo === 'hablar' || tipo === 'consulta') {
     const texto = String(consultaTexto || '').trim();
     mensaje = `👩‍🏫 *Quiere hablar con una profesora*\n\n📱 WhatsApp del interesado: +${telCliente || 'desconocido'}${

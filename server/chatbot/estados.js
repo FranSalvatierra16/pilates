@@ -8,6 +8,8 @@ export const ESTADOS = {
   /** Tras "hablar con profesora": el bot no contesta; solo reenvía y espera *menu* */
   CON_PROFESORA: 'CON_PROFESORA',
   ESPERANDO_LIBERAR: 'ESPERANDO_LIBERAR',
+  /** Después de elegir qué liberar: motivo opcional */
+  ESPERANDO_LIBERAR_MOTIVO: 'ESPERANDO_LIBERAR_MOTIVO',
   ESPERANDO_RECUPERAR: 'ESPERANDO_RECUPERAR',
   /** Cambiar turno fijo: elegir origen → destino → confirmar */
   ESPERANDO_CAMBIAR_ORIGEN: 'ESPERANDO_CAMBIAR_ORIGEN',

@@ -38,6 +38,7 @@ import {
   listaDestinosCambiar,
   textoConfirmarCambio,
   respuestaCambioOk,
+  textoPedirMotivoLiberar,
   labelHorarioCorto,
   renderPaginaOpciones,
   esPedidoMas,
@@ -1054,15 +1055,78 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
     return textoErrorEleccion(resolved, opciones, page);
   }
 
-  const ctxClaim = await reclamarEstado(telefono, ESTADOS.ESPERANDO_LIBERAR);
-  if (!ctxClaim) {
-    return `Ya procesamos esa elección ✅\n\n${menuAlumno()}`;
-  }
-
-  const ops = Array.isArray(ctxClaim.opcionesLiberar) ? ctxClaim.opcionesLiberar : opciones;
-  const opcion = ops[resolved.index] || resolved.opcion;
+  const opcion = opciones[resolved.index] || resolved.opcion;
   if (!opcion) return irMenuAlumno(telefono);
 
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.ESPERANDO_LIBERAR_MOTIVO,
+    ultimoMenu: ESTADOS.MENU_ALUMNO,
+    contexto: {
+      alumnoId: sesion.contexto?.alumnoId,
+      dni: sesion.contexto?.dni,
+      liberarPendiente: {
+        turnoId: opcion.turnoId,
+        semana: opcion.semana,
+        tipo: opcion.tipo || 'fija',
+        recuperacionId: opcion.recuperacionId || null,
+        dia: opcion.dia,
+        hora: opcion.hora,
+        etiquetaSemana: opcion.etiquetaSemana,
+        label: opcion.label,
+      },
+    },
+    mergeContexto: false,
+  });
+
+  return textoPedirMotivoLiberar(opcion);
+}
+
+function motivoLiberarDesdeMensaje(mensaje) {
+  const m = String(mensaje || '').trim();
+  if (!m) return '';
+  const norm = normalizarMensaje(m);
+  if (
+    m === '-' ||
+    m === '—' ||
+    m === '1' ||
+    norm === 'no' ||
+    norm === 'nada' ||
+    norm === 'saltar' ||
+    norm === 'omitir' ||
+    norm === 'sin motivo' ||
+    norm === 'sinmotivo'
+  ) {
+    return '';
+  }
+  return m.slice(0, 280);
+}
+
+async function manejarEsperandoLiberarMotivo(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) {
+    return irMenuPrincipal(telefono);
+  }
+  if (esVolverAtras(m)) {
+    const dni = sesion.contexto?.dni;
+    const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
+    if (!alumno) return irMenuAlumno(telefono);
+    return iniciarLiberarClases(telefono, alumno);
+  }
+
+  const pendiente = sesion.contexto?.liberarPendiente;
+  if (!pendiente?.turnoId) {
+    return irMenuAlumno(telefono);
+  }
+
+  const motivo = motivoLiberarDesdeMensaje(m);
+
+  const ctxClaim = await reclamarEstado(telefono, ESTADOS.ESPERANDO_LIBERAR_MOTIVO);
+  if (!ctxClaim) {
+    return `Ya procesamos esa liberación ✅\n\n${menuAlumno()}`;
+  }
+
+  const pendienteClaim = ctxClaim.liberarPendiente || pendiente;
   const dni = ctxClaim.dni || sesion.contexto?.dni;
   const alumno = dni ? await buscarAlumnoPorDni(dni) : null;
   if (!alumno) {
@@ -1070,9 +1134,10 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
   }
 
   try {
-    const result = await liberarClaseFija(alumno, opcion.turnoId, opcion.semana, {
-      tipo: opcion.tipo,
-      recuperacionId: opcion.recuperacionId,
+    const result = await liberarClaseFija(alumno, pendienteClaim.turnoId, pendienteClaim.semana, {
+      tipo: pendienteClaim.tipo,
+      recuperacionId: pendienteClaim.recuperacionId,
+      motivo,
     });
     const alumnoFresh = await buscarAlumnoPorDni(dni);
     const creditos = Number(alumnoFresh?.clases_para_recuperar ?? alumno.clases_para_recuperar) || 0;
@@ -1087,8 +1152,11 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
       mergeContexto: false,
     });
 
-    if (result.yaEstaba) return respuestaLiberacionYaHecha(opcion, menuAlumno);
-    return respuestaLiberacionOk(alumno, opcion, creditos, menuAlumno, result);
+    if (result.yaEstaba) return respuestaLiberacionYaHecha(pendienteClaim, menuAlumno);
+    return respuestaLiberacionOk(alumno, pendienteClaim, creditos, menuAlumno, {
+      ...result,
+      motivo,
+    });
   } catch (e) {
     console.error('[chatbot liberar]', e);
     return `${e.message || 'No se pudo liberar la clase.'}\n\n0️⃣ Volver`;
@@ -1434,6 +1502,9 @@ router.post('/', async (req, res) => {
         break;
       case ESTADOS.ESPERANDO_LIBERAR:
         reply = await manejarEsperandoLiberar(telefono, mensaje, sesion);
+        break;
+      case ESTADOS.ESPERANDO_LIBERAR_MOTIVO:
+        reply = await manejarEsperandoLiberarMotivo(telefono, mensaje, sesion);
         break;
       case ESTADOS.ESPERANDO_RECUPERAR:
         reply = await manejarEsperandoRecuperar(telefono, mensaje, sesion);

@@ -116,6 +116,7 @@ export async function avisarProfesorChatbot({
   extraLabel,
   telefonoCliente,
   consultaTexto,
+  motivo,
 } = {}) {
   const dest = telefonoAvisoProfesorFromEnv();
   if (!dest) {
@@ -127,10 +128,13 @@ export async function avisarProfesorChatbot({
   const clase = extraLabel || labelTurno(turno, semana);
   const telCliente = normalizarTelefonoWhatsApp(telefonoCliente || alumno?.telefono || '');
   const contacto = telCliente ? `\n📱 WhatsApp: +${telCliente}\n🔗 https://wa.me/${telCliente}` : '';
+  const motivoTxt = String(motivo || '').trim();
 
   let mensaje;
   if (tipo === 'liberar') {
-    mensaje = `🔔 *Liberó una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+    mensaje = `🔔 *Liberó una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}${
+      motivoTxt ? `\n💬 Motivo: ${motivoTxt}` : ''
+    }\n\n(Chatbot Savia3)`;
   } else if (tipo === 'recuperar' || tipo === 'anotar') {
     mensaje = `🔔 *Se anotó a una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
   } else if (tipo === 'prueba' || tipo === 'nuevo') {

@@ -259,21 +259,36 @@ ${PIE_NAV}`,
   };
 }
 
+export function textoPedirMotivoLiberar(opcion) {
+  const label = labelHorarioCorto(opcion) || opcion?.label || 'esa clase';
+  return `📝 Liberás: *${label}*
+
+¿Querés dejar un *motivo*? (opcional)
+
+Escribí el motivo, o respondé *-* / *1* para liberar sin motivo.
+
+Se lo avisamos a la profesora.
+
+${PIE_NAV}`;
+}
+
 export function respuestaLiberacionOk(alumno, opcion, creditos, menuFn, result = {}) {
   const nombre = `${alumno.nombre || ''} ${alumno.apellido || ''}`.trim();
   const menu = typeof menuFn === 'function' ? `\n\n${menuFn()}` : '';
+  const motivo = String(result.motivo || '').trim();
+  const lineaMotivo = motivo ? `\n💬 Motivo: _${motivo}_` : '';
   const esRecup = result.tipo === 'recuperacion' || opcion.tipo === 'recuperacion';
   if (esRecup) {
     return `✅ Listo ${nombre}
 
 Cancelaste la *recuperación*:
-*${labelHorarioCorto(opcion)}*
+*${labelHorarioCorto(opcion)}*${lineaMotivo}
 
 💳 Créditos para recuperar: *${creditos}*${menu}`;
   }
   return `✅ Listo ${nombre}
 
-Liberaste: *${labelHorarioCorto(opcion)}*
+Liberaste: *${labelHorarioCorto(opcion)}*${lineaMotivo}
 
 💳 Créditos para recuperar: *${creditos}*
 

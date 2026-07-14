@@ -248,6 +248,7 @@ export async function liberarClaseFija(alumno, turnoId, semana, meta = {}) {
       turno: t,
       semana: rec.semana,
       extraLabel: `Recuperación cancelada · ${rec.semana}`,
+      motivo: meta.motivo,
     }).catch((e) => console.error('[whatsapp liberar recup]', e?.message || e));
 
     return {
@@ -257,6 +258,7 @@ export async function liberarClaseFija(alumno, turnoId, semana, meta = {}) {
       devolvioCredito: !!rec.usa_credito,
       turno: t,
       semana: rec.semana,
+      motivo: String(meta.motivo || '').trim() || null,
     };
   }
 
@@ -317,9 +319,18 @@ export async function liberarClaseFija(alumno, turnoId, semana, meta = {}) {
     alumno,
     turno: t,
     semana: semanaVista,
+    motivo: meta.motivo,
   }).catch((e) => console.error('[whatsapp liberar]', e?.message || e));
 
-  return { ok: true, liberacionId: id, yaEstaba: false, tipo: 'fija', turno: t, semana: semanaVista };
+  return {
+    ok: true,
+    liberacionId: id,
+    yaEstaba: false,
+    tipo: 'fija',
+    turno: t,
+    semana: semanaVista,
+    motivo: String(meta.motivo || '').trim() || null,
+  };
 }
 
 /**

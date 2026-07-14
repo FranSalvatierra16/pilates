@@ -13,6 +13,7 @@ import {
   pedirApellidoNuevo,
   pedirDniNuevo,
   pedirEmailNuevo,
+  conNav,
 } from './menu.js';
 import {
   respuestaVencimiento,
@@ -55,6 +56,7 @@ import {
   listarHorariosParaNuevo,
   registrarAlumnoNuevo,
 } from '../services/registroNuevo.js';
+import { avisarProfesorChatbot } from '../services/whatsapp.js';
 import { resolverEleccionHorario } from './matchHorario.js';
 
 const router = express.Router();
@@ -81,10 +83,6 @@ function esMenuOHola(msg) {
     .trim();
   if (!m) return true;
   if (
-    m === '0' ||
-    m === 'menu' ||
-    m === 'menú' ||
-    m === 'inicio' ||
     m === 'hi' ||
     m === 'hello' ||
     m === 'ok' ||
@@ -99,10 +97,23 @@ function esMenuOHola(msg) {
   ) {
     return true;
   }
-  // "hola", "holaaa", "hola hola", "buenas", "buen dia", etc.
+  // "hola", "holaaa", "buenas", etc. → menú principal
   if (/^hola+/.test(m)) return true;
   if (/^(buen\s*as?|buenas|buen\s*dias?|buena\s*tardes?|buena\s*noches?)/.test(m)) return true;
   return false;
+}
+
+/** 00 / menu → siempre menú principal */
+function esIrMenuPrincipal(msg) {
+  const raw = String(msg || '').trim();
+  if (raw === '00') return true;
+  const m = normalizarMensaje(raw);
+  return m === '00' || m === 'menu' || m === 'menú' || m === 'inicio';
+}
+
+/** 0 → paso/menú anterior */
+function esVolverAtras(msg) {
+  return String(msg || '').trim() === '0';
 }
 
 /** ¿Parece una consulta real (no un chat corto / joda)? */
@@ -354,10 +365,15 @@ async function manejarMenuPrincipal(telefono, mensaje) {
       contexto: { derivarProfesora: true },
       mergeContexto: false,
     });
+    avisarProfesorChatbot({
+      tipo: 'hablar',
+      telefonoCliente: telefono,
+      consultaTexto: '',
+    }).catch((e) => console.error('[whatsapp hablar]', e?.message || e));
     return textoHablarProfesora();
   }
 
-  if (esMenuOHola(m) || m === '0') {
+  if (esIrMenuPrincipal(m) || esMenuOHola(m) || esVolverAtras(m)) {
     return irMenuPrincipal(telefono);
   }
 
@@ -373,7 +389,6 @@ async function manejarMenuPrincipal(telefono, mensaje) {
   }
 
   // Solo mensajes que parecen consulta real → profesora.
-  // "bue deja", "jaja", etc. no deben disparar ese aviso en loop.
   if (pareceConsultaLibre(m)) {
     await actualizarSesion(telefono, {
       estado: ESTADOS.MENU_PRINCIPAL,
@@ -381,6 +396,11 @@ async function manejarMenuPrincipal(telefono, mensaje) {
       contexto: { ultimaConsulta: m },
       mergeContexto: true,
     });
+    avisarProfesorChatbot({
+      tipo: 'consulta',
+      telefonoCliente: telefono,
+      consultaTexto: m,
+    }).catch((e) => console.error('[whatsapp consulta]', e?.message || e));
     return textoConsultaRecibida();
   }
 
@@ -389,9 +409,8 @@ async function manejarMenuPrincipal(telefono, mensaje) {
 
 async function manejarMenuNuevo(telefono, mensaje) {
   const m = String(mensaje || '').trim();
-  const mNorm = normalizarMensaje(m);
 
-  if (m === '0' || esMenuOHola(m) || mNorm === 'menu' || mNorm === 'inicio') {
+  if (esIrMenuPrincipal(m) || esMenuOHola(m) || esVolverAtras(m)) {
     return irMenuPrincipal(telefono);
   }
 
@@ -404,10 +423,11 @@ async function manejarMenuNuevo(telefono, mensaje) {
 
 async function manejarNuevoNombre(telefono, mensaje) {
   const m = String(mensaje || '').trim();
-  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) return irMenuNuevo(telefono);
 
   if (m.length < 2) {
-    return `El nombre es muy corto. Escribilo de nuevo.\n\n0️⃣ Cancelar`;
+    return conNav(`El nombre es muy corto. Escribilo de nuevo.`, { atrasLabel: 'Menú nuevo' });
   }
 
   await actualizarSesion(telefono, {
@@ -421,10 +441,19 @@ async function manejarNuevoNombre(telefono, mensaje) {
 
 async function manejarNuevoApellido(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
-  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.NUEVO_NOMBRE,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: {},
+      mergeContexto: false,
+    });
+    return pedirNombreNuevo();
+  }
 
   if (m.length < 2) {
-    return `El apellido es muy corto. Escribilo de nuevo.\n\n0️⃣ Cancelar`;
+    return conNav(`El apellido es muy corto. Escribilo de nuevo.`, { atrasLabel: 'Paso anterior (nombre)' });
   }
 
   const alta = contextoAlta(sesion.contexto);
@@ -439,7 +468,17 @@ async function manejarNuevoApellido(telefono, mensaje, sesion) {
 
 async function manejarNuevoDni(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
-  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) {
+    const alta = contextoAlta(sesion.contexto);
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.NUEVO_APELLIDO,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: { altaNombre: alta.altaNombre },
+      mergeContexto: false,
+    });
+    return pedirApellidoNuevo();
+  }
 
   const dni = normalizarDni(m);
   if (!dni || dni.length < 6) return respuestaDniInvalido();
@@ -474,7 +513,21 @@ ${menuAlumno()}`;
 
 async function manejarNuevoEmail(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
-  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) {
+    const alta = contextoAlta(sesion.contexto);
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.NUEVO_DNI,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: {
+        altaNombre: alta.altaNombre,
+        altaApellido: alta.altaApellido,
+        altaDni: alta.altaDni,
+      },
+      mergeContexto: false,
+    });
+    return pedirDniNuevo();
+  }
 
   let email = m === '-' || m === '—' || normalizarMensaje(m) === 'no' ? '' : m;
   if (email && !email.includes('@')) {
@@ -515,7 +568,22 @@ async function manejarNuevoEmail(telefono, mensaje, sesion) {
 
 async function manejarNuevoActividad(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
-  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) {
+    const alta = contextoAlta(sesion.contexto);
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.NUEVO_EMAIL,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: {
+        altaNombre: alta.altaNombre,
+        altaApellido: alta.altaApellido,
+        altaDni: alta.altaDni,
+        altaEmail: alta.altaEmail,
+      },
+      mergeContexto: false,
+    });
+    return pedirEmailNuevo();
+  }
 
   const opciones = Array.isArray(sesion.contexto?.opcionesActividades)
     ? sesion.contexto.opcionesActividades
@@ -556,7 +624,29 @@ async function manejarNuevoActividad(telefono, mensaje, sesion) {
 
 async function manejarNuevoHorario(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
-  if (m === '0' || esMenuOHola(m)) return irMenuNuevo(telefono);
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) {
+    // Volver a elegir actividad
+    const alta = contextoAlta(sesion.contexto);
+    const actividades = await listarActividadesChatbot();
+    const { texto, opciones } = listaActividadesParaElegir(actividades);
+    if (!opciones.length) return irMenuNuevo(telefono);
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.NUEVO_ACTIVIDAD,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: {
+        ...alta,
+        opcionesActividades: opciones.map((a) => ({
+          id: a.id,
+          nombre: a.nombre,
+          labelPrecio: a.labelPrecio,
+          clasesPorSemana: a.clasesPorSemana,
+        })),
+      },
+      mergeContexto: false,
+    });
+    return texto;
+  }
 
   const opciones = Array.isArray(sesion.contexto?.opcionesHorariosNuevo)
     ? sesion.contexto.opcionesHorariosNuevo
@@ -633,17 +723,12 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
 
 async function manejarMenuAlumno(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
-  const mNorm = normalizarMensaje(m);
 
-  if (m === '0') {
-    return irMenuPrincipal(telefono);
-  }
-
-  if (mNorm === 'menu' || mNorm === 'menú' || mNorm === 'inicio') {
-    return irMenuPrincipal(telefono, { resetIdentidad: true });
-  }
-  if (esMenuOHola(m)) {
-    return irMenuPrincipal(telefono);
+  if (esIrMenuPrincipal(m) || esMenuOHola(m) || esVolverAtras(m)) {
+    const reset =
+      esIrMenuPrincipal(m) &&
+      (normalizarMensaje(m) === 'menu' || normalizarMensaje(m) === 'menú' || normalizarMensaje(m) === 'inicio');
+    return irMenuPrincipal(telefono, { resetIdentidad: reset });
   }
 
   const posibleDni = normalizarDni(m);
@@ -676,7 +761,10 @@ ${menuAlumno()}`;
 async function manejarEsperandoDni(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
 
-  if (m === '0') {
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) {
+    return irMenuPrincipal(telefono);
+  }
+  if (esVolverAtras(m)) {
     return irMenuAlumno(telefono);
   }
 
@@ -722,13 +810,17 @@ function textoErrorEleccion(resolved, opciones, page = 0) {
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
-0️⃣ Cancelar`;
+0️⃣ Volver atrás
+0️⃣0️⃣ Menú principal`;
 }
 
 async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
 
-  if (m === '0' || esMenuOHola(m) || normalizarMensaje(m).startsWith('hola')) {
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) {
+    return irMenuPrincipal(telefono);
+  }
+  if (esVolverAtras(m)) {
     return irMenuAlumno(telefono);
   }
 
@@ -798,7 +890,10 @@ async function manejarEsperandoLiberar(telefono, mensaje, sesion) {
 async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
 
-  if (m === '0' || esMenuOHola(m) || normalizarMensaje(m).startsWith('hola')) {
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) {
+    return irMenuPrincipal(telefono);
+  }
+  if (esVolverAtras(m)) {
     return irMenuAlumno(telefono);
   }
 
@@ -866,7 +961,7 @@ async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
 async function manejarEsperandoConsulta(telefono, mensaje) {
   const m = String(mensaje || '').trim();
 
-  if (m === '0' || esMenuOHola(m)) {
+  if (esIrMenuPrincipal(m) || esMenuOHola(m) || esVolverAtras(m)) {
     return irMenuPrincipal(telefono);
   }
 
@@ -877,6 +972,11 @@ async function manejarEsperandoConsulta(telefono, mensaje) {
     contexto: { ultimaConsulta: m },
     mergeContexto: true,
   });
+  avisarProfesorChatbot({
+    tipo: 'consulta',
+    telefonoCliente: telefono,
+    consultaTexto: m,
+  }).catch((e) => console.error('[whatsapp consulta]', e?.message || e));
   return `${textoConsultaRecibida()}
 
 ${menuPrincipal()}`;

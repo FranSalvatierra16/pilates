@@ -1,4 +1,4 @@
-import { formatoFecha } from './menu.js';
+import { formatoFecha, PIE_NAV } from './menu.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const DIAS_CORTO = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'];
@@ -242,7 +242,7 @@ ${pag.pie ? `\n${pag.pie}` : ''}
 • Fija → suma 1 crédito
 • Recuperación (R) → cancela y te devuelve el crédito
 
-0️⃣ Cancelar y volver`,
+${PIE_NAV}`,
     opciones: liberables,
     page: pag.page,
   };
@@ -323,7 +323,7 @@ ${pag.pie ? `\n${pag.pie}` : ''}
 
 Al anotarte se descuenta 1 crédito.
 
-0️⃣ Cancelar y volver`,
+${PIE_NAV}`,
     opciones,
     page: pag.page,
   };
@@ -472,7 +472,7 @@ ${pag.pie ? `\n${pag.pie}` : ''}
 
 ✏️ Escribí *día y hora*, ej: *Martes 18:00*
 
-0️⃣ Cancelar`,
+${PIE_NAV}`,
     opciones,
     page: pag.page,
   };

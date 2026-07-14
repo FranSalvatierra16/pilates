@@ -1,3 +1,18 @@
+/** Pie estándar: 0 = atrás / 00 = menú principal */
+export const PIE_NAV =
+  `0️⃣ Volver atrás
+0️⃣0️⃣ Menú principal
+(o escribí *menu*)`;
+
+export function conNav(texto, { atrasLabel = 'Volver atrás' } = {}) {
+  const t = String(texto || '').replace(/\n*0️⃣[^\n]*/g, '').trimEnd();
+  return `${t}
+
+0️⃣ ${atrasLabel}
+0️⃣0️⃣ Menú principal
+(o escribí *menu*)`;
+}
+
 export function menuPrincipal() {
   return `🌿 ¡Hola! Bienvenido a Savia Pilates (Savia3 — prueba)!
 
@@ -11,7 +26,7 @@ Soy el asistente del estudio 😊
 4️⃣ Hablar con una profesora
 
 ✍️ También podés escribir tu consulta directamente.
-0️⃣ Volver a este menú`;
+(Escribí *menu* o *hola* para volver acá)`;
 }
 
 export function menuAlumno() {
@@ -24,7 +39,7 @@ Elegí una opción:
 3️⃣ Recuperar una clase
 4️⃣ Ver mis horarios
 
-0️⃣ Volver al menú principal`;
+${PIE_NAV}`;
 }
 
 export function menuNuevo() {
@@ -36,41 +51,45 @@ Elegí una opción:
 2️⃣ Ver horarios con cupo libre
 3️⃣ Anotarme a una clase de prueba
 
-0️⃣ Volver al menú principal`;
+${PIE_NAV}`;
 }
 
 export function pedirDni(accionLabel) {
-  return `🔑 Para ${accionLabel}, necesito tu DNI.
+  return conNav(
+    `🔑 Para ${accionLabel}, necesito tu DNI.
 
-Escribí solo los números (sin puntos).
-
-0️⃣ Cancelar y volver`;
+Escribí solo los números (sin puntos).`,
+    { atrasLabel: 'Cancelar (menú alumno)' }
+  );
 }
 
 export function textoConocerSavia() {
-  return `💚 Savia Pilates es un entrenamiento en formato circuito donde trabajás con Reformer, Chair, Barril y Unidad de Pared.
+  return conNav(
+    `💚 Savia Pilates es un entrenamiento en formato circuito donde trabajás con Reformer, Chair, Barril y Unidad de Pared.
 
 Podés enfocarte en fuerza, movilidad, postura o rehabilitación.
 
 🎁 Tenés una clase de prueba gratuita.
 
-Para ver planes, horarios y anotarte: escribí *2* o volvé al menú y elegí *Quiero anotarme*.
-
-0️⃣ Volver al menú principal`;
+Para anotarte: *2* en el menú.`,
+    { atrasLabel: 'Menú principal' }
+  );
 }
 
 export function textoHablarProfesora() {
-  return `😊 Perfecto. En unos minutos una profesora se va a comunicar con vos.
+  return conNav(
+    `😊 Perfecto. Ya avisamos a una profesora: se va a comunicar con vos.
 
-Si preferís, también podés dejar tu consulta escribiendo el número 4️⃣ otra vez o volviendo al menú.
-
-0️⃣ Volver al menú principal`;
+Si querés, ahora podés dejar tu consulta por escrito (la reenviamos).`,
+    { atrasLabel: 'Menú principal' }
+  );
 }
 
 export function textoConsultaRecibida() {
-  return `✅ Recibimos tu mensaje. Una profesora te va a responder a la brevedad.
-
-0️⃣ Volver al menú principal`;
+  return conNav(
+    `✅ Recibimos tu mensaje. Una profesora te va a responder a la brevedad.`,
+    { atrasLabel: 'Menú principal' }
+  );
 }
 
 export function textoOpcionInvalida(menuFn) {
@@ -80,31 +99,28 @@ ${menuFn()}`;
 }
 
 export function pedirNombreNuevo() {
-  return `✍️ ¿Cómo es tu *nombre*?
+  return conNav(`✍️ ¿Cómo es tu *nombre*?
 
-(Solo el nombre, sin apellido)
-
-0️⃣ Cancelar`;
+(Solo el nombre, sin apellido)`, { atrasLabel: 'Menú nuevo' });
 }
 
 export function pedirApellidoNuevo() {
-  return `✍️ ¿Y tu *apellido*?
-
-0️⃣ Cancelar`;
+  return conNav(`✍️ ¿Y tu *apellido*?`, { atrasLabel: 'Paso anterior (nombre)' });
 }
 
 export function pedirDniNuevo() {
-  return `🔑 Escribí tu *DNI* (solo números, sin puntos).
-
-0️⃣ Cancelar`;
+  return conNav(`🔑 Escribí tu *DNI* (solo números, sin puntos).`, {
+    atrasLabel: 'Paso anterior (apellido)',
+  });
 }
 
 export function pedirEmailNuevo() {
-  return `📧 Escribí tu *email*.
+  return conNav(
+    `📧 Escribí tu *email*.
 
-Si no querés dejarlo, respondé con *-* (guión).
-
-0️⃣ Cancelar`;
+Si no querés dejarlo, respondé con *-* (guión).`,
+    { atrasLabel: 'Paso anterior (DNI)' }
+  );
 }
 
 export function formatoFecha(fecha) {

@@ -103,10 +103,20 @@ function nombreAlumno(alumno) {
 }
 
 /**
- * Avisa al celular configurado (profe) de una liberación o anotación.
+ * Avisa al celular configurado (profe).
  * Fire-and-forget: nunca tira el flujo principal.
+ *
+ * tipos: liberar | recuperar | anotar | nuevo | prueba | consulta | hablar
  */
-export async function avisarProfesorChatbot({ tipo, alumno, turno, semana, extraLabel }) {
+export async function avisarProfesorChatbot({
+  tipo,
+  alumno,
+  turno,
+  semana,
+  extraLabel,
+  telefonoCliente,
+  consultaTexto,
+} = {}) {
   const dest = telefonoAvisoProfesorFromEnv();
   if (!dest) {
     console.warn('[whatsapp] CHATBOT_AVISO_WHATSAPP no configurado — no se avisa al profe');
@@ -115,15 +125,23 @@ export async function avisarProfesorChatbot({ tipo, alumno, turno, semana, extra
 
   const nombre = nombreAlumno(alumno);
   const clase = extraLabel || labelTurno(turno, semana);
+  const telCliente = normalizarTelefonoWhatsApp(telefonoCliente || alumno?.telefono || '');
+  const contacto = telCliente ? `\n📱 WhatsApp: +${telCliente}\n🔗 https://wa.me/${telCliente}` : '';
+
   let mensaje;
   if (tipo === 'liberar') {
-    mensaje = `🔔 *Liberó una clase*\n\n👤 ${nombre}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+    mensaje = `🔔 *Liberó una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
   } else if (tipo === 'recuperar' || tipo === 'anotar') {
-    mensaje = `🔔 *Se anotó a una clase*\n\n👤 ${nombre}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+    mensaje = `🔔 *Se anotó a una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
   } else if (tipo === 'prueba' || tipo === 'nuevo') {
-    mensaje = `🌱 *Alumno/a nuevo a prueba*\n\n👤 ${nombre}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+    mensaje = `🌱 *Alumno/a nuevo a prueba*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+  } else if (tipo === 'hablar' || tipo === 'consulta') {
+    const texto = String(consultaTexto || '').trim();
+    mensaje = `👩‍🏫 *Quiere hablar con una profesora*\n\n📱 WhatsApp del interesado: +${telCliente || 'desconocido'}${
+      telCliente ? `\n🔗 https://wa.me/${telCliente}` : ''
+    }${texto ? `\n\n💬 Mensaje:\n${texto}` : '\n\n(Todavía no dejó mensaje; espera tu contacto.)'}\n\n(Chatbot Savia3)`;
   } else {
-    mensaje = `🔔 Aviso chatbot\n👤 ${nombre}\n🗓️ ${clase}`;
+    mensaje = `🔔 Aviso chatbot\n👤 ${nombre}${contacto}\n🗓️ ${clase}`;
   }
 
   return enviarWhatsApp(dest, mensaje);

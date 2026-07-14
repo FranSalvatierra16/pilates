@@ -97,9 +97,10 @@ function esMenuOHola(msg) {
   ) {
     return true;
   }
-  // "hola", "holaaa", "buenas", etc. → menú principal
-  if (/^hola+/.test(m)) return true;
-  if (/^(buen\s*as?|buenas|buen\s*dias?|buena\s*tardes?|buena\s*noches?)/.test(m)) return true;
+  // Solo saludos CORTOS. "hola quería anotar..." NO es saludo.
+  if (/^hola+[!.]*$/.test(m)) return true;
+  if (/^hola+\s+(hola+|que\s+tal|como\s+estas?|buenas?)[!.]*$/.test(m) && m.length <= 24) return true;
+  if (/^(buen\s*as?|buenas|buen\s*dias?|buena\s*tardes?|buena\s*noches?)[!.]*$/.test(m)) return true;
   return false;
 }
 
@@ -360,9 +361,10 @@ async function manejarMenuPrincipal(telefono, mensaje) {
 
   if (m === '4') {
     await actualizarSesion(telefono, {
-      estado: ESTADOS.ESPERANDO_CONSULTA,
+      estado: ESTADOS.CON_PROFESORA,
       ultimoMenu: ESTADOS.MENU_PRINCIPAL,
-      contexto: { derivarProfesora: true },
+      // confirmoConsultaFwd: ya avisamos al elegir 4 → mensajes siguientes van en silencio
+      contexto: { derivarProfesora: true, confirmoConsultaFwd: true },
       mergeContexto: false,
     });
     avisarProfesorChatbot({
@@ -378,23 +380,32 @@ async function manejarMenuPrincipal(telefono, mensaje) {
   }
 
   const mNorm = normalizarMensaje(m);
+
+  // Intents cortos de alta (no frases largas tipo "hola quería que mi mamá…")
   if (
-    mNorm.includes('anotar') ||
-    mNorm.includes('nuevo') ||
-    mNorm.includes('prueba') ||
-    mNorm.includes('sumarme') ||
-    mNorm.includes('inscrib')
+    m.length <= 40 &&
+    (
+      mNorm.includes('anotar') ||
+      mNorm.includes('nuevo') ||
+      mNorm.includes('prueba') ||
+      mNorm.includes('sumarme') ||
+      mNorm.includes('inscrib')
+    )
   ) {
     return irMenuNuevo(telefono);
   }
 
-  // Solo mensajes que parecen consulta real → profesora.
+  // Solo mensajes que parecen consulta real → profesora (y pausar el bot).
   if (pareceConsultaLibre(m)) {
     await actualizarSesion(telefono, {
-      estado: ESTADOS.MENU_PRINCIPAL,
+      estado: ESTADOS.CON_PROFESORA,
       ultimoMenu: ESTADOS.MENU_PRINCIPAL,
-      contexto: { ultimaConsulta: m },
-      mergeContexto: true,
+      contexto: {
+        ultimaConsulta: m,
+        derivarProfesora: true,
+        confirmoConsultaFwd: true,
+      },
+      mergeContexto: false,
     });
     avisarProfesorChatbot({
       tipo: 'consulta',
@@ -959,27 +970,44 @@ async function manejarEsperandoRecuperar(telefono, mensaje, sesion) {
 }
 
 async function manejarEsperandoConsulta(telefono, mensaje) {
+  // Compat: estados viejos ESPERANDO_CONSULTA → misma lógica que CON_PROFESORA
+  return manejarConProfesora(telefono, mensaje);
+}
+
+/**
+ * Modo humano: el bot NO contesta (salvo menu/0/00) para no interrumpir a la profesora.
+ * Reenvía el texto al celu del profe.
+ */
+async function manejarConProfesora(telefono, mensaje, sesion) {
   const m = String(mensaje || '').trim();
 
-  if (esIrMenuPrincipal(m) || esMenuOHola(m) || esVolverAtras(m)) {
+  if (esIrMenuPrincipal(m) || esVolverAtras(m) || esMenuOHola(m)) {
     return irMenuPrincipal(telefono);
   }
 
-  // En este estado (eligió "hablar con profesora") cualquier texto es la consulta.
-  await actualizarSesion(telefono, {
-    estado: ESTADOS.MENU_PRINCIPAL,
-    ultimoMenu: ESTADOS.MENU_PRINCIPAL,
-    contexto: { ultimaConsulta: m },
-    mergeContexto: true,
-  });
+  if (!m) return null;
+
   avisarProfesorChatbot({
     tipo: 'consulta',
     telefonoCliente: telefono,
     consultaTexto: m,
   }).catch((e) => console.error('[whatsapp consulta]', e?.message || e));
-  return `${textoConsultaRecibida()}
 
-${menuPrincipal()}`;
+  const yaAvisoCliente = !!sesion?.contexto?.confirmoConsultaFwd;
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.CON_PROFESORA,
+    ultimoMenu: ESTADOS.MENU_PRINCIPAL,
+    contexto: {
+      derivarProfesora: true,
+      ultimaConsulta: m,
+      confirmoConsultaFwd: true,
+    },
+    mergeContexto: true,
+  });
+
+  // Primera vez: confirma al cliente sin menú. Después: silencio total.
+  if (!yaAvisoCliente) return textoConsultaRecibida();
+  return null;
 }
 
 /**
@@ -1000,10 +1028,13 @@ router.post('/', async (req, res) => {
 
     const sesion = await obtenerOCrearSesion(telefono);
 
-    const dup = replySiDuplicado(sesion, mensaje);
-    if (dup) {
-      console.log('[chatbot] dedup hit', String(telefono).slice(-6));
-      return res.json({ ok: true, reply: dup, estado: sesion.estado, dedup: true });
+    // En modo profesora no devolver replies viejos por dedup
+    if (sesion.estado !== ESTADOS.CON_PROFESORA && sesion.estado !== ESTADOS.ESPERANDO_CONSULTA) {
+      const dup = replySiDuplicado(sesion, mensaje);
+      if (dup) {
+        console.log('[chatbot] dedup hit', String(telefono).slice(-6));
+        return res.json({ ok: true, reply: dup, estado: sesion.estado, dedup: true });
+      }
     }
 
     let reply;
@@ -1043,7 +1074,8 @@ router.post('/', async (req, res) => {
         reply = await manejarEsperandoRecuperar(telefono, mensaje, sesion);
         break;
       case ESTADOS.ESPERANDO_CONSULTA:
-        reply = await manejarEsperandoConsulta(telefono, mensaje);
+      case ESTADOS.CON_PROFESORA:
+        reply = await manejarConProfesora(telefono, mensaje, sesion);
         break;
       case ESTADOS.MENU_PRINCIPAL:
       default:
@@ -1051,17 +1083,23 @@ router.post('/', async (req, res) => {
         break;
     }
 
-    try {
-      await guardarDedup(telefono, mensaje, sesion.estado, reply);
-    } catch (err) {
-      console.warn('[chatbot dedup]', err?.message || err);
+    const silencioso = reply == null;
+    const replyOut = silencioso ? '' : String(reply);
+
+    if (!silencioso) {
+      try {
+        await guardarDedup(telefono, mensaje, sesion.estado, replyOut);
+      } catch (err) {
+        console.warn('[chatbot dedup]', err?.message || err);
+      }
     }
 
     const actualizada = await obtenerOCrearSesion(telefono);
 
     return res.json({
       ok: true,
-      reply,
+      reply: replyOut,
+      silencioso,
       estado: actualizada.estado,
     });
   } catch (e) {

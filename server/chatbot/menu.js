@@ -77,19 +77,19 @@ Para anotarte: *2* en el menú.`,
 }
 
 export function textoHablarProfesora() {
-  return conNav(
-    `😊 Perfecto. Ya avisamos a una profesora: se va a comunicar con vos.
+  return `😊 Perfecto. Ya avisamos a una profesora: se va a comunicar con vos.
 
-Si querés, ahora podés dejar tu consulta por escrito (la reenviamos).`,
-    { atrasLabel: 'Menú principal' }
-  );
+Podés dejar tu consulta por escrito ahora (se la reenviamos).
+
+⏸️ Mientras hablen, el asistente *no responde* para no molestar.
+
+Cuando quieras volver al menú automático, escribí *menu*.`;
 }
 
 export function textoConsultaRecibida() {
-  return conNav(
-    `✅ Recibimos tu mensaje. Una profesora te va a responder a la brevedad.`,
-    { atrasLabel: 'Menú principal' }
-  );
+  return `✅ Listo, se lo pasamos a una profesora.
+
+⏸️ El asistente queda en pausa. Escribí *menu* si querés usar el bot otra vez.`;
 }
 
 export function textoOpcionInvalida(menuFn) {

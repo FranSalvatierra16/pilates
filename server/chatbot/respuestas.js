@@ -373,7 +373,7 @@ export function respuestaRecuperacionYaHecha(opcion, menuFn) {
 }
 
 export function respuestaDniNoEncontrado() {
-  return `No encontré un alumno activo con ese DNI en *Savia3* (prueba) 😕
+  return `No encontré un alumno activo con ese DNI en *Fgest* 😕
 
 Si sos nuevo/a, volvé al menú (*0*) y elegí *2* para anotarte.
 
@@ -409,7 +409,7 @@ Pedí hablar con una profesora (opción 4️⃣ del menú).
   });
 
   return {
-    texto: `📋 Actividades / planes en Savia3:
+    texto: `📋 Actividades / planes:
 
 ${lineas}
 
@@ -553,7 +553,7 @@ export function respuestaRegistroOk(result) {
   const claseLabel = labelHorarioCorto(result.clase) || result.clase?.label || '';
   return `✅ ¡Listo ${a.nombre}!
 
-Te anotamos como *alumno/a a prueba* en Savia3.${plan}
+Te anotamos como *alumno/a a prueba*.${plan}
 
 🎁 Clase de prueba:
 *${claseLabel}*
@@ -575,7 +575,7 @@ export function respuestaRegistroActividadOk(result) {
 
   return `✅ ¡Listo ${a.nombre}!
 
-Te anotamos en Savia3 con tu plan semanal.
+Te anotamos en Savia Pilates con tu plan semanal.
 ${plan}
 🗓️ Tus turnos fijos:
 ${lista || '• (sin detalle)'}

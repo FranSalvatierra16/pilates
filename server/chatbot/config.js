@@ -1,9 +1,9 @@
 /**
- * El chatbot (WhatsApp / n8n) trabaja solo con esta sucursal de prueba.
+ * El chatbot (WhatsApp / n8n) trabaja solo con esta sucursal.
  * Override: CHATBOT_SUCURSAL_ID o CHATBOT_SUCURSAL_USUARIO en el entorno.
  */
-export const CHATBOT_SUCURSAL_DEFAULT_ID = '55b80665-f82a-44c5-b075-7c8ecf406134'; // FitGest / usuario Savia3
-export const CHATBOT_SUCURSAL_DEFAULT_USUARIO = 'Savia3';
+export const CHATBOT_SUCURSAL_DEFAULT_ID = '0de2ea05-8a65-463a-a543-6774898af6bb'; // Fgest
+export const CHATBOT_SUCURSAL_DEFAULT_USUARIO = 'Fgest';
 
 /** Celular del profe a avisar (liberar / anotar). Override: CHATBOT_AVISO_WHATSAPP */
 export const CHATBOT_AVISO_WHATSAPP_DEFAULT = '5492235029881';

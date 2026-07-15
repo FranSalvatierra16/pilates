@@ -134,20 +134,20 @@ export async function avisarProfesorChatbot({
   if (tipo === 'liberar') {
     mensaje = `🔔 *Liberó una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}${
       motivoTxt ? `\n💬 Motivo: ${motivoTxt}` : ''
-    }\n\n(Chatbot Savia3)`;
+    }\n\n(Chatbot Fgest)`;
   } else if (tipo === 'recuperar' || tipo === 'anotar') {
-    mensaje = `🔔 *Se anotó a una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+    mensaje = `🔔 *Se anotó a una clase*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Fgest)`;
   } else if (tipo === 'prueba' || tipo === 'nuevo') {
-    mensaje = `🌱 *Alumno/a nuevo a prueba*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+    mensaje = `🌱 *Alumno/a nuevo a prueba*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Fgest)`;
   } else if (tipo === 'actividad') {
-    mensaje = `📋 *Alta a actividad / plan*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+    mensaje = `📋 *Alta a actividad / plan*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Fgest)`;
   } else if (tipo === 'cambiar') {
-    mensaje = `🔄 *Cambió turno fijo*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Savia3)`;
+    mensaje = `🔄 *Cambió turno fijo*\n\n👤 ${nombre}${contacto}\n🗓️ ${clase}\n\n(Chatbot Fgest)`;
   } else if (tipo === 'hablar' || tipo === 'consulta') {
     const texto = String(consultaTexto || '').trim();
     mensaje = `👩‍🏫 *Quiere hablar con una profesora*\n\n📱 WhatsApp del interesado: +${telCliente || 'desconocido'}${
       telCliente ? `\n🔗 https://wa.me/${telCliente}` : ''
-    }${texto ? `\n\n💬 Mensaje:\n${texto}` : '\n\n(Todavía no dejó mensaje; espera tu contacto.)'}\n\n(Chatbot Savia3)`;
+    }${texto ? `\n\n💬 Mensaje:\n${texto}` : '\n\n(Todavía no dejó mensaje; espera tu contacto.)'}\n\n(Chatbot Fgest)`;
   } else {
     mensaje = `🔔 Aviso chatbot\n👤 ${nombre}${contacto}\n🗓️ ${clase}`;
   }

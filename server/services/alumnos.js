@@ -9,7 +9,7 @@ export function normalizarDni(dni) {
 let sucursalChatbotCache = null;
 
 /**
- * Resuelve la sucursal del chatbot (por ahora Savia3 / FitGest).
+ * Resuelve la sucursal del chatbot (Fgest).
  */
 export async function getSucursalChatbot() {
   if (sucursalChatbotCache) return sucursalChatbotCache;
@@ -43,7 +43,7 @@ export async function getSucursalChatbot() {
 }
 
 /**
- * Busca alumno activo por DNI solo en la sucursal del chatbot (Savia3).
+ * Busca alumno activo por DNI solo en la sucursal del chatbot (Fgest).
  */
 export async function buscarAlumnoPorDni(dni) {
   const db = await getPool();
@@ -54,7 +54,7 @@ export async function buscarAlumnoPorDni(dni) {
 
   const sucursal = await getSucursalChatbot();
   if (!sucursal) {
-    console.warn('[chatbot] No se encontró sucursal Savia3 / CHATBOT_SUCURSAL_ID');
+    console.warn('[chatbot] No se encontró sucursal Fgest / CHATBOT_SUCURSAL_ID');
     return null;
   }
 

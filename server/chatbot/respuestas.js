@@ -537,6 +537,7 @@ ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
 ✏️ Escribí *día y hora*, ej: *Martes 18:00*
+También podés juntar días: *Martes Miércoles Jueves 07:00*
 
 ${PIE_NAV}`,
     opciones,

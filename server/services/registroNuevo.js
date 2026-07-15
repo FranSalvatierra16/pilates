@@ -249,6 +249,7 @@ export async function registrarAlumnoActividad({
   email,
   actividadId,
   turnos,
+  clasesEsperadas = null,
 }) {
   const db = await getPool();
   if (!db) throw new Error('Base de datos no configurada');
@@ -298,13 +299,25 @@ export async function registrarAlumnoActividad({
     if (!actividad) {
       throw Object.assign(new Error('Actividad no encontrada'), { status: 404 });
     }
-    const nEsperado = Number(actividad.clases_por_semana);
-    if (Number.isFinite(nEsperado) && nEsperado > 0 && lista.length !== nEsperado) {
-      throw Object.assign(
-        new Error(`Este plan es de ${nEsperado} clase${nEsperado === 1 ? '' : 's'} por semana. Elegí ${nEsperado}.`),
-        { status: 400 }
-      );
-    }
+  }
+
+  let nEsperado = Number(clasesEsperadas);
+  if (!Number.isFinite(nEsperado) || nEsperado <= 0) {
+    nEsperado = Number(actividad?.clases_por_semana);
+  }
+  if (!Number.isFinite(nEsperado) || nEsperado <= 0) {
+    const nom = String(actividad?.nombre || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    const m = nom.match(/(\d+)\s*(x|veces|clase)/);
+    if (m) nEsperado = Number(m[1]);
+  }
+  if (Number.isFinite(nEsperado) && nEsperado > 0 && lista.length !== nEsperado) {
+    throw Object.assign(
+      new Error(`Este plan es de ${nEsperado} clase${nEsperado === 1 ? '' : 's'} por semana. Elegí ${nEsperado}.`),
+      { status: 400 }
+    );
   }
 
   const cupos = await listarCuposDisponibles({ limite: 200 });

@@ -68,7 +68,7 @@ import {
   registrarAlumnoActividad,
 } from '../services/registroNuevo.js';
 import { avisarProfesorChatbot } from '../services/whatsapp.js';
-import { resolverEleccionHorario } from './matchHorario.js';
+import { resolverEleccionHorario, resolverEleccionHorariosMultiples } from './matchHorario.js';
 
 const router = express.Router();
 
@@ -165,6 +165,120 @@ function contextoAlta(ctx = {}) {
     opcionesActividades: Array.isArray(ctx.opcionesActividades) ? ctx.opcionesActividades : [],
     opcionesHorariosNuevo: Array.isArray(ctx.opcionesHorariosNuevo) ? ctx.opcionesHorariosNuevo : [],
   };
+}
+
+function inferirClasesNecesarias(actividad) {
+  const n = Number(actividad?.clasesPorSemana);
+  if (Number.isFinite(n) && n > 0) return Math.max(1, Math.floor(n));
+  const nombre = String(actividad?.nombre || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const m = nombre.match(/(\d+)\s*(x|veces|clase)/);
+  if (m) return Math.max(1, Number(m[1]) || 1);
+  return 1;
+}
+
+function mapTurnoElegido(opcion) {
+  return {
+    turnoId: opcion.turnoId,
+    semana: opcion.semana,
+    dia: opcion.dia,
+    hora: opcion.hora,
+    etiquetaSemana: opcion.etiquetaSemana,
+    label: labelHorarioCorto(opcion) || opcion.label,
+  };
+}
+
+async function completarOContinuarAltaActividad(telefono, sesion, alta, elegidosPrev, agregados, total) {
+  const usados = new Set(elegidosPrev.map((t) => String(t.turnoId)));
+  const nuevosElegidos = [...elegidosPrev];
+  for (const op of agregados) {
+    if (!op?.turnoId) continue;
+    if (usados.has(String(op.turnoId))) continue;
+    usados.add(String(op.turnoId));
+    nuevosElegidos.push(mapTurnoElegido(op));
+    if (nuevosElegidos.length >= total) break;
+  }
+
+  if (!nuevosElegidos.length) {
+    return `No pude anotar esos horarios. Probá de nuevo con día y hora.\n\n0️⃣ Volver`;
+  }
+
+  if (nuevosElegidos.length < total) {
+    const restantes = await listarHorariosFijosParaAlta({
+      limite: 80,
+      excluirTurnoIds: nuevosElegidos.map((t) => t.turnoId),
+    });
+    const lista = listaHorariosActividadPaso(restantes, 0, {
+      paso: nuevosElegidos.length + 1,
+      total,
+      elegidosLabels: nuevosElegidos.map((t) => t.label),
+    });
+    if (!lista.opciones.length) {
+      return `No hay más horarios con cupo para completar tu plan (${nuevosElegidos.length}/${total}) 😕
+
+Pedí ayuda con la opción 4️⃣, o volvé (0️⃣) para elegir otro plan.`;
+    }
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.NUEVO_HORARIO,
+      contexto: {
+        turnosElegidos: nuevosElegidos,
+        paginaLista: 0,
+        opcionesHorariosNuevo: mapOpcionesMin(lista.opciones),
+      },
+      mergeContexto: true,
+    });
+    return lista.texto;
+  }
+
+  const ctxClaim = await reclamarEstado(telefono, ESTADOS.NUEVO_HORARIO, {
+    estadoFinal: ESTADOS.MENU_PRINCIPAL,
+  });
+  if (!ctxClaim) {
+    return `Ya procesamos esa anotación ✅\n\n${menuPrincipal()}`;
+  }
+
+  const altaClaim = contextoAlta(ctxClaim);
+  try {
+    const result = await registrarAlumnoActividad({
+      nombre: altaClaim.altaNombre,
+      apellido: altaClaim.altaApellido,
+      dni: altaClaim.altaDni,
+      telefono,
+      email: altaClaim.altaEmail,
+      actividadId: altaClaim.altaActividadId,
+      turnos: nuevosElegidos,
+      clasesEsperadas: total,
+    });
+
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_PRINCIPAL,
+      ultimoMenu: ESTADOS.MENU_PRINCIPAL,
+      contexto: {
+        dni: result.alumno.dni,
+        alumnoId: result.alumno.id,
+      },
+      mergeContexto: false,
+    });
+
+    return respuestaRegistroActividadOk(result);
+  } catch (e) {
+    console.error('[chatbot registro actividad]', e);
+    if (e.status === 409 && e.alumno) {
+      await actualizarSesion(telefono, {
+        estado: ESTADOS.MENU_ALUMNO,
+        ultimoMenu: ESTADOS.MENU_ALUMNO,
+        contexto: {
+          alumnoId: e.alumno.id,
+          dni: normalizarDni(e.alumno.dni),
+        },
+        mergeContexto: false,
+      });
+      return `${e.message}\n\n${menuAlumno()}`;
+    }
+    return `${e.message || 'No se pudo completar el alta.'}\n\nProbá de nuevo con *4* en el menú nuevo, o *0* para salir.`;
+  }
 }
 
 function esConfirmacionSi(msg) {
@@ -675,9 +789,7 @@ async function manejarNuevoActividad(telefono, mensaje, sesion) {
   const elegida = opciones[n - 1];
   const alta = contextoAlta(sesion.contexto);
   const esActividad = alta.modoAlta === 'actividad';
-  const clasesNecesarias = esActividad
-    ? Math.max(1, Number(elegida.clasesPorSemana) || 1)
-    : 1;
+  const clasesNecesarias = esActividad ? inferirClasesNecesarias(elegida) : 1;
 
   const horarios = esActividad
     ? await listarHorariosFijosParaAlta({ limite: 80 })
@@ -774,107 +886,29 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
     return lista.texto;
   }
 
+  if (esActividad) {
+    const multi = resolverEleccionHorariosMultiples(m, opciones);
+    if (!multi.ok) {
+      return textoErrorEleccion(multi, opciones, page);
+    }
+    const avisoFaltantes =
+      Array.isArray(multi.faltantes) && multi.faltantes.length
+        ? `\n⚠️ No encontré cupo en: ${multi.faltantes.join(', ')}\n`
+        : '';
+    const cont = await completarOContinuarAltaActividad(
+      telefono,
+      sesion,
+      alta,
+      elegidos,
+      multi.opciones,
+      total
+    );
+    return avisoFaltantes ? `${avisoFaltantes}\n${cont}` : cont;
+  }
+
   const resolved = resolverEleccionHorario(m, opciones);
   if (!resolved.ok) {
     return textoErrorEleccion(resolved, opciones, page);
-  }
-
-  const opcion = opciones[resolved.index] || resolved.opcion;
-  if (!opcion) {
-    return textoErrorEleccion({ ok: false, hint: 'No encontré ese horario.' }, opciones, page);
-  }
-
-  if (esActividad) {
-    const ya = elegidos.some((t) => String(t.turnoId) === String(opcion.turnoId));
-    if (ya) {
-      return `Ese horario ya lo elegiste. Probá con otro día/hora.\n\n0️⃣ Volver`;
-    }
-
-    const nuevosElegidos = [
-      ...elegidos,
-      {
-        turnoId: opcion.turnoId,
-        semana: opcion.semana,
-        dia: opcion.dia,
-        hora: opcion.hora,
-        etiquetaSemana: opcion.etiquetaSemana,
-        label: labelHorarioCorto(opcion) || opcion.label,
-      },
-    ];
-
-    if (nuevosElegidos.length < total) {
-      const restantes = await listarHorariosFijosParaAlta({
-        limite: 80,
-        excluirTurnoIds: nuevosElegidos.map((t) => t.turnoId),
-      });
-      const lista = listaHorariosActividadPaso(restantes, 0, {
-        paso: nuevosElegidos.length + 1,
-        total,
-        elegidosLabels: nuevosElegidos.map((t) => t.label),
-      });
-      if (!lista.opciones.length) {
-        return `No hay más horarios con cupo para completar tu plan (${nuevosElegidos.length}/${total}) 😕
-
-Pedí ayuda con la opción 4️⃣, o volvé (0️⃣) para elegir otro plan.`;
-      }
-      await actualizarSesion(telefono, {
-        estado: ESTADOS.NUEVO_HORARIO,
-        contexto: {
-          turnosElegidos: nuevosElegidos,
-          paginaLista: 0,
-          opcionesHorariosNuevo: mapOpcionesMin(lista.opciones),
-        },
-        mergeContexto: true,
-      });
-      return lista.texto;
-    }
-
-    const ctxClaim = await reclamarEstado(telefono, ESTADOS.NUEVO_HORARIO, {
-      estadoFinal: ESTADOS.MENU_PRINCIPAL,
-    });
-    if (!ctxClaim) {
-      return `Ya procesamos esa anotación ✅\n\n${menuPrincipal()}`;
-    }
-
-    const altaClaim = contextoAlta(ctxClaim);
-    try {
-      const result = await registrarAlumnoActividad({
-        nombre: altaClaim.altaNombre,
-        apellido: altaClaim.altaApellido,
-        dni: altaClaim.altaDni,
-        telefono,
-        email: altaClaim.altaEmail,
-        actividadId: altaClaim.altaActividadId,
-        turnos: nuevosElegidos,
-      });
-
-      await actualizarSesion(telefono, {
-        estado: ESTADOS.MENU_PRINCIPAL,
-        ultimoMenu: ESTADOS.MENU_PRINCIPAL,
-        contexto: {
-          dni: result.alumno.dni,
-          alumnoId: result.alumno.id,
-        },
-        mergeContexto: false,
-      });
-
-      return respuestaRegistroActividadOk(result);
-    } catch (e) {
-      console.error('[chatbot registro actividad]', e);
-      if (e.status === 409 && e.alumno) {
-        await actualizarSesion(telefono, {
-          estado: ESTADOS.MENU_ALUMNO,
-          ultimoMenu: ESTADOS.MENU_ALUMNO,
-          contexto: {
-            alumnoId: e.alumno.id,
-            dni: normalizarDni(e.alumno.dni),
-          },
-          mergeContexto: false,
-        });
-        return `${e.message}\n\n${menuAlumno()}`;
-      }
-      return `${e.message || 'No se pudo completar el alta.'}\n\nProbá de nuevo con *4* en el menú nuevo, o *0* para salir.`;
-    }
   }
 
   const ctxClaim = await reclamarEstado(telefono, ESTADOS.NUEVO_HORARIO, {
@@ -885,7 +919,7 @@ Pedí ayuda con la opción 4️⃣, o volvé (0️⃣) para elegir otro plan.`;
   }
 
   const ops = Array.isArray(ctxClaim.opcionesHorariosNuevo) ? ctxClaim.opcionesHorariosNuevo : opciones;
-  const opcionClaim = ops[resolved.index] || resolved.opcion || opcion;
+  const opcionClaim = ops[resolved.index] || resolved.opcion;
   const altaClaim = contextoAlta(ctxClaim);
 
   try {

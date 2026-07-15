@@ -4803,7 +4803,10 @@ app.post('/api/auth/login', async (req, res) => {
     }
     const { rows: sucRows } = await queryWithRetry(
       db,
-      'SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil, activa, fecha_vencimiento_cuenta, planificacion_habilitada FROM sucursales WHERE usuario = $1',
+      `SELECT id, nombre_lugar, usuario, clave_hash, foto_perfil, activa, fecha_vencimiento_cuenta, planificacion_habilitada
+         FROM sucursales
+        WHERE LOWER(TRIM(usuario)) = LOWER(TRIM($1))
+        LIMIT 1`,
       [u]
     );
     if (sucRows.length === 0) return res.status(401).json({ ok: false, error: 'Usuario o contraseña incorrectos' });

@@ -52,7 +52,7 @@ import {
   replySiDuplicado,
   reclamarEstado,
 } from './sesiones.js';
-import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni } from '../services/alumnos.js';
+import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni, getSucursalChatbot } from '../services/alumnos.js';
 import {
   listarClasesParaLiberar,
   liberarClaseFija,
@@ -1500,7 +1500,15 @@ router.post('/', async (req, res) => {
       const dup = replySiDuplicado(sesion, mensaje);
       if (dup) {
         console.log('[chatbot] dedup hit', String(telefono).slice(-6));
-        return res.json({ ok: true, reply: dup, estado: sesion.estado, dedup: true });
+        const suc = await getSucursalChatbot();
+        return res.json({
+          ok: true,
+          reply: dup,
+          estado: sesion.estado,
+          dedup: true,
+          sucursal: suc?.usuario || null,
+          sucursalId: suc?.id || null,
+        });
       }
     }
 
@@ -1574,12 +1582,16 @@ router.post('/', async (req, res) => {
     }
 
     const actualizada = await obtenerOCrearSesion(telefono);
+    const suc = await getSucursalChatbot();
 
     return res.json({
       ok: true,
       reply: replyOut,
       silencioso,
       estado: actualizada.estado,
+      sucursal: suc?.usuario || null,
+      sucursalNombre: suc?.nombre_lugar || null,
+      sucursalId: suc?.id || null,
     });
   } catch (e) {
     console.error('[chatbot]', e);

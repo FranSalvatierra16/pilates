@@ -14,7 +14,7 @@ export function conNav(texto, { atrasLabel = 'Volver atrás' } = {}) {
 }
 
 export function menuPrincipal() {
-  return `🌿 ¡Hola! Bienvenido a Savia Pilates!
+  return `🌿 ¡Hola! Bienvenido a *Fgest* (Savia Pilates)!
 
 Soy el asistente del estudio 😊
 

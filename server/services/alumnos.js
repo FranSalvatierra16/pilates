@@ -10,6 +10,8 @@ let sucursalChatbotCache = null;
 
 /**
  * Resuelve la sucursal del chatbot (Fgest).
+ * Prioridad: CHATBOT_SUCURSAL_USUARIO → CHATBOT_SUCURSAL_ID → defaults Fgest.
+ * (Usuario primero para no quedar pegados a un ID viejo de Savia/Savia3 en Railway.)
  */
 export async function getSucursalChatbot() {
   if (sucursalChatbotCache) return sucursalChatbotCache;
@@ -21,14 +23,7 @@ export async function getSucursalChatbot() {
   const usuarioEnv = chatbotSucursalUsuarioFromEnv();
 
   let row = null;
-  if (idEnv) {
-    const { rows } = await db.query(
-      `SELECT id, nombre_lugar, usuario FROM sucursales WHERE id = $1 LIMIT 1`,
-      [idEnv]
-    );
-    row = rows[0] || null;
-  }
-  if (!row && usuarioEnv) {
+  if (usuarioEnv) {
     const { rows } = await db.query(
       `SELECT id, nombre_lugar, usuario FROM sucursales
        WHERE LOWER(TRIM(usuario)) = LOWER(TRIM($1))
@@ -37,8 +32,24 @@ export async function getSucursalChatbot() {
     );
     row = rows[0] || null;
   }
+  if (!row && idEnv) {
+    const { rows } = await db.query(
+      `SELECT id, nombre_lugar, usuario FROM sucursales WHERE id = $1 LIMIT 1`,
+      [idEnv]
+    );
+    row = rows[0] || null;
+  }
 
-  if (row) sucursalChatbotCache = row;
+  if (row) {
+    if (String(row.usuario || '').toLowerCase() !== 'fgest') {
+      console.warn(
+        '[chatbot] Atención: sucursal resuelta no es Fgest:',
+        row.usuario,
+        row.id
+      );
+    }
+    sucursalChatbotCache = row;
+  }
   return row;
 }
 

@@ -31,27 +31,29 @@ function makeInsertSql(table, columns) {
   return `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
 }
 
-function nextUniqueDni(baseDni, usedDnis) {
+function nextUniqueDni(baseDni, usedDnis, { offset = 10 } = {}) {
   const trimmed = String(baseDni || '').trim();
   if (!trimmed) {
     let candidate = String(Date.now());
-    while (usedDnis.has(candidate)) candidate = String(Number(candidate) + 1);
+    while (usedDnis.has(candidate)) candidate = String(Number(candidate) + offset);
     usedDnis.add(candidate);
     return candidate;
   }
 
   if (/^\d+$/.test(trimmed)) {
-    let candidate = String(Number(trimmed) + 1);
-    while (usedDnis.has(candidate)) candidate = String(Number(candidate) + 1);
+    let candidate = String(BigInt(trimmed) + BigInt(offset));
+    while (usedDnis.has(candidate)) {
+      candidate = String(BigInt(candidate) + BigInt(offset));
+    }
     usedDnis.add(candidate);
     return candidate;
   }
 
-  let n = 1;
-  let candidate = `${trimmed}-${n}`;
+  let n = offset;
+  let candidate = `${trimmed}+${n}`;
   while (usedDnis.has(candidate)) {
-    n += 1;
-    candidate = `${trimmed}-${n}`;
+    n += offset;
+    candidate = `${trimmed}+${n}`;
   }
   usedDnis.add(candidate);
   return candidate;
@@ -61,9 +63,10 @@ async function main() {
   const replaceTarget = process.argv.includes('--replace');
   const positionalArgs = process.argv.slice(2).filter((a) => a !== '--replace');
   const sourceUser = (positionalArgs[0] || 'Savia').trim();
-  const targetUser = (positionalArgs[1] || 'Savia2').trim();
-  const targetPassword = (positionalArgs[2] || '1234').trim();
-  const targetNombreLugar = (positionalArgs[3] || targetUser).trim();
+  const targetUser = (positionalArgs[1] || 'Fgest').trim();
+  const targetPassword = (positionalArgs[2] || '2286').trim();
+  const targetNombreLugar = (positionalArgs[3] || 'Fgest').trim();
+  const dniOffset = Number(process.env.CLONE_DNI_OFFSET || positionalArgs[4] || 10) || 10;
 
   const databaseUrl = getDatabaseUrl();
   if (!databaseUrl) {
@@ -220,7 +223,7 @@ async function main() {
         targetSucursalId,
         row.nombre,
         row.apellido,
-        nextUniqueDni(row.dni, usedDnis),
+        nextUniqueDni(row.dni, usedDnis, { offset: dniOffset }),
         row.telefono,
         row.email,
         row.fecha_vencimiento_cuota,
@@ -239,6 +242,10 @@ async function main() {
       if (alumnosCols.has('activo')) {
         cols.push('activo');
         vals.push(row.activo ?? true);
+      }
+      if (alumnosCols.has('a_prueba')) {
+        cols.push('a_prueba');
+        vals.push(row.a_prueba ?? false);
       }
       if (alumnosCols.has('created_at')) {
         cols.push('created_at');
@@ -383,7 +390,7 @@ async function main() {
           targetSucursalId,
           row.nombre,
           row.apellido,
-          row.dni,
+          nextUniqueDni(row.dni, usedDnis, { offset: dniOffset }),
           row.telefono,
           row.email,
           row.actividad_id ? actividadMap.get(row.actividad_id) || null : null,
@@ -391,6 +398,32 @@ async function main() {
         ]
       );
       counters.registrosLink++;
+    }
+
+    // Liberaciones semanales (misma estructura de turnos/alumnos)
+    try {
+      const { rows: liberaciones } = await client.query(
+        `SELECT l.*
+           FROM liberaciones_semana l
+           JOIN turnos t ON t.id = l.turno_id
+          WHERE t.sucursal_id = $1
+          ORDER BY l.created_at, l.id`,
+        [src.id]
+      );
+      counters.liberaciones = 0;
+      for (const row of liberaciones) {
+        const turnoId = turnoMap.get(row.turno_id);
+        const alumnoId = alumnoMap.get(row.alumno_id);
+        if (!turnoId || !alumnoId) continue;
+        await client.query(
+          `INSERT INTO liberaciones_semana (id, turno_id, alumno_id, semana, created_at)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [crypto.randomUUID(), turnoId, alumnoId, row.semana, row.created_at]
+        );
+        counters.liberaciones++;
+      }
+    } catch (e) {
+      console.warn('No se copiaron liberaciones_semana:', e.message);
     }
 
     const { rows: asistencias } = await client.query(
@@ -478,6 +511,7 @@ async function main() {
     console.log(`Usuario: ${targetUser}`);
     console.log(`Clave: ${targetPassword}`);
     console.log(`ID nueva sucursal: ${targetSucursalId}`);
+    console.log(`DNIs: cada uno +${dniOffset}`);
     console.log('Copiados:', counters);
     console.log('No se copiaron push_subscriptions para evitar notificaciones duplicadas en dispositivos existentes.');
   } catch (error) {

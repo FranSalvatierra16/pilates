@@ -22,6 +22,20 @@ function normalizePhoneForWhatsApp(telefono: string): string | null {
   return num.length >= 12 ? num : null;
 }
 
+/** Saca tildes/acentos y pasa a minúsculas para buscar sin importar cómo se escriba. */
+function normalizarTexto(s: string): string {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/** Solo dígitos (para comparar DNI aunque tenga puntos o espacios). */
+function soloDigitos(s: string): string {
+  return String(s || '').replace(/\D/g, '');
+}
+
 const MAX_CREDITOS_RECUPERAR = 999;
 
 /** Lunes=0 … Domingo=6 (igual que Calendario) */
@@ -192,13 +206,25 @@ const Alumnos = () => {
       : alumnos.filter((alumno) => alumno.activo !== false);
 
     if (filtroBusqueda.trim()) {
-      const busqueda = filtroBusqueda.toLowerCase().trim();
-      filtrados = filtrados.filter(alumno =>
-        alumno.nombre.toLowerCase().includes(busqueda) ||
-        alumno.apellido.toLowerCase().includes(busqueda) ||
-        alumno.dni.includes(busqueda) ||
-        `${alumno.nombre} ${alumno.apellido}`.toLowerCase().includes(busqueda)
-      );
+      // Cada palabra debe aparecer (en cualquier orden) en nombre/apellido/DNI/teléfono/email.
+      // Ignora tildes, mayúsculas y puntos del DNI.
+      const terminos = normalizarTexto(filtroBusqueda).split(/\s+/).filter(Boolean);
+      const digitosBusqueda = soloDigitos(filtroBusqueda);
+
+      filtrados = filtrados.filter((alumno) => {
+        const campos = normalizarTexto(
+          `${alumno.nombre} ${alumno.apellido} ${alumno.dni || ''} ${alumno.telefono || ''} ${alumno.email || ''}`
+        );
+        const dniDigitos = soloDigitos(alumno.dni || '');
+        const telDigitos = soloDigitos(alumno.telefono || '');
+
+        const coincideTexto = terminos.every((t) => campos.includes(t));
+        const coincideNumero =
+          digitosBusqueda.length >= 2 &&
+          (dniDigitos.includes(digitosBusqueda) || telDigitos.includes(digitosBusqueda));
+
+        return coincideTexto || coincideNumero;
+      });
     }
     // Filtrar por vencimiento
     if (filtroVencimiento === 'mes-vencido') {
@@ -812,7 +838,7 @@ const Alumnos = () => {
               type="text"
               value={filtroBusqueda}
               onChange={(e) => setFiltroBusqueda(e.target.value)}
-              placeholder="Buscar por nombre, apellido o DNI..."
+              placeholder="Buscar por nombre, apellido, DNI o teléfono..."
               className="input-field flex-1 min-w-0 sm:min-w-[200px]"
             />
             {filtroBusqueda && (

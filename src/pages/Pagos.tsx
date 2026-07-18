@@ -8,6 +8,20 @@ import { formatCurrency } from '../utils/format';
 import { cierreFechaCorte, combinarFechaHoraISO, estaEnPeriodoAbiertoCaja, getUltimoCierre } from '../utils/cierre-caja';
 import { useToast } from '../components/ToastProvider';
 
+/** Saca tildes/acentos y pasa a minúsculas para buscar sin importar cómo se escriba. */
+function normalizarTexto(s: string): string {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/** Solo dígitos (para comparar DNI/teléfono aunque tengan puntos o espacios). */
+function soloDigitos(s: string): string {
+  return String(s || '').replace(/\D/g, '');
+}
+
 const Pagos = () => {
   const toast = useToast();
   const [pagos, setPagos] = useState<Pago[]>([]);
@@ -26,6 +40,11 @@ const Pagos = () => {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const selectAllRef = useRef<HTMLInputElement>(null);
+
+  // Combobox buscador de alumno en "Registrar Pago"
+  const [alumnoBusqueda, setAlumnoBusqueda] = useState('');
+  const [alumnoDropdownOpen, setAlumnoDropdownOpen] = useState(false);
+  const alumnoBoxRef = useRef<HTMLDivElement>(null);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [finEstado, setFinEstado] = useState<FinanzasEstado | null>(null);
@@ -126,7 +145,49 @@ const Pagos = () => {
       fecha: new Date().toISOString().split('T')[0],
       descripcion: '',
     });
+    setAlumnoBusqueda('');
+    setAlumnoDropdownOpen(false);
   };
+
+  // Alumnos ordenados alfabéticamente (apellido, nombre) y filtrados por lo que se escribe.
+  const alumnosOrdenados = useMemo(() => {
+    return [...alumnos].sort((a, b) => {
+      const cmp = normalizarTexto(a.apellido).localeCompare(normalizarTexto(b.apellido), 'es');
+      if (cmp !== 0) return cmp;
+      return normalizarTexto(a.nombre).localeCompare(normalizarTexto(b.nombre), 'es');
+    });
+  }, [alumnos]);
+
+  const alumnosFiltradosPago = useMemo(() => {
+    const q = alumnoBusqueda.trim();
+    if (!q) return alumnosOrdenados;
+    const terminos = normalizarTexto(q).split(/\s+/).filter(Boolean);
+    const digitos = soloDigitos(q);
+    return alumnosOrdenados.filter((a) => {
+      const campos = normalizarTexto(`${a.nombre} ${a.apellido} ${a.dni || ''} ${a.telefono || ''}`);
+      const coincideTexto = terminos.every((t) => campos.includes(t));
+      const coincideNumero =
+        digitos.length >= 2 &&
+        (soloDigitos(a.dni || '').includes(digitos) || soloDigitos(a.telefono || '').includes(digitos));
+      return coincideTexto || coincideNumero;
+    });
+  }, [alumnosOrdenados, alumnoBusqueda]);
+
+  const alumnoSeleccionado = useMemo(
+    () => alumnos.find((a) => a.id === formData.alumnoId) || null,
+    [alumnos, formData.alumnoId]
+  );
+
+  useEffect(() => {
+    if (!alumnoDropdownOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (alumnoBoxRef.current && !alumnoBoxRef.current.contains(e.target as Node)) {
+        setAlumnoDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [alumnoDropdownOpen]);
 
   const handleOpenModal = () => {
     resetForm();
@@ -640,18 +701,86 @@ const Pagos = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Alumno (opcional)
                 </label>
-                <select
-                  value={formData.alumnoId}
-                  onChange={(e) => setFormData({ ...formData, alumnoId: e.target.value })}
-                  className="input-field"
-                >
-                  <option value="">Ninguno — Aporte a caja / ingreso del dueño</option>
-                  {alumnos.map((alumno) => (
-                    <option key={alumno.id} value={alumno.id}>
-                      {alumno.nombre} {alumno.apellido} - DNI: {alumno.dni}
-                    </option>
-                  ))}
-                </select>
+                {formData.alumnoId && alumnoSeleccionado ? (
+                  <div className="flex items-center gap-2">
+                    <div className="input-field flex-1 flex items-center justify-between bg-gray-50">
+                      <span className="truncate">
+                        {alumnoSeleccionado.nombre} {alumnoSeleccionado.apellido}
+                        {alumnoSeleccionado.dni ? ` — DNI: ${alumnoSeleccionado.dni}` : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, alumnoId: '' });
+                        setAlumnoBusqueda('');
+                        setAlumnoDropdownOpen(false);
+                      }}
+                      className="btn-secondary whitespace-nowrap"
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative" ref={alumnoBoxRef}>
+                    <input
+                      type="text"
+                      value={alumnoBusqueda}
+                      onChange={(e) => {
+                        setAlumnoBusqueda(e.target.value);
+                        setAlumnoDropdownOpen(true);
+                      }}
+                      onFocus={() => setAlumnoDropdownOpen(true)}
+                      className="input-field"
+                      placeholder="Escribí nombre, apellido o DNI (o dejá vacío para aporte a caja)"
+                      autoComplete="off"
+                    />
+                    {alumnoDropdownOpen && (
+                      <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, alumnoId: '' });
+                            setAlumnoBusqueda('');
+                            setAlumnoDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100 text-gray-600"
+                        >
+                          Ninguno — Aporte a caja / ingreso del dueño
+                        </button>
+                        {alumnosFiltradosPago.length === 0 ? (
+                          <div className="px-3 py-3 text-sm text-gray-400">
+                            No se encontraron alumnos con “{alumnoBusqueda}”.
+                          </div>
+                        ) : (
+                          alumnosFiltradosPago.slice(0, 50).map((alumno) => (
+                            <button
+                              key={alumno.id}
+                              type="button"
+                              onClick={() => {
+                                setFormData({ ...formData, alumnoId: alumno.id });
+                                setAlumnoDropdownOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50"
+                            >
+                              <span className="font-medium text-gray-900">
+                                {alumno.nombre} {alumno.apellido}
+                              </span>
+                              {alumno.dni ? (
+                                <span className="text-gray-500"> — DNI: {alumno.dni}</span>
+                              ) : null}
+                            </button>
+                          ))
+                        )}
+                        {alumnosFiltradosPago.length > 50 && (
+                          <div className="px-3 py-2 text-xs text-gray-400 border-t border-gray-100">
+                            Mostrando 50 de {alumnosFiltradosPago.length}. Seguí escribiendo para afinar.
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {!formData.alumnoId && (
                   <input
                     type="text"

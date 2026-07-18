@@ -9,6 +9,7 @@ import {
   textoHablarProfesora,
   textoConsultaRecibida,
   textoOpcionInvalida,
+  pedirDatosNuevo,
   pedirNombreNuevo,
   pedirApellidoNuevo,
   pedirDniNuevo,
@@ -504,12 +505,96 @@ async function mostrarHorariosNuevo(telefono) {
 
 async function iniciarAltaNuevo(telefono, modoAlta = 'prueba') {
   await actualizarSesion(telefono, {
-    estado: ESTADOS.NUEVO_NOMBRE,
+    estado: ESTADOS.NUEVO_DATOS,
     ultimoMenu: ESTADOS.MENU_NUEVO,
     contexto: { modoAlta: modoAlta === 'actividad' ? 'actividad' : 'prueba' },
     mergeContexto: false,
   });
-  return pedirNombreNuevo();
+  return pedirDatosNuevo();
+}
+
+/**
+ * Parsea un mensaje con nombre, apellido y DNI juntos.
+ * Ej: "Juan Pérez 40123456" → { nombre: 'Juan', apellido: 'Pérez', dni: '40123456' }
+ * El DNI es el token con 6+ dígitos (soporta puntos). El primer token de texto
+ * es el nombre y el resto (hasta el DNI) es el apellido.
+ */
+function parseDatosAlta(texto) {
+  const raw = String(texto || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return { ok: false };
+
+  const tokens = raw.split(' ');
+  let dni = null;
+  const palabras = [];
+  for (const tk of tokens) {
+    const soloNum = tk.replace(/[.\-]/g, '');
+    if (!dni && /^\d{6,9}$/.test(soloNum)) {
+      dni = normalizarDni(soloNum);
+    } else {
+      palabras.push(tk);
+    }
+  }
+
+  if (!dni) return { ok: false, motivo: 'dni' };
+  if (palabras.length < 2) return { ok: false, motivo: 'nombre' };
+
+  const nombre = palabras[0];
+  const apellido = palabras.slice(1).join(' ');
+  return { ok: true, nombre, apellido, dni };
+}
+
+async function manejarNuevoDatos(telefono, mensaje, sesion) {
+  const m = String(mensaje || '').trim();
+  if (esIrMenuPrincipal(m) || esMenuOHola(m)) return irMenuPrincipal(telefono);
+  if (esVolverAtras(m)) return irMenuNuevo(telefono);
+
+  const alta = contextoAlta(sesion?.contexto);
+  const datos = parseDatosAlta(m);
+
+  if (!datos.ok) {
+    const detalle =
+      datos.motivo === 'dni'
+        ? 'No encontré el *DNI* (tienen que ser 6 a 9 números).'
+        : 'Necesito *nombre y apellido* además del DNI.';
+    return conNav(
+      `${detalle}
+
+Mandá todo junto en un mensaje, por ejemplo:
+*Juan Pérez 40123456*`,
+      { atrasLabel: 'Menú nuevo' }
+    );
+  }
+
+  const existente = await buscarAlumnoPorDni(datos.dni);
+  if (existente) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: existente.id,
+        dni: normalizarDni(existente.dni) || datos.dni,
+      },
+      mergeContexto: false,
+    });
+    return `Ya estás cargado/a como *${existente.nombre} ${existente.apellido}* 😊
+
+Te paso al menú de alumno:
+
+${menuAlumno()}`;
+  }
+
+  await actualizarSesion(telefono, {
+    estado: ESTADOS.NUEVO_EMAIL,
+    ultimoMenu: ESTADOS.MENU_NUEVO,
+    contexto: {
+      modoAlta: alta.modoAlta,
+      altaNombre: datos.nombre,
+      altaApellido: datos.apellido,
+      altaDni: datos.dni,
+    },
+    mergeContexto: false,
+  });
+  return pedirEmailNuevo();
 }
 
 async function manejarMenuPrincipal(telefono, mensaje) {
@@ -708,17 +793,12 @@ async function manejarNuevoEmail(telefono, mensaje, sesion) {
   if (esVolverAtras(m)) {
     const alta = contextoAlta(sesion.contexto);
     await actualizarSesion(telefono, {
-      estado: ESTADOS.NUEVO_DNI,
+      estado: ESTADOS.NUEVO_DATOS,
       ultimoMenu: ESTADOS.MENU_NUEVO,
-      contexto: {
-        modoAlta: alta.modoAlta,
-        altaNombre: alta.altaNombre,
-        altaApellido: alta.altaApellido,
-        altaDni: alta.altaDni,
-      },
+      contexto: { modoAlta: alta.modoAlta },
       mergeContexto: false,
     });
-    return pedirDniNuevo();
+    return pedirDatosNuevo();
   }
 
   let email = m === '-' || m === '—' || normalizarMensaje(m) === 'no' ? '' : m;
@@ -1520,6 +1600,9 @@ router.post('/', async (req, res) => {
         break;
       case ESTADOS.MENU_NUEVO:
         reply = await manejarMenuNuevo(telefono, mensaje);
+        break;
+      case ESTADOS.NUEVO_DATOS:
+        reply = await manejarNuevoDatos(telefono, mensaje, sesion);
         break;
       case ESTADOS.NUEVO_NOMBRE:
         reply = await manejarNuevoNombre(telefono, mensaje, sesion);

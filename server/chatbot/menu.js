@@ -100,6 +100,16 @@ export function textoOpcionInvalida(menuFn) {
 ${menuFn()}`;
 }
 
+export function pedirDatosNuevo() {
+  return conNav(
+    `✍️ Escribí en *un solo mensaje* tu *nombre, apellido y DNI*.
+
+Ejemplo:
+*Juan Pérez 40123456*`,
+    { atrasLabel: 'Menú nuevo' }
+  );
+}
+
 export function pedirNombreNuevo() {
   return conNav(`✍️ ¿Cómo es tu *nombre*?
 

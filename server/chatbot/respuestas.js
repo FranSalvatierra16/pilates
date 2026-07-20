@@ -575,7 +575,7 @@ export function respuestaRegistroActividadOk(result) {
 
   return `✅ ¡Listo ${a.nombre}!
 
-Te anotamos en Savia Pilates con tu plan semanal.
+Te anotamos en *Fgest* con tu plan semanal.
 ${plan}
 🗓️ Tus turnos fijos:
 ${lista || '• (sin detalle)'}

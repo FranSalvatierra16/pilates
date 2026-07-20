@@ -14,13 +14,13 @@ export function conNav(texto, { atrasLabel = 'Volver atrás' } = {}) {
 }
 
 export function menuPrincipal() {
-  return `🌿 ¡Hola! Bienvenido a *Fgest* (Savia Pilates)!
+  return `🌿 ¡Hola! Bienvenido a *Fgest*!
 
 Soy el asistente del estudio 😊
 
 ¿Cómo puedo ayudarte?
 
-1️⃣ Conocer Savia Pilates
+1️⃣ Conocer Fgest
 2️⃣ Quiero anotarme (nuevo / prueba)
 3️⃣ Ya soy alumno/a
 4️⃣ Hablar con una profesora
@@ -67,7 +67,7 @@ Escribí solo los números (sin puntos).`,
 
 export function textoConocerSavia() {
   return conNav(
-    `💚 Savia Pilates es un entrenamiento en formato circuito donde trabajás con Reformer, Chair, Barril y Unidad de Pared.
+    `💚 *Fgest* es un entrenamiento en formato circuito donde trabajás con Reformer, Chair, Barril y Unidad de Pared.
 
 Podés enfocarte en fuerza, movilidad, postura o rehabilitación.
 

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getPool } from '../db/index.js';
-import { getSucursalChatbot, buscarAlumnoPorDni, normalizarDni } from './alumnos.js';
+import { getSucursalChatbot, buscarAlumnoPorDni, buscarAlumnoPorDniGlobal, normalizarDni } from './alumnos.js';
 import {
   getSemanaActual,
   semanaPortalSiguiente,
@@ -10,6 +10,34 @@ import {
 import { avisarProfesorChatbot } from './whatsapp.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+function errorDniDuplicado(existente) {
+  const nombre = existente
+    ? `*${existente.nombre || ''} ${existente.apellido || ''}*`.trim()
+    : null;
+  const msg = nombre
+    ? `Ese DNI ya está cargado como ${nombre}. Si sos vos, usá la opción “Ya soy alumno/a”.`
+    : 'Ese DNI ya está registrado. Si sos vos, usá la opción “Ya soy alumno/a”.';
+  return Object.assign(new Error(msg), { status: 409, alumno: existente || null });
+}
+
+function esErrorDniUnique(err) {
+  return (
+    err?.code === '23505' &&
+    (err.constraint === 'alumnos_dni_key' || err.constraint === 'alumnos_sucursal_id_dni_key')
+  );
+}
+
+async function assertDniLibreParaAlta(dniNorm, sucursalId) {
+  const existente = await buscarAlumnoPorDniGlobal(dniNorm);
+  if (!existente) return null;
+
+  const mismoEstudio =
+    String(existente.sucursal_id) === String(sucursalId) && existente.activo !== false;
+
+  // Solo adjuntamos alumno si es de esta sucursal (para pasar al menú alumno).
+  throw errorDniDuplicado(mismoEstudio ? existente : null);
+}
 
 function formatoPrecio(n) {
   const v = Number(n);
@@ -120,13 +148,7 @@ export async function registrarAlumnoNuevo({
     throw Object.assign(new Error('DNI inválido'), { status: 400 });
   }
 
-  const existente = await buscarAlumnoPorDni(dniNorm);
-  if (existente) {
-    throw Object.assign(
-      new Error('Ya hay un alumno activo con ese DNI. Usá la opción “Ya soy alumno/a”.'),
-      { status: 409, alumno: existente }
-    );
-  }
+  await assertDniLibreParaAlta(dniNorm, sucursal.id);
 
   const nombreOk = String(nombre || '').trim();
   const apellidoOk = String(apellido || '').trim();
@@ -169,14 +191,22 @@ export async function registrarAlumnoNuevo({
   const alumnoId = crypto.randomUUID();
   const desc = `Alta por WhatsApp (chatbot). Clase de prueba.`;
 
-  await db.query(
-    `INSERT INTO alumnos (
-       id, sucursal_id, nombre, apellido, dni, telefono, email,
-       fecha_vencimiento_cuota, actividad_id, a_prueba,
-       clases_asistidas, clases_para_recuperar, descripcion, activo, created_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,true,0,0,$9,true,NOW())`,
-    [alumnoId, sucursal.id, nombreOk, apellidoOk, dniNorm, tel, emailOk, actividad?.id || null, desc]
-  );
+  try {
+    await db.query(
+      `INSERT INTO alumnos (
+         id, sucursal_id, nombre, apellido, dni, telefono, email,
+         fecha_vencimiento_cuota, actividad_id, a_prueba,
+         clases_asistidas, clases_para_recuperar, descripcion, activo, created_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,true,0,0,$9,true,NOW())`,
+      [alumnoId, sucursal.id, nombreOk, apellidoOk, dniNorm, tel, emailOk, actividad?.id || null, desc]
+    );
+  } catch (err) {
+    if (esErrorDniUnique(err)) {
+      const existente = await buscarAlumnoPorDni(dniNorm);
+      throw errorDniDuplicado(existente);
+    }
+    throw err;
+  }
 
   const ids = [...(turno.alumno_ids || []).map(String)];
   if (!ids.includes(alumnoId)) ids.push(alumnoId);
@@ -262,13 +292,7 @@ export async function registrarAlumnoActividad({
     throw Object.assign(new Error('DNI inválido'), { status: 400 });
   }
 
-  const existente = await buscarAlumnoPorDni(dniNorm);
-  if (existente) {
-    throw Object.assign(
-      new Error('Ya hay un alumno activo con ese DNI. Usá la opción “Ya soy alumno/a”.'),
-      { status: 409, alumno: existente }
-    );
-  }
+  await assertDniLibreParaAlta(dniNorm, sucursal.id);
 
   const nombreOk = String(nombre || '').trim();
   const apellidoOk = String(apellido || '').trim();
@@ -344,14 +368,22 @@ export async function registrarAlumnoActividad({
   const alumnoId = crypto.randomUUID();
   const desc = `Alta por WhatsApp (chatbot). Actividad / plan semanal.`;
 
-  await db.query(
-    `INSERT INTO alumnos (
-       id, sucursal_id, nombre, apellido, dni, telefono, email,
-       fecha_vencimiento_cuota, actividad_id, a_prueba,
-       clases_asistidas, clases_para_recuperar, descripcion, activo, created_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,false,0,0,$9,true,NOW())`,
-    [alumnoId, sucursal.id, nombreOk, apellidoOk, dniNorm, tel, emailOk, actividad?.id || null, desc]
-  );
+  try {
+    await db.query(
+      `INSERT INTO alumnos (
+         id, sucursal_id, nombre, apellido, dni, telefono, email,
+         fecha_vencimiento_cuota, actividad_id, a_prueba,
+         clases_asistidas, clases_para_recuperar, descripcion, activo, created_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,false,0,0,$9,true,NOW())`,
+      [alumnoId, sucursal.id, nombreOk, apellidoOk, dniNorm, tel, emailOk, actividad?.id || null, desc]
+    );
+  } catch (err) {
+    if (esErrorDniUnique(err)) {
+      const existente = await buscarAlumnoPorDni(dniNorm);
+      throw errorDniDuplicado(existente);
+    }
+    throw err;
+  }
 
   const clases = [];
   for (const turno of turnosDb) {

@@ -53,7 +53,7 @@ import {
   replySiDuplicado,
   reclamarEstado,
 } from './sesiones.js';
-import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni, getSucursalChatbot } from '../services/alumnos.js';
+import { buscarAlumnoPorDni, buscarAlumnoPorDniGlobal, horariosFijosAlumno, normalizarDni, getSucursalChatbot } from '../services/alumnos.js';
 import {
   listarClasesParaLiberar,
   liberarClaseFija,
@@ -266,7 +266,24 @@ Pedí ayuda con la opción 4️⃣, o volvé (0️⃣) para elegir otro plan.`;
     return respuestaRegistroActividadOk(result);
   } catch (e) {
     console.error('[chatbot registro actividad]', e);
-    if (e.status === 409 && e.alumno) {
+    return textoErrorRegistroAlta(telefono, e, '4');
+  }
+}
+
+function esErrorDniDuplicadoCatch(e) {
+  if (e?.status === 409) return true;
+  const msg = String(e?.message || e || '');
+  return (
+    e?.code === '23505' ||
+    msg.includes('alumnos_dni_key') ||
+    msg.includes('alumnos_sucursal_id_dni_key') ||
+    /duplicate key/i.test(msg)
+  );
+}
+
+async function textoErrorRegistroAlta(telefono, e, opcionMenu) {
+  if (esErrorDniDuplicadoCatch(e)) {
+    if (e.alumno?.id) {
       await actualizarSesion(telefono, {
         estado: ESTADOS.MENU_ALUMNO,
         ultimoMenu: ESTADOS.MENU_ALUMNO,
@@ -276,10 +293,26 @@ Pedí ayuda con la opción 4️⃣, o volvé (0️⃣) para elegir otro plan.`;
         },
         mergeContexto: false,
       });
-      return `${e.message}\n\n${menuAlumno()}`;
+      return `${e.message || 'Ese DNI ya está registrado.'}\n\n${menuAlumno()}`;
     }
-    return `${e.message || 'No se pudo completar el alta.'}\n\nProbá de nuevo con *4* en el menú nuevo, o *0* para salir.`;
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_NUEVO,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: {},
+      mergeContexto: false,
+    });
+    return conNav(
+      `⚠️ Ese DNI ya está registrado. No se puede volver a cargar.
+
+Si sos vos, usá *“Ya soy alumno/a”* en el menú principal.`,
+      { atrasLabel: 'Menú nuevo' }
+    );
   }
+  const msgAmigable =
+    e?.status && e.status >= 400 && e.status < 500
+      ? e.message
+      : 'No se pudo completar el alta.';
+  return `${msgAmigable}\n\nProbá de nuevo con *${opcionMenu}* en el menú nuevo, o *0* para salir.`;
 }
 
 function esConfirmacionSi(msg) {
@@ -565,23 +598,8 @@ Mandá todo junto en un mensaje, por ejemplo:
     );
   }
 
-  const existente = await buscarAlumnoPorDni(datos.dni);
-  if (existente) {
-    await actualizarSesion(telefono, {
-      estado: ESTADOS.MENU_ALUMNO,
-      ultimoMenu: ESTADOS.MENU_ALUMNO,
-      contexto: {
-        alumnoId: existente.id,
-        dni: normalizarDni(existente.dni) || datos.dni,
-      },
-      mergeContexto: false,
-    });
-    return `Ya estás cargado/a como *${existente.nombre} ${existente.apellido}* 😊
-
-Te paso al menú de alumno:
-
-${menuAlumno()}`;
-  }
+  const avisoDni = await textoSiDniYaExiste(telefono, datos.dni);
+  if (avisoDni) return avisoDni;
 
   await actualizarSesion(telefono, {
     estado: ESTADOS.NUEVO_EMAIL,
@@ -595,6 +613,51 @@ ${menuAlumno()}`;
     mergeContexto: false,
   });
   return pedirEmailNuevo();
+}
+
+/**
+ * Si el DNI ya existe (en Fgest u otra sucursal), responde aviso y no deja seguir el alta.
+ */
+async function textoSiDniYaExiste(telefono, dni) {
+  const dniNorm = normalizarDni(dni);
+  if (!dniNorm) return null;
+
+  const enSucursal = await buscarAlumnoPorDni(dniNorm);
+  if (enSucursal) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: enSucursal.id,
+        dni: normalizarDni(enSucursal.dni) || dniNorm,
+      },
+      mergeContexto: false,
+    });
+    return `Ese DNI ya está cargado como *${enSucursal.nombre} ${enSucursal.apellido}* 😊
+
+Te paso al menú de alumno:
+
+${menuAlumno()}`;
+  }
+
+  const global = await buscarAlumnoPorDniGlobal(dniNorm);
+  if (global) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_NUEVO,
+      ultimoMenu: ESTADOS.MENU_NUEVO,
+      contexto: {},
+      mergeContexto: false,
+    });
+    return conNav(
+      `⚠️ Ese DNI (*${dniNorm}*) ya está registrado como *${global.nombre} ${global.apellido}*.
+
+No se puede volver a cargar. Si sos vos, usá la opción *“Ya soy alumno/a”* del menú principal.
+Si el DNI es de otra persona, pedile a la profesora que lo revise.`,
+      { atrasLabel: 'Menú nuevo' }
+    );
+  }
+
+  return null;
 }
 
 async function manejarMenuPrincipal(telefono, mensaje) {
@@ -754,23 +817,8 @@ async function manejarNuevoDni(telefono, mensaje, sesion) {
   const dni = normalizarDni(m);
   if (!dni || dni.length < 6) return respuestaDniInvalido();
 
-  const existente = await buscarAlumnoPorDni(dni);
-  if (existente) {
-    await actualizarSesion(telefono, {
-      estado: ESTADOS.MENU_ALUMNO,
-      ultimoMenu: ESTADOS.MENU_ALUMNO,
-      contexto: {
-        alumnoId: existente.id,
-        dni: normalizarDni(existente.dni) || dni,
-      },
-      mergeContexto: false,
-    });
-    return `Ya estás cargado/a como *${existente.nombre} ${existente.apellido}* 😊
-
-Te paso al menú de alumno:
-
-${menuAlumno()}`;
-  }
+  const avisoDni = await textoSiDniYaExiste(telefono, dni);
+  if (avisoDni) return avisoDni;
 
   const alta = contextoAlta(sesion.contexto);
   await actualizarSesion(telefono, {
@@ -1027,19 +1075,7 @@ async function manejarNuevoHorario(telefono, mensaje, sesion) {
     return respuestaRegistroOk(result);
   } catch (e) {
     console.error('[chatbot registro nuevo]', e);
-    if (e.status === 409 && e.alumno) {
-      await actualizarSesion(telefono, {
-        estado: ESTADOS.MENU_ALUMNO,
-        ultimoMenu: ESTADOS.MENU_ALUMNO,
-        contexto: {
-          alumnoId: e.alumno.id,
-          dni: normalizarDni(e.alumno.dni),
-        },
-        mergeContexto: false,
-      });
-      return `${e.message}\n\n${menuAlumno()}`;
-    }
-    return `${e.message || 'No se pudo completar el alta.'}\n\nProbá de nuevo con *3* en el menú nuevo, o *0* para salir.`;
+    return textoErrorRegistroAlta(telefono, e, '3');
   }
 }
 

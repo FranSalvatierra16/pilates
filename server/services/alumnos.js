@@ -87,6 +87,34 @@ export async function buscarAlumnoPorDni(dni) {
 }
 
 /**
+ * Busca cualquier alumno con ese DNI (cualquier sucursal, activo o no).
+ * Sirve para el alta: el constraint alumnos_dni_key es global.
+ */
+export async function buscarAlumnoPorDniGlobal(dni) {
+  const db = await getPool();
+  if (!db) return null;
+
+  const dniNorm = normalizarDni(dni);
+  if (!dniNorm || dniNorm.length < 6) return null;
+
+  const { rows } = await db.query(
+    `SELECT a.id, a.nombre, a.apellido, a.dni, a.telefono, a.fecha_vencimiento_cuota,
+            a.clases_para_recuperar, a.sucursal_id, a.activo,
+            s.nombre_lugar AS sucursal_nombre, s.usuario AS sucursal_usuario
+     FROM alumnos a
+     LEFT JOIN sucursales s ON s.id = a.sucursal_id
+     WHERE regexp_replace(COALESCE(a.dni, ''), '[^0-9]', '', 'g') = $1
+     ORDER BY
+       CASE WHEN a.activo IS DISTINCT FROM false THEN 0 ELSE 1 END,
+       a.created_at DESC
+     LIMIT 1`,
+    [dniNorm]
+  );
+
+  return rows[0] || null;
+}
+
+/**
  * Turnos fijos del alumno (día + hora + título), solo de su sucursal.
  */
 export async function horariosFijosAlumno(alumnoId) {

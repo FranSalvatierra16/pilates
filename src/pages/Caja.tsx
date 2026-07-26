@@ -179,6 +179,8 @@ const Caja = () => {
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModalGasto, setShowModalGasto] = useState(false);
+  const [showModalTodosGastos, setShowModalTodosGastos] = useState(false);
+  const [filtroTodosGastos, setFiltroTodosGastos] = useState('');
   const [formDataGasto, setFormDataGasto] = useState({
     descripcion: '',
     monto: '',
@@ -554,6 +556,37 @@ const Caja = () => {
   const ultimosGastos = gastosVisiblesVista
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
+
+  const todosGastosOrdenados = useMemo(
+    () =>
+      [...gastos].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ),
+    [gastos]
+  );
+
+  const todosGastosFiltrados = useMemo(() => {
+    const q = filtroTodosGastos.trim().toLowerCase();
+    if (!q) return todosGastosOrdenados;
+    return todosGastosOrdenados.filter((g) => {
+      const desc = String(g.descripcion || '').toLowerCase();
+      const metodo = g.metodoPago === 'efectivo' ? 'efectivo' : 'transferencia';
+      const monto = String(g.monto);
+      const fecha = formatDate(g.fecha);
+      return (
+        desc.includes(q) ||
+        metodo.includes(q) ||
+        monto.includes(q) ||
+        fecha.includes(q) ||
+        (g.profesorId ? 'sueldo' : '').includes(q)
+      );
+    });
+  }, [todosGastosOrdenados, filtroTodosGastos]);
+
+  const totalTodosGastosFiltrados = useMemo(
+    () => todosGastosFiltrados.reduce((s, g) => s + g.monto, 0),
+    [todosGastosFiltrados]
+  );
 
   const getAlumnoNombre = (pago: Pago): string => {
     if (pago.alumnoId == null) return pago.descripcion || 'Aporte a caja';
@@ -1162,13 +1195,26 @@ const Caja = () => {
               </p>
             )}
           </div>
-          <button
-            onClick={handleOpenModalGasto}
-            className="btn-primary flex items-center gap-2 text-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo Gasto
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroTodosGastos('');
+                setShowModalTodosGastos(true);
+              }}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              <Eye className="w-4 h-4" />
+              Ver todos
+            </button>
+            <button
+              onClick={handleOpenModalGasto}
+              className="btn-primary flex items-center gap-2 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Nuevo Gasto
+            </button>
+          </div>
         </div>
         {ultimosGastos.length === 0 ? (
           <div className="text-center py-8">
@@ -1342,6 +1388,167 @@ const Caja = () => {
           </div>
         )}
       </div>
+
+      {/* Modal: todos los gastos */}
+      {showModalTodosGastos && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="p-5 sm:p-6 border-b border-gray-200 flex justify-between items-start gap-3 sticky top-0 bg-white z-10">
+              <div className="min-w-0">
+                <h2 className="text-2xl font-bold text-gray-900">Todos los gastos</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {todosGastosFiltrados.length} de {todosGastosOrdenados.length} · Total:{' '}
+                  <span className="font-semibold text-red-600">
+                    - {formatCurrency(totalTodosGastosFiltrados)}
+                  </span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModalTodosGastos(false)}
+                className="text-gray-400 hover:text-gray-600 shrink-0"
+                aria-label="Cerrar"
+              >
+                <X className="w-7 h-7" />
+              </button>
+            </div>
+
+            <div className="px-5 sm:px-6 pt-4 pb-2">
+              <input
+                type="text"
+                value={filtroTodosGastos}
+                onChange={(e) => setFiltroTodosGastos(e.target.value)}
+                placeholder="Buscar por descripción, fecha, monto o método…"
+                className="input-field w-full"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 sm:px-6 pb-6">
+              {todosGastosFiltrados.length === 0 ? (
+                <p className="text-center text-gray-500 py-10">
+                  {todosGastosOrdenados.length === 0
+                    ? 'No hay gastos registrados.'
+                    : 'Ningún gasto coincide con la búsqueda.'}
+                </p>
+              ) : isMobile ? (
+                <div className="space-y-3 pt-2">
+                  {todosGastosFiltrados.map((gasto) => (
+                    <div key={gasto.id} className="p-4 border border-gray-200 rounded-xl bg-white">
+                      <div className="flex justify-between items-start gap-2 mb-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-gray-900 break-words">{gasto.descripcion}</p>
+                          <p className="text-sm text-gray-500 flex items-center gap-1 mt-0.5">
+                            <Calendar className="w-4 h-4 flex-shrink-0" />
+                            {formatDate(gasto.fecha)} {formatHora24(gasto.hora)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <span className="text-base font-semibold text-red-600">
+                            - {formatCurrency(gasto.monto)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarGasto(gasto.id)}
+                            className="p-2 rounded-lg text-red-600 hover:bg-red-50"
+                            title="Eliminar gasto"
+                            aria-label="Eliminar"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-gray-100 flex flex-wrap gap-1">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            gasto.metodoPago === 'efectivo'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {gasto.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                        </span>
+                        {gasto.profesorId && (
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                            Sueldo
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="overflow-x-auto pt-2">
+                  <table className="w-full min-w-[480px]">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                          Fecha
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                          Descripción
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                          Monto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                          Método
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 w-20">
+                          Eliminar
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {todosGastosFiltrados.map((gasto) => (
+                        <tr key={gasto.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                            {formatDate(gasto.fecha)} {formatHora24(gasto.hora)}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 break-words">
+                            {gasto.descripcion}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-red-600">
+                            - {formatCurrency(gasto.monto)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-wrap gap-1">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  gasto.metodoPago === 'efectivo'
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {gasto.metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
+                              </span>
+                              {gasto.profesorId && (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                                  Sueldo
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleEliminarGasto(gasto.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                              title="Eliminar gasto"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Gasto (z-[70] si viene desde detalle de cierre para quedar arriba del panel) */}
       {showModalGasto && (

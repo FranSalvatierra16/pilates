@@ -227,6 +227,10 @@ const Calendario = () => {
     mostrarLugares: true,
   });
   const [mensajeDisponibles, setMensajeDisponibles] = useState('');
+  /** Aviso interno: turnos del mensaje que tienen gente recuperando (no se incluye en WhatsApp). */
+  const [avisoRecuperacionesDisponibles, setAvisoRecuperacionesDisponibles] = useState<
+    { dia: string; hora: string; cantidad: number }[]
+  >([]);
   const [generandoDisponibles, setGenerandoDisponibles] = useState(false);
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
@@ -781,6 +785,7 @@ const Calendario = () => {
       mostrarLugares: true,
     });
     setMensajeDisponibles('');
+    setAvisoRecuperacionesDisponibles([]);
     setShowModalCompartirDisponibles(true);
   };
 
@@ -809,6 +814,9 @@ const Calendario = () => {
 
     setGenerandoDisponibles(true);
     try {
+      const diasCortos = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+      const avisosRecup: { dia: string; hora: string; cantidad: number }[] = [];
+
       const lineasPorDia = diasSeleccionados.map((diaSemana) => {
         const turnosDelDia = todasLasHoras
           .filter((hora) => !horaDesde || hora >= horaDesde)
@@ -817,10 +825,20 @@ const Calendario = () => {
           .map((hora) => getTurnoRepresentativoDelSlot(diaSemana, hora))
           .filter((turno): turno is Turno => turno !== undefined)
           .map((turno) => {
+            const alumnasSlot = getAlumnosDelSlot(diaSemana, turno.hora);
             // Para compartir disponibilidad "estable", los liberados semanales se consideran ocupados.
-            const alumnasFijasBase = getAlumnosDelSlot(diaSemana, turno.hora).filter((item) => !item.isRecuperacion).length;
+            // Las recuperaciones no restan del cupo publicado, pero avisamos si hay alguna.
+            const alumnasFijasBase = alumnasSlot.filter((item) => !item.isRecuperacion).length;
+            const recuperando = alumnasSlot.filter((item) => item.isRecuperacion).length;
             const cupo = cupoDelSlot(diaSemana, turno.hora);
             const disponibles = Math.max(0, cupo - alumnasFijasBase);
+            if (recuperando > 0 && disponibles > 0) {
+              avisosRecup.push({
+                dia: diasCortos[diaSemana],
+                hora: turno.hora,
+                cantidad: recuperando,
+              });
+            }
             return {
               hora: turno.hora,
               titulo: turno.titulo?.trim() || 'Clase',
@@ -835,7 +853,6 @@ const Calendario = () => {
         };
       }).filter((item) => item.turnos.length > 0);
 
-      const diasCortos = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
       const descripcionDias = diasSeleccionados.length === diasSemana.length
         ? 'Todos'
         : diasSeleccionados.map((dia) => diasCortos[dia]).join('/');
@@ -857,6 +874,7 @@ const Calendario = () => {
         : `${encabezado}\nSin lugares.`;
 
       setMensajeDisponibles(mensaje);
+      setAvisoRecuperacionesDisponibles(avisosRecup);
     } finally {
       setGenerandoDisponibles(false);
     }
@@ -3375,7 +3393,7 @@ const Calendario = () => {
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Compartir turnos disponibles</h2>
                 <p className="text-sm text-gray-600 mt-1">Elegí días y horario para armar un mensaje listo para WhatsApp.</p>
-                <p className="text-xs text-amber-700 mt-1">Las recuperaciones no se cuentan; los liberados semanales se consideran ocupados.</p>
+                <p className="text-xs text-amber-700 mt-1">Las recuperaciones no se cuentan en el mensaje; si hay alguna, te avisamos abajo (solo vos lo ves).</p>
               </div>
               <button
                 type="button"
@@ -3513,6 +3531,25 @@ const Calendario = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Vista previa</label>
+                {avisoRecuperacionesDisponibles.length > 0 && (
+                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+                    <p className="font-semibold">
+                      ⚠️ Solo para vos (no va en el mensaje de WhatsApp)
+                    </p>
+                    <p className="mt-1 text-amber-900/90">
+                      En estos turnos hay gente recuperando. El cupo publicado no las resta, pero el aula puede estar más llena:
+                    </p>
+                    <ul className="mt-2 space-y-0.5 list-disc list-inside text-amber-900">
+                      {avisoRecuperacionesDisponibles.map((a) => (
+                        <li key={`${a.dia}-${a.hora}`}>
+                          <span className="font-medium">{a.dia} {a.hora}</span>
+                          {' — '}
+                          {a.cantidad} recuperando
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <textarea
                   value={mensajeDisponibles}
                   readOnly

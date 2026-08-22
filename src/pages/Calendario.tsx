@@ -864,13 +864,6 @@ const Calendario = () => {
         };
       }).filter((item) => item.turnos.length > 0);
 
-      const descripcionDias = diasSeleccionados.length === diasSemana.length
-        ? 'Todos'
-        : diasSeleccionados.map((dia) => diasCortos[dia]).join('/');
-      const rangoHorario = horaDesde || horaHasta
-        ? ` ${horaDesde || '00:00'}-${horaHasta || '23:59'}`
-        : '';
-      const encabezado = `Disponibles ${descripcionDias}${rangoHorario}`;
       const cuerpo = lineasPorDia.map(({ diaSemana, turnos }) => {
         const detalleTurnos = turnos.map((turno) =>
           mostrarLugares
@@ -881,8 +874,8 @@ const Calendario = () => {
       });
 
       const mensaje = lineasPorDia.length > 0
-        ? [encabezado, ...cuerpo].join('\n').trim()
-        : `${encabezado}\nSin lugares.`;
+        ? cuerpo.join('\n').trim()
+        : 'Sin lugares.';
 
       setMensajeDisponibles(mensaje);
       setAvisoRecuperacionesDisponibles(avisosRecup);

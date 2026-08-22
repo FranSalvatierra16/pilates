@@ -229,7 +229,7 @@ const Calendario = () => {
   const [mensajeDisponibles, setMensajeDisponibles] = useState('');
   /** Aviso interno: turnos del mensaje que tienen gente recuperando (no se incluye en WhatsApp). */
   const [avisoRecuperacionesDisponibles, setAvisoRecuperacionesDisponibles] = useState<
-    { dia: string; hora: string; cantidad: number }[]
+    { dia: string; hora: string; cantidad: number; ocupacion: number; cupo: number; llena: boolean }[]
   >([]);
   const [generandoDisponibles, setGenerandoDisponibles] = useState(false);
   const [turnoDestino, setTurnoDestino] = useState<{ diaSemana: number; hora: string } | null>(null);
@@ -815,7 +815,14 @@ const Calendario = () => {
     setGenerandoDisponibles(true);
     try {
       const diasCortos = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
-      const avisosRecup: { dia: string; hora: string; cantidad: number }[] = [];
+      const avisosRecup: {
+        dia: string;
+        hora: string;
+        cantidad: number;
+        ocupacion: number;
+        cupo: number;
+        llena: boolean;
+      }[] = [];
 
       const lineasPorDia = diasSeleccionados.map((diaSemana) => {
         const turnosDelDia = todasLasHoras
@@ -831,12 +838,16 @@ const Calendario = () => {
             const alumnasFijasBase = alumnasSlot.filter((item) => !item.isRecuperacion).length;
             const recuperando = alumnasSlot.filter((item) => item.isRecuperacion).length;
             const cupo = cupoDelSlot(diaSemana, turno.hora);
+            const ocupacionReal = alumnasFijasBase + recuperando;
             const disponibles = Math.max(0, cupo - alumnasFijasBase);
             if (recuperando > 0 && disponibles > 0) {
               avisosRecup.push({
                 dia: diasCortos[diaSemana],
                 hora: turno.hora,
                 cantidad: recuperando,
+                ocupacion: ocupacionReal,
+                cupo,
+                llena: ocupacionReal >= cupo,
               });
             }
             return {
@@ -3532,19 +3543,45 @@ const Calendario = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Vista previa</label>
                 {avisoRecuperacionesDisponibles.length > 0 && (
-                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+                  <div
+                    className={`mb-3 rounded-lg border px-3 py-2.5 text-sm ${
+                      avisoRecuperacionesDisponibles.some((a) => a.llena)
+                        ? 'border-red-300 bg-red-50 text-red-950'
+                        : 'border-amber-200 bg-amber-50 text-amber-950'
+                    }`}
+                  >
                     <p className="font-semibold">
                       ⚠️ Solo para vos (no va en el mensaje de WhatsApp)
                     </p>
-                    <p className="mt-1 text-amber-900/90">
+                    <p className="mt-1 opacity-90">
                       En estos turnos hay gente recuperando. El cupo publicado no las resta, pero el aula puede estar más llena:
                     </p>
-                    <ul className="mt-2 space-y-0.5 list-disc list-inside text-amber-900">
+                    <ul className="mt-2 space-y-1">
                       {avisoRecuperacionesDisponibles.map((a) => (
-                        <li key={`${a.dia}-${a.hora}`}>
-                          <span className="font-medium">{a.dia} {a.hora}</span>
-                          {' — '}
-                          {a.cantidad} recuperando
+                        <li
+                          key={`${a.dia}-${a.hora}`}
+                          className={`flex flex-wrap items-center gap-2 rounded-md px-2 py-1.5 ${
+                            a.llena
+                              ? 'bg-red-100 border border-red-300 font-semibold'
+                              : 'bg-amber-100/60 border border-amber-200/80'
+                          }`}
+                        >
+                          <span className="font-medium">
+                            {a.dia} {a.hora}
+                          </span>
+                          <span
+                            className={`tabular-nums px-1.5 py-0.5 rounded text-xs ${
+                              a.llena
+                                ? 'bg-red-600 text-white'
+                                : 'bg-amber-200 text-amber-950'
+                            }`}
+                          >
+                            {a.ocupacion}/{a.cupo}
+                            {a.llena ? ' LLENA' : ''}
+                          </span>
+                          <span className="text-xs opacity-80">
+                            ({a.cantidad} recuperando)
+                          </span>
                         </li>
                       ))}
                     </ul>

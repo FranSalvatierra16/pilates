@@ -36,6 +36,43 @@ function soloDigitos(s: string): string {
   return String(s || '').replace(/\D/g, '');
 }
 
+/** DNI realista AR: exactamente 8 dígitos (acepta puntos/espacios). Sin DNI o con letras / otra cantidad = problema. */
+type EstadoDni = 'ok' | 'sin' | 'no-realista';
+
+function clasificarDni(dni: string | undefined | null): EstadoDni {
+  const raw = String(dni || '').trim();
+  if (!raw) return 'sin';
+  const digits = soloDigitos(raw);
+  if (/[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(raw) || digits.length !== 8) return 'no-realista';
+  return 'ok';
+}
+
+function etiquetaEstadoDni(estado: EstadoDni): string {
+  if (estado === 'sin') return 'Sin DNI';
+  if (estado === 'no-realista') return 'DNI inválido';
+  return '';
+}
+
+/** WhatsApp pidiendo el DNI (8 números). */
+function getWhatsAppPedirDni(alumno: Alumno, nombreLugar: string = ''): { url: string | null; tooltip: string } {
+  const nombre = [alumno.nombre, alumno.apellido].filter(Boolean).join(' ') || 'Hola';
+  const phone = normalizePhoneForWhatsApp(alumno.telefono || '');
+  const marca = nombreLugar.trim() || 'Savia';
+  const estado = clasificarDni(alumno.dni);
+  const motivo =
+    estado === 'sin'
+      ? 'no tenemos tu DNI cargado'
+      : 'el DNI que tenemos cargado no es válido (tiene que ser de 8 números)';
+  const text =
+    `Hola ${nombre}! Te escribimos de ${marca}. Para completar tu ficha necesitamos tu DNI (${motivo}). ` +
+    `¿Nos lo pasás por acá? Tiene que ser de 8 números, sin letras. ¡Gracias!`;
+  if (!phone) return { url: null, tooltip: 'Agregá teléfono al alumno para pedir el DNI por WhatsApp' };
+  return {
+    url: `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+    tooltip: 'Pedir DNI por WhatsApp',
+  };
+}
+
 const MAX_CREDITOS_RECUPERAR = 999;
 
 /** Lunes=0 … Domingo=6 (igual que Calendario) */
@@ -111,6 +148,7 @@ const Alumnos = () => {
   const [filtroVencimiento, setFiltroVencimiento] = useState<'todos' | 'mes-vencido' | 'vence-hoy'>('todos');
   const [filtroActividad, setFiltroActividad] = useState('todas');
   const [filtroPrueba, setFiltroPrueba] = useState<'todos' | 'aprueba' | 'noaprueba'>('todos');
+  const [filtroDni, setFiltroDni] = useState<'todos' | 'sin' | 'no-realista' | 'problemas'>('todos');
   const [ordenarPorVencimientoCercano, setOrdenarPorVencimientoCercano] = useState(false);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [actividades, setActividades] = useState<Actividad[]>([]);
@@ -249,8 +287,16 @@ const Alumnos = () => {
       filtrados = filtrados.filter((alumno) => alumno.aPrueba !== true);
     }
 
+    if (filtroDni === 'sin') {
+      filtrados = filtrados.filter((alumno) => clasificarDni(alumno.dni) === 'sin');
+    } else if (filtroDni === 'no-realista') {
+      filtrados = filtrados.filter((alumno) => clasificarDni(alumno.dni) === 'no-realista');
+    } else if (filtroDni === 'problemas') {
+      filtrados = filtrados.filter((alumno) => clasificarDni(alumno.dni) !== 'ok');
+    }
+
     setAlumnosFiltrados(filtrados);
-  }, [filtroBusqueda, filtroVencimiento, filtroActividad, filtroPrueba, alumnos]);
+  }, [filtroBusqueda, filtroVencimiento, filtroActividad, filtroPrueba, filtroDni, alumnos, mostrarInactivos]);
 
   // Ordenar por apellido y luego nombre (alfabético); si "por vencimiento cercano" está activo, filtrar y ordenar por fecha
   const alumnosAMostrar = useMemo(() => {

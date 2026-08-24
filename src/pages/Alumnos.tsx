@@ -497,14 +497,18 @@ const Alumnos = () => {
   };
 
   const handleDelete = async (id: string) => {
-    const ok = await toast.confirm('¿Desactivar alumno? No se borran pagos ni historial, solo deja de aparecer en la lista activa.', {
-      title: 'Desactivar alumno',
-      confirmText: 'Desactivar',
-    });
+    const ok = await toast.confirm(
+      '¿Desactivar alumno? No se borran pagos, historial ni sus clases fijas: sigue ocupando el lugar en el calendario (se ve como inactivo).',
+      {
+        title: 'Desactivar alumno',
+        confirmText: 'Desactivar',
+      }
+    );
     if (!ok) return;
     try {
       await storageHybrid.alumnos.delete(id);
       await loadAlumnos();
+      toast.success('Alumno desactivado. Sus clases fijas se conservan.');
     } catch (error) {
       console.error('Error deleting alumno:', error);
       toast.error('Error al eliminar el alumno. Por favor intentá nuevamente.');
@@ -515,6 +519,7 @@ const Alumnos = () => {
     try {
       await storageHybrid.alumnos.update(id, { activo: true });
       await loadAlumnos();
+      toast.success('Alumno reactivado. Sus clases fijas vuelven a estar activas.');
     } catch (error) {
       console.error('Error reactivando alumno:', error);
       toast.error('Error al reactivar el alumno. Por favor intentá nuevamente.');

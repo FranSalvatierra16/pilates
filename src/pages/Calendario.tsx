@@ -390,14 +390,15 @@ const Calendario = () => {
 
   const loadAlumnos = async () => {
     try {
-      const data = await storageHybrid.alumnos.getAll();
+      // Incluye inactivos: siguen en las clases fijas y ocupan cupo hasta que se los quite a mano.
+      const data = await storageHybrid.alumnos.getAll(true);
       setAlumnos(data);
-      setAlumnosFiltrados(data);
+      setAlumnosFiltrados(data.filter((a) => a.activo !== false));
     } catch (error) {
       console.error('Error loading alumnos:', error);
       const alumnosLocal = storage.alumnos.getAll();
       setAlumnos(alumnosLocal);
-      setAlumnosFiltrados(alumnosLocal);
+      setAlumnosFiltrados(alumnosLocal.filter((a) => a.activo !== false));
     }
   };
 
@@ -919,7 +920,7 @@ const Calendario = () => {
     setAlumnoSeleccionado('');
     setMarcarSoloRecuperacion(false);
     setFiltroBusqueda('');
-    setAlumnosFiltrados(alumnos);
+    setAlumnosFiltrados(alumnos.filter((a) => a.activo !== false));
     setShowModal(true);
   };
 
@@ -965,12 +966,13 @@ const Calendario = () => {
   };
 
   useEffect(() => {
-    // Filtrar alumnos cuando cambia el filtro de búsqueda
+    // Filtrar alumnos cuando cambia el filtro de búsqueda (solo activos para anotar)
+    const activos = alumnos.filter((a) => a.activo !== false);
     if (!filtroBusqueda.trim()) {
-      setAlumnosFiltrados(alumnos);
+      setAlumnosFiltrados(activos);
     } else {
       const busqueda = filtroBusqueda.toLowerCase().trim();
-      const filtrados = alumnos.filter(alumno => 
+      const filtrados = activos.filter(alumno => 
         alumno.nombre.toLowerCase().includes(busqueda) ||
         alumno.apellido.toLowerCase().includes(busqueda) ||
         alumno.dni.includes(busqueda) ||
@@ -1877,12 +1879,14 @@ const Calendario = () => {
     const turnoRefId = item.sourceTurnoId ?? turno.id;
 
     const estadoAsistencia = getEstadoAsistencia(turnoRefId, alumno.id);
+    const inactivo = alumno.activo === false;
     const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
-    const vencido = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
-    const porVencer = tieneFecha && !vencido && (isCuotaVenceHoy(alumno.fechaVencimientoCuota) || isCuotaPorVencer(alumno.fechaVencimientoCuota, 3));
-    // Recuperación: amarillo; liberó: slate; a prueba: violeta; luego cuota
+    const vencido = !inactivo && tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
+    const porVencer = !inactivo && tieneFecha && !vencido && (isCuotaVenceHoy(alumno.fechaVencimientoCuota) || isCuotaPorVencer(alumno.fechaVencimientoCuota, 3));
+    // Recuperación: amarillo; liberó: slate; a prueba: violeta; inactivo: gris; luego cuota
     let bgColor = 'bg-primary-100 text-primary-900';
     if (isRecuperacion) bgColor = 'bg-amber-200 text-amber-900 border-l-4 border-amber-500';
+    else if (inactivo) bgColor = 'bg-gray-200 text-gray-600 border-l-4 border-gray-400 opacity-80';
     else if (liberadaSemana) bgColor = 'bg-slate-200 text-slate-800 border-l-4 border-slate-500';
     else if (aPrueba) bgColor = 'bg-violet-200 text-violet-900 border-l-4 border-violet-600';
     else if (vencido) bgColor = 'bg-red-200 text-red-900 border-l-4 border-red-600';
@@ -1895,16 +1899,19 @@ const Calendario = () => {
         onClick={(e) => handleAbrirPopupAlumno(e, item, turno, diaSemana, hora)}
       >
         {isRecuperacion && <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 text-amber-700" aria-label="Recuperación" />}
-        {!isRecuperacion && aPrueba && (
+        {!isRecuperacion && aPrueba && !inactivo && (
           <Sparkles className="w-3.5 h-3.5 flex-shrink-0 text-violet-700" aria-label="A prueba" />
         )}
         <span
           className="truncate flex-1"
-          title={`${alumno.nombre} ${alumno.apellido}${isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : aPrueba ? ' (a prueba)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}
+          title={`${alumno.nombre} ${alumno.apellido}${inactivo ? ' (inactivo)' : isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : aPrueba ? ' (a prueba)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}
         >
           {alumno.nombre} {alumno.apellido}
         </span>
-        {liberadaSemana && !isRecuperacion && (
+        {inactivo && !isRecuperacion && (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">Inact.</span>
+        )}
+        {liberadaSemana && !isRecuperacion && !inactivo && (
           <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-700">Lib.</span>
         )}
         <div className="flex items-center gap-2 flex-shrink-0">

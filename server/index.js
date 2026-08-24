@@ -623,7 +623,10 @@ app.delete('/api/alumnos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
-    await db.query('UPDATE alumnos SET activo = false WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
+    const sid = req.user.sucursalId;
+    const alumnoId = req.params.id;
+    // Soft-delete: NO se sacan de turnos. Las clases fijas se conservan y siguen ocupando cupo.
+    await db.query('UPDATE alumnos SET activo = false WHERE id = $1 AND sucursal_id = $2', [alumnoId, sid]);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -3149,7 +3152,7 @@ async function ocupacionEfectivaSlotSemana(db, sucursalId, diaSemana, hora, sema
   if (candidateIds.size > 0) {
     const { rows: existRows } = await db.query(
       `SELECT id FROM alumnos
-        WHERE sucursal_id = $1 AND id = ANY($2::text[]) AND activo IS DISTINCT FROM false`,
+        WHERE sucursal_id = $1 AND id = ANY($2::text[])`,
       [sucursalId, [...candidateIds]]
     );
     validAlumnoSet = new Set(existRows.map((r) => String(r.id)));
@@ -3494,7 +3497,7 @@ app.get('/api/alumno-portal', async (req, res) => {
     const insByTurno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r]));
     const insDesdePorTurnoAlumno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r.semana_desde]));
     const { rows: validAlumnoRows } = await db.query(
-      'SELECT id FROM alumnos WHERE sucursal_id = $1 AND activo IS DISTINCT FROM false',
+      'SELECT id FROM alumnos WHERE sucursal_id = $1',
       [sid]
     );
     const validAlumnoSet = new Set(validAlumnoRows.map((row) => String(row.id)));

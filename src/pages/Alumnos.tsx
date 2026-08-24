@@ -695,18 +695,29 @@ const Alumnos = () => {
     }
   };
 
-  const handleCopiarLinkGeneralClases = (modo: 'fijo' | 'recuperar') => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    if (!sucursalId) {
+  const originPortal = typeof window !== 'undefined' ? window.location.origin : '';
+  const linkPortalRecuperar = sucursalId
+    ? `${originPortal}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=recuperar`
+    : '';
+
+  const handleCopiarLinkGeneralClases = (modo: 'fijo' | 'recuperar' = 'recuperar') => {
+    const url =
+      modo === 'recuperar'
+        ? linkPortalRecuperar
+        : sucursalId
+          ? `${originPortal}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=fijo`
+          : '';
+    if (!url) {
       toast.error('No se pudo detectar la sede. Cerrando sesión y volvé a entrar para que el link general incluya tu sede.');
       return;
     }
-    let url = `${origin}/mi-clase?sucursalId=${encodeURIComponent(sucursalId)}&modo=${modo}`;
     try {
       navigator.clipboard.writeText(url);
-      toast.success(modo === 'recuperar'
-        ? 'Link de Tu clase copiado. Cada persona ingresa su DNI y entra al formato de recuperación para anotarse.'
-        : 'Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.');
+      toast.success(
+        modo === 'recuperar'
+          ? 'Link para recuperar copiado. Cada persona ingresa su DNI y entra a recuperar.'
+          : 'Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.'
+      );
     } catch {
       prompt('Copiá este link:', url);
     }
@@ -785,10 +796,10 @@ const Alumnos = () => {
             type="button"
             onClick={() => handleCopiarLinkGeneralClases('recuperar')}
             className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
-            title="Link para que el alumno entre a Tu clase y se anote en formato recuperación"
+            title="Copiar link para recuperar"
           >
             <Link2 className="w-5 h-5" />
-            Tu clase
+            Link para recuperar
           </button>
           <button
             onClick={() => handleOpenModal()}
@@ -799,6 +810,32 @@ const Alumnos = () => {
           </button>
         </div>
       </div>
+
+      {linkPortalRecuperar ? (
+        <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Link para recuperar</p>
+          <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
+            <a
+              href={linkPortalRecuperar}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-w-0 flex-1 break-all text-sm font-medium text-violet-900 underline underline-offset-2 hover:text-violet-700"
+            >
+              {linkPortalRecuperar}
+            </a>
+            <button
+              type="button"
+              onClick={() => handleCopiarLinkGeneralClases('recuperar')}
+              className="btn-secondary whitespace-nowrap min-h-[40px] text-sm"
+            >
+              Copiar link
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-violet-800/80">
+            Compartilo con los alumnos. Entran con su DNI y solo ven la semana actual para recuperar.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mb-6">
         <div className="card border border-primary-100">

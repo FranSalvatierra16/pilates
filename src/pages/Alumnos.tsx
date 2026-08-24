@@ -320,6 +320,20 @@ const Alumnos = () => {
     });
   }, [alumnosFiltrados, ordenarPorVencimientoCercano]);
 
+  const conteoDni = useMemo(() => {
+    const base = mostrarInactivos
+      ? alumnos.filter((a) => a.activo === false)
+      : alumnos.filter((a) => a.activo !== false);
+    let sin = 0;
+    let noRealista = 0;
+    for (const a of base) {
+      const e = clasificarDni(a.dni);
+      if (e === 'sin') sin += 1;
+      else if (e === 'no-realista') noRealista += 1;
+    }
+    return { sin, noRealista, problemas: sin + noRealista };
+  }, [alumnos, mostrarInactivos]);
+
   const alumnoTieneAlgunPagoRegistrado = (alumno: Alumno) =>
     alumno.tienePagosHistorial === true || alumnoIdsConPago.has(alumno.id);
 
@@ -1012,6 +1026,54 @@ const Alumnos = () => {
             >
               Sin prueba
             </button>
+            <div className="w-full h-px bg-gray-200 my-1" />
+            <span className="text-sm text-gray-500 w-full sm:w-auto">DNI:</span>
+            <button
+              type="button"
+              onClick={() => setFiltroDni('todos')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroDni === 'todos'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroDni('problemas')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroDni === 'problemas'
+                  ? 'bg-orange-600 text-white'
+                  : 'bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100'
+              }`}
+              title="Sin DNI o DNI que no tiene exactamente 8 números"
+            >
+              Problemas ({conteoDni.problemas})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroDni('sin')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroDni === 'sin'
+                  ? 'bg-orange-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              Sin DNI ({conteoDni.sin})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroDni('no-realista')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtroDni === 'no-realista'
+                  ? 'bg-orange-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title="Tiene letras o no son exactamente 8 dígitos"
+            >
+              No realista ({conteoDni.noRealista})
+            </button>
             <button
               type="button"
               onClick={() => setOrdenarPorVencimientoCercano((v) => !v)}
@@ -1037,10 +1099,11 @@ const Alumnos = () => {
               {mostrarInactivos ? 'Ocultar inactivos' : 'Ver inactivos'}
             </button>
           </div>
-          {(filtroBusqueda || filtroVencimiento !== 'todos' || filtroActividad !== 'todas' || filtroPrueba !== 'todos' || ordenarPorVencimientoCercano) && (
+          {(filtroBusqueda || filtroVencimiento !== 'todos' || filtroActividad !== 'todas' || filtroPrueba !== 'todos' || filtroDni !== 'todos' || ordenarPorVencimientoCercano) && (
             <p className="text-sm text-gray-500 mt-2">
               Mostrando {alumnosAMostrar.length} de {alumnos.length} alumnos
               {ordenarPorVencimientoCercano && alumnosAMostrar.length < alumnosFiltrados.length && ' (sin vencidos)'}
+              {filtroDni !== 'todos' && ' · DNI realista = 8 números'}
             </p>
           )}
         </div>
@@ -1052,7 +1115,14 @@ const Alumnos = () => {
             No hay alumnos que coincidan con los filtros aplicados.
           </p>
           <button
-            onClick={() => { setFiltroBusqueda(''); setFiltroVencimiento('todos'); setFiltroActividad('todas'); setFiltroPrueba('todos'); setOrdenarPorVencimientoCercano(false); }}
+            onClick={() => {
+              setFiltroBusqueda('');
+              setFiltroVencimiento('todos');
+              setFiltroActividad('todas');
+              setFiltroPrueba('todos');
+              setFiltroDni('todos');
+              setOrdenarPorVencimientoCercano(false);
+            }}
             className="btn-secondary"
           >
             Ver todos
@@ -1090,7 +1160,38 @@ const Alumnos = () => {
                         </span>
                       )}
                     </h3>
-                    <p className="text-sm text-gray-500">DNI {alumno.dni}</p>
+                    <div
+                      className={`text-sm flex flex-wrap items-center gap-1.5 ${
+                        clasificarDni(alumno.dni) === 'ok' ? 'text-gray-500' : 'text-orange-700 font-medium'
+                      }`}
+                    >
+                      <span>DNI {alumno.dni?.trim() ? alumno.dni : '—'}</span>
+                      {clasificarDni(alumno.dni) !== 'ok' && (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-orange-100 text-orange-800">
+                          {etiquetaEstadoDni(clasificarDni(alumno.dni))}
+                        </span>
+                      )}
+                      {clasificarDni(alumno.dni) !== 'ok' && (() => {
+                        const waDni = getWhatsAppPedirDni(alumno, sucursalNombre || '');
+                        return waDni.url ? (
+                          <a
+                            href={waDni.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-md bg-emerald-600 text-white text-[11px] font-medium px-2 py-1 hover:bg-emerald-700 touch-manipulation"
+                            title={waDni.tooltip}
+                            aria-label="Pedir DNI por WhatsApp"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            WPP
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-gray-400" title={waDni.tooltip}>
+                            Sin tel.
+                          </span>
+                        );
+                      })()}
+                    </div>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
                     {(() => {
@@ -1226,7 +1327,33 @@ const Alumnos = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{alumno.dni}</td>
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm ${clasificarDni(alumno.dni) === 'ok' ? 'text-gray-500' : 'text-orange-700 font-medium'}`}>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span>{alumno.dni?.trim() ? alumno.dni : '—'}</span>
+                          {clasificarDni(alumno.dni) !== 'ok' && (
+                            <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase bg-orange-100 text-orange-800">
+                              {etiquetaEstadoDni(clasificarDni(alumno.dni))}
+                            </span>
+                          )}
+                          {clasificarDni(alumno.dni) !== 'ok' && (() => {
+                            const waDni = getWhatsAppPedirDni(alumno, sucursalNombre || '');
+                            return waDni.url ? (
+                              <a
+                                href={waDni.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 rounded-md bg-emerald-600 text-white text-[11px] font-medium px-2 py-1 hover:bg-emerald-700"
+                                title={waDni.tooltip}
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                                WPP
+                              </a>
+                            ) : (
+                              <span className="text-[11px] text-gray-400" title={waDni.tooltip}>Sin tel.</span>
+                            );
+                          })()}
+                        </div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{alumno.telefono}</div>
                         <div className="text-sm text-gray-500">{alumno.email}</div>

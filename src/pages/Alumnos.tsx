@@ -53,19 +53,14 @@ function etiquetaEstadoDni(estado: EstadoDni): string {
   return '';
 }
 
-/** WhatsApp pidiendo el DNI (8 números). */
+/** WhatsApp pidiendo el DNI. */
 function getWhatsAppPedirDni(alumno: Alumno, nombreLugar: string = ''): { url: string | null; tooltip: string } {
   const nombre = [alumno.nombre, alumno.apellido].filter(Boolean).join(' ') || 'Hola';
   const phone = normalizePhoneForWhatsApp(alumno.telefono || '');
   const marca = nombreLugar.trim() || 'Savia';
-  const estado = clasificarDni(alumno.dni);
-  const motivo =
-    estado === 'sin'
-      ? 'no tenemos tu DNI cargado'
-      : 'el DNI que tenemos cargado no es válido (tiene que ser de 8 números)';
   const text =
-    `Hola ${nombre}! Te escribimos de ${marca}. Para completar tu ficha necesitamos tu DNI (${motivo}). ` +
-    `¿Nos lo pasás por acá? Tiene que ser de 8 números, sin letras. ¡Gracias!`;
+    `Hola ${nombre}! Te escribimos de ${marca}. Para completar tu ficha necesitamos tu DNI. ¿Nos lo pasás por acá?\n` +
+    `Es para que funcione el link de recuperar clase. ¡Muchas gracias!`;
   if (!phone) return { url: null, tooltip: 'Agregá teléfono al alumno para pedir el DNI por WhatsApp' };
   return {
     url: `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,

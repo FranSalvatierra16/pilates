@@ -1012,6 +1012,19 @@ const Calendario = () => {
           toast.warning('Esta clase ya tiene el cupo completo.');
           return;
         }
+        const fechaCuota = (alumnoActual.fechaVencimientoCuota || '').trim();
+        if (fechaCuota && isCuotaVencida(fechaCuota)) {
+          const okCuota = await toast.confirm(
+            `${alumnoActual.nombre} ${alumnoActual.apellido} tiene la cuota vencida (${formatDate(fechaCuota)}). ¿La anotás igual para recuperar?`,
+            {
+              title: 'Cuota vencida',
+              confirmText: 'Anotar igual',
+              cancelText: 'Cancelar',
+              tone: 'danger',
+            }
+          );
+          if (!okCuota) return;
+        }
         const actividad = getActividadDelAlumno(alumnoSeleccionado);
         const limiteSemanal = actividad?.clasesPorSemana ?? null;
         const clasesUsadasSemana = getClasesUsadasSemanaAlumno(alumnoSeleccionado);
@@ -3102,6 +3115,8 @@ const Calendario = () => {
                   const alum = alumnos.find((a) => a.id === alumnoSeleccionado);
                   if (!alum) return null;
                   const n = alum.clasesParaRecuperar || 0;
+                  const fechaCuota = (alum.fechaVencimientoCuota || '').trim();
+                  const cuotaVencidaAlum = !!fechaCuota && isCuotaVencida(fechaCuota);
                   return (
                     <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-3">
                       <div className="flex items-center justify-between gap-3">
@@ -3131,6 +3146,11 @@ const Calendario = () => {
                           + Agregar 1
                         </button>
                       </div>
+                      {cuotaVencidaAlum && (
+                        <p className="text-xs text-red-700 mt-2">
+                          Cuota vencida ({formatDate(fechaCuota)}). La alumna no puede recuperar sola hasta regularizar; desde acá podés anotar igual.
+                        </p>
+                      )}
                       {n <= 0 && (
                         <p className="text-xs text-amber-800 mt-2">
                           No tiene clases para recuperar. Podés sumarle 1 acá y después anotarla.

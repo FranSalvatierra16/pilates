@@ -53,7 +53,7 @@ import {
   replySiDuplicado,
   reclamarEstado,
 } from './sesiones.js';
-import { buscarAlumnoPorDni, buscarAlumnoPorDniGlobal, horariosFijosAlumno, normalizarDni, getSucursalChatbot } from '../services/alumnos.js';
+import { buscarAlumnoPorDni, buscarAlumnoPorDniGlobal, horariosFijosAlumno, normalizarDni, getSucursalChatbot, cuotaVencidaAlumno, mensajeCuotaVencidaRecuperar } from '../services/alumnos.js';
 import {
   listarClasesParaLiberar,
   liberarClaseFija,
@@ -437,6 +437,18 @@ async function iniciarLiberarClases(telefono, alumno) {
 }
 
 async function iniciarRecuperarClases(telefono, alumno) {
+  if (cuotaVencidaAlumno(alumno)) {
+    await actualizarSesion(telefono, {
+      estado: ESTADOS.MENU_ALUMNO,
+      ultimoMenu: ESTADOS.MENU_ALUMNO,
+      contexto: {
+        alumnoId: alumno.id,
+        dni: normalizarDni(alumno.dni),
+      },
+      mergeContexto: false,
+    });
+    return conNav(mensajeCuotaVencidaRecuperar());
+  }
   const { opciones, creditos } = await listarClasesParaRecuperar(alumno);
   const { texto, opciones: recuperables, page } = listaRecuperarClases(alumno, opciones, creditos, 0);
 

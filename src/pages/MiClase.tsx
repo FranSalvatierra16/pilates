@@ -1,16 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut, ArrowLeft, RefreshCw, Info } from 'lucide-react';
+import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
-const useApi = () => {
-  if (import.meta.env.VITE_USE_API === 'false') return false;
-  if (import.meta.env.VITE_USE_API === 'true') return true;
-  return import.meta.env.PROD;
-};
 
 type TurnoPortal = {
   id: string;
@@ -150,57 +145,11 @@ function elegirTurnoRepresentativo(actual: TurnoPortal, candidate: TurnoPortal):
   return actual;
 }
 
-function urlBase64ToUint8Array(base64: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
-  const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(b64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
-}
-
-function isIosDevice(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return (
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-  );
-}
-
-function isStandalonePwa(): boolean {
-  if (typeof window === 'undefined') return false;
-  const nav = window.navigator as Navigator & { standalone?: boolean };
-  return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
-}
-
 const fetchWithTimeout = (url: string, options: RequestInit = {}, ms = 15000): Promise<Response> => {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
   return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(id));
 };
-
-async function asegurarServiceWorker(): Promise<ServiceWorkerRegistration> {
-  if (!('serviceWorker' in navigator)) {
-    throw new Error('Este navegador no soporta service workers.');
-  }
-  // Si ya hay uno activo, usarlo; si no, registrar el de la PWA.
-  try {
-    const existing = await navigator.serviceWorker.getRegistration();
-    if (existing?.active) return existing;
-  } catch {
-    // sigue al register
-  }
-  try {
-    await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-  } catch {
-    // VitePWA puede registrar con otro nombre; igual esperamos ready
-  }
-  const readyPromise = navigator.serviceWorker.ready;
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('timeout-sw')), 20000)
-  );
-  return Promise.race([readyPromise, timeoutPromise]);
-}
 
 function ajustarStatsRecuperacion(
   stats: NonNullable<PortalData['recuperacionStats']>,
@@ -338,8 +287,6 @@ const MiClase = () => {
   const [dniInput, setDniInput] = useState('');
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
   const [enviandoDni, setEnviandoDni] = useState(false);
-  const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
-  const [pushMessage, setPushMessage] = useState('');
   const [cargandoSemana, setCargandoSemana] = useState(false);
   const notifPromptHandledRef = useRef(false);
 
@@ -483,10 +430,15 @@ const MiClase = () => {
 
   const inscribir = async (turnoId: string) => {
     if (!portalAuth || !data) return;
+    const esRecuperar = data.modo === 'recuperar';
+    const fechaCuota = (data.alumno.fechaVencimientoCuota || '').trim();
+    if (esRecuperar && fechaCuota && isCuotaVencida(fechaCuota)) {
+      toast.error('Tu cuota está vencida. Regularizá el pago para poder recuperar una clase.');
+      return;
+    }
     setActioning(turnoId);
     try {
       const base = getBase();
-      const esRecuperar = data.modo === 'recuperar';
       const semana = data.semanaVista || getSemanaActual();
       const body = portalAuth.type === 'token'
         ? { token: portalAuth.token, turnoId, ...(esRecuperar && { semana }) }
@@ -631,116 +583,6 @@ const MiClase = () => {
       void recargarRecuperar({ silencioso: true });
     } finally {
       setActioning(null);
-    }
-  };
-
-  const activarPushPortal = async () => {
-    if (!portalAuth) return;
-    const ios = isIosDevice();
-    const standalone = isStandalonePwa();
-
-    if (!useApi()) {
-      setPushStatus('unsupported');
-      setPushMessage('Las notificaciones requieren conexión al servidor.');
-      return;
-    }
-    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setPushStatus('unsupported');
-      setPushMessage(
-        ios
-          ? 'En iPhone: tocá Compartir → “Agregar a pantalla de inicio”, abrí la app desde el ícono y volvé a activar.'
-          : 'Tu navegador no soporta notificaciones push. Probá Chrome o Edge, o instalá la app en el celular.'
-      );
-      return;
-    }
-    if (ios && !standalone) {
-      setPushStatus('unsupported');
-      setPushMessage(
-        'En iPhone las notificaciones solo funcionan si instalás la app: Compartir → “Agregar a pantalla de inicio”, y después abrila desde el ícono (no desde Safari ni WhatsApp).'
-      );
-      return;
-    }
-
-    setPushStatus('loading');
-    setPushMessage('');
-    try {
-      if (Notification.permission === 'denied') {
-        setPushStatus('denied');
-        setPushMessage('Tenés bloqueadas las notificaciones. Activálas desde la configuración del celular o del navegador.');
-        return;
-      }
-      const base = getBase();
-      const vapidRes = await fetchWithTimeout(`${base}/api/alumno-portal/push-vapid-public`, {}, 10000);
-      if (!vapidRes.ok) {
-        setPushStatus('error');
-        setPushMessage('El servidor no tiene notificaciones configuradas. Pedile al estudio que las active.');
-        return;
-      }
-      const { vapidPublicKey } = await vapidRes.json();
-      if (!vapidPublicKey) {
-        setPushStatus('error');
-        setPushMessage('Faltan las claves de notificación en el servidor.');
-        return;
-      }
-      const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
-      if (permission !== 'granted') {
-        setPushStatus('denied');
-        setPushMessage('Necesitás aceptar el permiso para recibir avisos.');
-        return;
-      }
-
-      const reg = await asegurarServiceWorker();
-      if (!reg?.pushManager) {
-        setPushStatus('unsupported');
-        setPushMessage(
-          ios
-            ? 'En iPhone tenés que abrir la app instalada (ícono en el inicio), no desde el navegador.'
-            : 'No se pudo preparar el servicio de notificaciones en este dispositivo.'
-        );
-        return;
-      }
-
-      const existingSub = await reg.pushManager.getSubscription();
-      if (existingSub) {
-        try {
-          await existingSub.unsubscribe();
-        } catch {
-          // ignore
-        }
-      }
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
-      });
-      const body = portalAuth.type === 'token'
-        ? { token: portalAuth.token, subscription: sub.toJSON() }
-        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId, subscription: sub.toJSON() };
-      const subscribeRes = await fetchWithTimeout(`${base}/api/alumno-portal/push-subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }, 15000);
-      const subscribeJson = await subscribeRes.json().catch(() => ({}));
-      if (!subscribeRes.ok) {
-        setPushStatus('error');
-        setPushMessage(subscribeJson.error || 'No se pudo registrar este dispositivo para avisos.');
-        return;
-      }
-      setPushStatus('ok');
-      setPushMessage('Listo: te tendría que llegar una notificación de prueba en unos segundos.');
-    } catch (e) {
-      setPushStatus('error');
-      if (e instanceof Error && e.message === 'timeout-sw') {
-        setPushMessage(
-          ios
-            ? 'Tardó demasiado. En iPhone: agregá la app al inicio y abrila desde el ícono, no desde Safari.'
-            : 'Tardó demasiado al preparar las notificaciones. Cerrá y abrí de nuevo la página e intentá otra vez.'
-        );
-      } else if (e instanceof Error && (e.name === 'AbortError' || /aborted/i.test(e.message))) {
-        setPushMessage('La conexión tardó demasiado. Revisá internet e intentá de nuevo.');
-      } else {
-        setPushMessage(e instanceof Error ? e.message : 'No se pudo activar las notificaciones.');
-      }
     }
   };
 
@@ -929,8 +771,6 @@ const MiClase = () => {
     setError('');
     setSucursales([]);
     setActioning(null);
-    setPushStatus('idle');
-    setPushMessage('');
     setDniInput('');
     setFiltroDia(null);
     setFiltroHorario('todos');
@@ -942,51 +782,6 @@ const MiClase = () => {
     if (sucursalPortal.trim()) params.set('sucursalId', sucursalPortal.trim());
     navigate(`/mi-clase?${params.toString()}`, { replace: true });
   };
-
-  const bloqueAvisosPush = (
-    <div className="rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 mb-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
-            <Bell className="w-4 h-4 flex-shrink-0" />
-            Avisos de cupos liberados
-          </p>
-          <p className="text-xs text-primary-700 mt-1">
-            Activá las notificaciones para enterarte cuando se libere un lugar esta semana.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void activarPushPortal()}
-          disabled={pushStatus === 'loading'}
-          className="px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 flex-shrink-0"
-        >
-          {pushStatus === 'loading' ? 'Activando...' : pushStatus === 'ok' ? 'Activadas' : 'Activar'}
-        </button>
-      </div>
-      {isIosDevice() && !isStandalonePwa() && (
-        <div className="mt-3 flex gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-          <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <p>
-            En <strong>iPhone</strong>: Compartir → <strong>Agregar a pantalla de inicio</strong>, abrí la app desde el ícono y recién ahí tocá Activar.
-          </p>
-        </div>
-      )}
-      {pushMessage && (
-        <p
-          className={`text-xs mt-2 ${
-            pushStatus === 'ok'
-              ? 'text-green-700'
-              : pushStatus === 'error' || pushStatus === 'denied' || pushStatus === 'unsupported'
-                ? 'text-amber-800'
-                : 'text-primary-700'
-          }`}
-        >
-          {pushMessage}
-        </p>
-      )}
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-gray-100 pb-safe">
@@ -1044,8 +839,6 @@ const MiClase = () => {
 
         {seccionActiva === 'clases' ? (
           <>
-            {esRecuperar && bloqueAvisosPush}
-
             {esRecuperar && (
               <div className="mb-4 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -1073,6 +866,15 @@ const MiClase = () => {
                     {data.alumno.clasesParaRecuperar || 0}
                   </p>
                 </div>
+                {cuotaVencida && (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-red-800">Cuota vencida</p>
+                    <p className="text-xs text-red-700 mt-1 leading-snug">
+                      Regularizá el pago para poder recuperar una clase.
+                      {tieneFechaVencimiento ? ` Venció el ${formatDate(fechaVencimiento)}.` : ''}
+                    </p>
+                  </div>
+                )}
                 <ol className="mt-3 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
                   <li className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2">
                     <span className="font-semibold text-violet-800">1.</span> Liberá tu clase fija si no vas
@@ -1181,6 +983,11 @@ const MiClase = () => {
                   <p className="text-xs text-gray-500 mt-1">
                     Filtrá por día u horario. Tocá <strong>Recuperar acá</strong> en el que quieras.
                   </p>
+                  {cuotaVencida && (
+                    <p className="text-xs text-red-700 mt-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 leading-snug">
+                      No podés recuperar: tu cuota está vencida. Regularizá el pago primero.
+                    </p>
+                  )}
                   {hayPoliticaAnticipacion && (
                     <p className="text-xs text-gray-600 mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 leading-snug">
                       Liberar: <strong>{textoPlazoMinutos(mLib)}</strong> antes · Anotarse:{' '}
@@ -1403,7 +1210,7 @@ const MiClase = () => {
                               <button
                                 type="button"
                                 onClick={() => inscribir(t.id)}
-                                disabled={!!actioning || t.inscriptos >= t.cupo}
+                                disabled={!!actioning || t.inscriptos >= t.cupo || (esRecuperar && cuotaVencida)}
                                 className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation ${
                                   esRecuperar
                                     ? 'bg-violet-600 text-white hover:bg-violet-700'
@@ -1411,7 +1218,9 @@ const MiClase = () => {
                                 }`}
                               >
                                 {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                                {esRecuperar ? (llena ? 'Llena' : 'Recuperar acá') : 'Sumarme'}
+                                {esRecuperar
+                                  ? (cuotaVencida ? 'Cuota vencida' : llena ? 'Llena' : 'Recuperar acá')
+                                  : 'Sumarme'}
                               </button>
                             )}
                           </div>
@@ -1467,9 +1276,6 @@ const MiClase = () => {
                 </div>
               </div>
 
-              <div className="mt-4">
-                {bloqueAvisosPush}
-              </div>
             </div>
 
             <div className="bg-white rounded-xl shadow p-4 mb-4">

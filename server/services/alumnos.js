@@ -6,6 +6,52 @@ export function normalizarDni(dni) {
   return String(dni || '').replace(/\D/g, '');
 }
 
+/**
+ * Fecha de vencimiento de cuota como YYYY-MM-DD (o '').
+ */
+export function fechaCuotaAlumno(alumno) {
+  const raw = alumno?.fecha_vencimiento_cuota ?? alumno?.fechaVencimientoCuota ?? '';
+  if (!raw) return '';
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    return raw.toISOString().slice(0, 10);
+  }
+  return String(raw).slice(0, 10);
+}
+
+/**
+ * true si la cuota está vencida (fecha estrictamente anterior a hoy, TZ Argentina).
+ * Sin fecha cargada → no se considera vencida (no bloquea).
+ */
+export function cuotaVencidaAlumno(alumno) {
+  const f = fechaCuotaAlumno(alumno);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return false;
+  try {
+    const hoy = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' })
+    );
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, '0');
+    const d = String(hoy.getDate()).padStart(2, '0');
+    const hoyStr = `${y}-${m}-${d}`;
+    return f < hoyStr;
+  } catch {
+    return false;
+  }
+}
+
+export function mensajeCuotaVencidaRecuperar() {
+  return 'Tu cuota está vencida. Regularizá el pago para poder recuperar una clase.';
+}
+
+/**
+ * Lanza error 400 si la cuota está vencida (recuperar requiere cuota al día).
+ */
+export function assertCuotaAlDiaParaRecuperar(alumno) {
+  if (cuotaVencidaAlumno(alumno)) {
+    throw Object.assign(new Error(mensajeCuotaVencidaRecuperar()), { status: 400 });
+  }
+}
+
 let sucursalChatbotCache = null;
 
 /**

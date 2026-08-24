@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import chatbotRouter from './chatbot/index.js';  
 import { getPool } from "./db/index.js";
+import { assertCuotaAlDiaParaRecuperar } from './services/alumnos.js';
 
 
 const JWT_SECRET = process.env.JWT_SECRET || 'savia-pilates-secret-cambiar-en-produccion';
@@ -3721,6 +3722,11 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
     });
     if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
     const alumno = resolved.alumno;
+    try {
+      assertCuotaAlDiaParaRecuperar(alumno);
+    } catch (e) {
+      return res.status(e.status || 400).json({ error: e.message || 'Cuota vencida.' });
+    }
     let semanaVista = (semana || '').toString().trim() || getSemanaActual();
     const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });

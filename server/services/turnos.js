@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getPool } from '../db/index.js';
-import { getSucursalChatbot } from './alumnos.js';
+import { getSucursalChatbot, assertCuotaAlDiaParaRecuperar } from './alumnos.js';
 import { avisarProfesorChatbot } from './whatsapp.js';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -595,6 +595,7 @@ export async function anotarRecuperacion(alumno, turnoId, semana) {
   if (semanaVista !== getSemanaActual()) {
     throw Object.assign(new Error('Solo podés recuperar en la semana actual.'), { status: 400 });
   }
+  assertCuotaAlDiaParaRecuperar(alumno);
   const creditos = Number(alumno.clases_para_recuperar) || 0;
   if (creditos <= 0) {
     throw Object.assign(new Error('No te quedan créditos para recuperar. Primero liberá una clase fija.'), {

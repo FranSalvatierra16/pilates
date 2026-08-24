@@ -56,6 +56,7 @@ type PortalData = {
     createdAt: string;
   }[];
   sucursalId?: string;
+  sucursalNombre?: string;
   horarios?: HorariosPortal;
   modo?: 'fijo' | 'recuperar';
   semanaVista?: string;
@@ -288,7 +289,39 @@ const MiClase = () => {
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
   const [enviandoDni, setEnviandoDni] = useState(false);
   const [cargandoSemana, setCargandoSemana] = useState(false);
+  const [brandNombre, setBrandNombre] = useState('');
+  const [brandLogoUrl, setBrandLogoUrl] = useState('');
   const notifPromptHandledRef = useRef(false);
+
+  useEffect(() => {
+    const sid = (data?.sucursalId || sucursalIdFromUrl || '').trim();
+    const token = tokenFromUrl.trim();
+    if (!sid && !token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const base = getBase();
+        const q = sid
+          ? `sucursalId=${encodeURIComponent(sid)}`
+          : `token=${encodeURIComponent(token)}`;
+        const res = await fetch(`${base}/api/public/sucursal-brand?${q}`);
+        if (!res.ok || cancelled) return;
+        const json = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (typeof json.nombreLugar === 'string') setBrandNombre(json.nombreLugar);
+        if (typeof json.logoUrl === 'string') setBrandLogoUrl(json.logoUrl);
+      } catch {
+        /* brand opcional */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [data?.sucursalId, sucursalIdFromUrl, tokenFromUrl]);
+
+  const nombreParaMarca = (data?.sucursalNombre || brandNombre || '').trim();
+  const brandConocido = nombreParaMarca.length > 0;
+  const isSavia = brandConocido ? /savia/i.test(nombreParaMarca) : true;
+  const logoSrc = isSavia ? '/savia.png' : (brandLogoUrl || '/fitgest.png');
+  const marcaTitulo = isSavia ? 'Savia' : (nombreParaMarca || 'Tu clase');
 
   useEffect(() => {
     if (tokenFromUrl.trim()) {
@@ -337,14 +370,18 @@ const MiClase = () => {
     if (tokenFromUrl.trim()) params.set('token', tokenFromUrl.trim());
     else if (sid.trim()) params.set('sucursalId', sid.trim());
     const manifestHref = `/api/manifest.webmanifest?${params.toString()}`;
-    const iconHref = sid.trim() ? `/api/public/sucursal-logo/${encodeURIComponent(sid.trim())}` : '/fitgest.png';
+    const iconHref = sid.trim()
+      ? `/api/public/sucursal-logo/${encodeURIComponent(sid.trim())}`
+      : isSavia
+        ? '/savia.png'
+        : '/fitgest.png';
 
     if (manifestLink) manifestLink.href = manifestHref;
     if (appleTouch) appleTouch.href = iconHref;
     if (favicon) favicon.href = iconHref;
-    if (appleTitle) appleTitle.content = 'Tu clase';
-    document.title = 'Tu clase';
-  }, [data?.sucursalId, modoFromUrl, sucursalIdFromUrl, tokenFromUrl]);
+    if (appleTitle) appleTitle.content = isSavia ? 'Savia Pilates' : 'Tu clase';
+    document.title = isSavia ? 'Savia Pilates' : 'Tu clase';
+  }, [data?.sucursalId, modoFromUrl, sucursalIdFromUrl, tokenFromUrl, isSavia]);
 
   const cargarPorDni = async (dni: string, sucursalIdElegida?: string) => {
     setEnviandoDni(true);
@@ -588,46 +625,101 @@ const MiClase = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-10 h-10 text-primary-600 animate-spin" />
-          <p className="text-gray-600">Cargando tus clases...</p>
+      <div
+        className={`min-h-screen flex items-center justify-center p-4 ${
+          isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
+        }`}
+      >
+        <div className="flex flex-col items-center gap-4 animate-savia-soft-in">
+          {isSavia ? (
+            <img
+              src="/savia.png"
+              alt="Savia Pilates"
+              className="w-24 h-24 rounded-full object-cover shadow-md ring-2 ring-savia-sandSoft animate-savia-breathe"
+            />
+          ) : null}
+          <Loader2
+            className={`w-9 h-9 animate-spin ${isSavia ? 'text-savia-terra' : 'text-primary-600'}`}
+          />
+          <p className={`text-sm ${isSavia ? 'text-savia-muted' : 'text-gray-600'}`}>
+            Cargando tus clases...
+          </p>
         </div>
       </div>
     );
   }
 
   if (!data) {
-    const tituloPortal = modoFromUrl === 'recuperar' ? 'Tu clase' : 'Mis clases';
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
-        <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
+      <div
+        className={`min-h-screen flex items-center justify-center p-4 ${
+          isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
+        }`}
+      >
+        <div
+          className={`max-w-md w-full animate-savia-fade-up ${
+            isSavia
+              ? 'rounded-3xl border border-savia-sandSoft bg-white/85 backdrop-blur-sm p-7 shadow-[0_12px_40px_rgba(143,102,76,0.12)]'
+              : 'bg-white rounded-2xl shadow-lg p-6'
+          }`}
+        >
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 mb-4"
+            className={`inline-flex items-center gap-1.5 text-sm font-medium mb-5 ${
+              isSavia ? 'text-savia-muted hover:text-savia-ink' : 'text-gray-600 hover:text-gray-900'
+            }`}
           >
             <ArrowLeft className="w-4 h-4" />
             Volver
           </button>
-          <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
-            <Calendar className="w-5 h-5 text-primary-600" />
-            {tituloPortal}
-          </h1>
-          <p className="text-sm text-gray-600 mb-2">
-            {modoFromUrl === 'recuperar'
-              ? 'Ingresá tu DNI para recuperar una clase de esta semana.'
-              : 'Ingresá tu DNI para ver tus clases, sumarte o liberar cupo.'}
-          </p>
+
+          {isSavia ? (
+            <div className="text-center mb-6">
+              <img
+                src="/savia.png"
+                alt="Savia Pilates"
+                className="mx-auto w-28 h-28 rounded-full object-cover shadow-lg ring-4 ring-savia-sandSoft/80 animate-savia-soft-in animate-savia-breathe"
+              />
+              <h1 className="mt-4 font-saviaDisplay text-4xl tracking-[0.18em] text-savia-ink uppercase">
+                Savia
+              </h1>
+              <p className="mt-1 font-saviaDisplay text-xl text-savia-terra italic">Pilates</p>
+              <p className="mt-3 text-sm text-savia-muted leading-relaxed">
+                {modoFromUrl === 'recuperar'
+                  ? 'Ingresá tu DNI para recuperar una clase de esta semana.'
+                  : 'Ingresá tu DNI para ver tus clases, sumarte o liberar cupo.'}
+              </p>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-2">
+                <Calendar className="w-5 h-5 text-primary-600" />
+                {modoFromUrl === 'recuperar' ? 'Tu clase' : 'Mis clases'}
+              </h1>
+              <p className="text-sm text-gray-600 mb-2">
+                {modoFromUrl === 'recuperar'
+                  ? 'Ingresá tu DNI para recuperar una clase de esta semana.'
+                  : 'Ingresá tu DNI para ver tus clases, sumarte o liberar cupo.'}
+              </p>
+            </>
+          )}
+
           {error && (
             <div className="mb-3">
-              <p className="text-red-600 text-sm">{error}</p>
-              {tokenFromUrl && <p className="text-gray-500 text-xs mt-1">Podés ingresar tu DNI acá o pedir un link nuevo al estudio.</p>}
+              <p className={`text-sm ${isSavia ? 'text-red-700' : 'text-red-600'}`}>{error}</p>
+              {tokenFromUrl && (
+                <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Podés ingresar tu DNI acá o pedir un link nuevo al estudio.
+                </p>
+              )}
             </div>
           )}
           {sucursales.length > 0 ? (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-700">Elegí tu sede:</p>
+              <p className={`text-sm font-medium ${isSavia ? 'text-savia-ink' : 'text-gray-700'}`}>
+                Elegí tu sede:
+              </p>
               <div className="flex flex-col gap-1.5">
                 {sucursales.map((s) => (
                   <button
@@ -635,7 +727,11 @@ const MiClase = () => {
                     type="button"
                     onClick={() => cargarPorDni(dniInput, s.id)}
                     disabled={enviandoDni}
-                    className="px-4 py-2 rounded-lg bg-primary-100 text-primary-800 hover:bg-primary-200 font-medium text-sm disabled:opacity-50"
+                    className={`px-4 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 ${
+                      isSavia
+                        ? 'bg-savia-oliveSoft text-savia-oliveDeep hover:bg-savia-sandSoft border border-savia-sand'
+                        : 'bg-primary-100 text-primary-800 hover:bg-primary-200'
+                    }`}
                   >
                     {s.nombre_lugar}
                   </button>
@@ -650,29 +746,45 @@ const MiClase = () => {
               }}
               className="space-y-3"
             >
-              <label className="block text-sm font-medium text-gray-700">DNI</label>
+              <label
+                className={`block text-sm font-medium ${isSavia ? 'text-savia-ink' : 'text-gray-700'}`}
+              >
+                DNI
+              </label>
               <input
                 type="text"
                 inputMode="numeric"
                 placeholder="Ej. 12345678"
                 value={dniInput}
                 onChange={(e) => setDniInput(e.target.value.replace(/\D/g, ''))}
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:outline-none ${
+                  isSavia
+                    ? 'border-savia-sand bg-savia-cream/60 text-savia-ink placeholder:text-savia-muted focus:ring-savia-terra/40 focus:border-savia-terra'
+                    : 'border-gray-300 focus:ring-primary-500 focus:border-primary-500'
+                }`}
                 autoFocus
               />
               <button
                 type="submit"
                 disabled={enviandoDni || !dniInput.trim()}
-                className="w-full py-3 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`w-full py-3.5 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${
+                  isSavia
+                    ? 'bg-savia-terra text-white hover:bg-savia-terraDeep shadow-sm'
+                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                }`}
               >
                 {enviandoDni ? 'Cargando...' : 'Entrar'}
               </button>
               {!sucursalIdFromUrl.trim() && (
-                <p className="text-xs text-gray-500">Si tu DNI aparece en más de una sede, te vamos a pedir que elijas cuál corresponde.</p>
+                <p className={`text-xs ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Si tu DNI aparece en más de una sede, te vamos a pedir que elijas cuál corresponde.
+                </p>
               )}
             </form>
           )}
-          <p className="text-xs text-gray-500 mt-4">Si tenés un link con token, usalo directamente desde ahí.</p>
+          <p className={`text-xs mt-4 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+            Si tenés un link con token, usalo directamente desde ahí.
+          </p>
         </div>
       </div>
     );
@@ -783,54 +895,143 @@ const MiClase = () => {
     navigate(`/mi-clase?${params.toString()}`, { replace: true });
   };
 
+  const cardCls = isSavia
+    ? 'rounded-3xl border border-savia-sandSoft bg-white/90 backdrop-blur-sm shadow-[0_8px_28px_rgba(143,102,76,0.08)]'
+    : 'bg-white rounded-2xl shadow-lg';
+  const chipActive = isSavia
+    ? 'bg-savia-terra text-white shadow-sm'
+    : 'bg-primary-600 text-white';
+  const chipIdle = isSavia
+    ? 'bg-savia-creamDeep text-savia-ink hover:bg-savia-sandSoft border border-savia-sandSoft'
+    : 'bg-gray-100 text-gray-700 hover:bg-gray-200';
+  const chipRecuperar = isSavia
+    ? 'bg-savia-olive text-white shadow-sm'
+    : 'bg-violet-600 text-white';
+  const ctaPrimary = isSavia
+    ? 'bg-savia-terra text-white hover:bg-savia-terraDeep'
+    : 'bg-primary-600 text-white hover:bg-primary-700';
+  const ctaLiberar = isSavia
+    ? 'bg-savia-sandSoft text-savia-terraDeep hover:bg-savia-sand border border-savia-sand'
+    : 'bg-amber-100 text-amber-800 hover:bg-amber-200';
+  const ctaRestaurar = isSavia
+    ? 'bg-savia-oliveSoft text-savia-oliveDeep hover:bg-savia-sandSoft border border-savia-olive/30'
+    : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200';
+  const ink = isSavia ? 'text-savia-ink' : 'text-gray-900';
+  const muted = isSavia ? 'text-savia-muted' : 'text-gray-600';
+  const headingDay = isSavia
+    ? (esRecuperar ? 'text-savia-oliveDeep' : 'text-savia-terra')
+    : (esRecuperar ? 'text-violet-700' : 'text-primary-700');
+
   return (
-    <div className="min-h-screen bg-gray-100 pb-safe">
-      <div className="max-w-lg mx-auto p-4 pt-8 sm:pt-6">
-        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+    <div
+      className={`min-h-screen pb-safe ${
+        isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
+      }`}
+    >
+      <div className="max-w-lg mx-auto p-4 pt-8 sm:pt-6 animate-savia-fade-up">
+        <div className={`${cardCls} p-5 mb-4`}>
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary-600" />
-                Tu perfil
-              </h1>
-              <p className="text-sm font-semibold text-gray-900 mt-2 truncate">{nombreCompleto}</p>
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${esRecuperar ? 'bg-violet-100 text-violet-800' : 'bg-primary-100 text-primary-800'}`}>
-                  {esRecuperar ? 'Modo recuperar' : 'Modo clases'}
-                </span>
-                {data.alumno.actividadNombre && (
-                  <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700">
-                    {data.alumno.actividadNombre}
-                  </span>
+            <div className="min-w-0 flex items-start gap-3">
+              <img
+                src={logoSrc}
+                alt={marcaTitulo}
+                className={`w-14 h-14 rounded-full object-cover flex-shrink-0 shadow-md animate-savia-soft-in ${
+                  isSavia ? 'ring-2 ring-savia-sandSoft' : 'ring-2 ring-primary-100'
+                }`}
+              />
+              <div className="min-w-0">
+                {isSavia ? (
+                  <>
+                    <h1 className="font-saviaDisplay text-2xl tracking-[0.12em] text-savia-ink uppercase leading-tight">
+                      Savia
+                    </h1>
+                    <p className="font-saviaDisplay text-base text-savia-terra italic -mt-0.5">Pilates</p>
+                  </>
+                ) : (
+                  <h1 className={`text-lg font-bold flex items-center gap-2 ${ink}`}>
+                    <Calendar className="w-5 h-5 text-primary-600" />
+                    {marcaTitulo}
+                  </h1>
                 )}
+                <p className={`text-sm font-semibold mt-2 truncate ${ink}`}>{nombreCompleto}</p>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                      esRecuperar
+                        ? isSavia
+                          ? 'bg-savia-oliveSoft text-savia-oliveDeep border border-savia-olive/25'
+                          : 'bg-violet-100 text-violet-800'
+                        : isSavia
+                          ? 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand'
+                          : 'bg-primary-100 text-primary-800'
+                    }`}
+                  >
+                    {esRecuperar ? 'Modo recuperar' : 'Modo clases'}
+                  </span>
+                  {data.alumno.actividadNombre && (
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
+                        isSavia
+                          ? 'bg-savia-creamDeep text-savia-muted border border-savia-sandSoft'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {data.alumno.actividadNombre}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <button
               type="button"
               onClick={cerrarSesionPortal}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
+                isSavia
+                  ? 'text-savia-muted hover:text-savia-ink hover:bg-savia-creamDeep/80'
+                  : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+              }`}
             >
               <LogOut className="w-4 h-4" />
               Cerrar sesión
             </button>
           </div>
-          <p className="text-sm text-gray-600 mt-3">
+          <p className={`text-sm mt-3 ${muted}`}>
             {esRecuperar
               ? 'Esta semana: liberá tu clase fija si no vas y elegí otro horario para recuperar.'
               : 'Acá podés ver tus clases, tu estado de cuota y gestionar tus reservas.'}
           </p>
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div
+            className={`mt-4 grid grid-cols-2 gap-2 p-1 rounded-2xl ${
+              isSavia ? 'bg-savia-creamDeep/70' : 'bg-gray-100'
+            }`}
+          >
             <button
               type="button"
               onClick={() => setSeccionActiva('clases')}
-              className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${seccionActiva === 'clases' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              className={`rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                seccionActiva === 'clases'
+                  ? isSavia
+                    ? 'bg-white text-savia-terraDeep shadow-sm'
+                    : 'bg-primary-600 text-white'
+                  : isSavia
+                    ? 'text-savia-muted hover:text-savia-ink'
+                    : 'text-gray-700 hover:bg-gray-200'
+              }`}
             >
               Mis clases
             </button>
             <button
               type="button"
               onClick={() => setSeccionActiva('perfil')}
-              className={`rounded-xl px-3 py-2 text-sm font-medium transition-colors ${seccionActiva === 'perfil' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              className={`rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+                seccionActiva === 'perfil'
+                  ? isSavia
+                    ? 'bg-white text-savia-terraDeep shadow-sm'
+                    : 'bg-primary-600 text-white'
+                  : isSavia
+                    ? 'text-savia-muted hover:text-savia-ink'
+                    : 'text-gray-700 hover:bg-gray-200'
+              }`}
             >
               Mi perfil
             </button>
@@ -840,12 +1041,24 @@ const MiClase = () => {
         {seccionActiva === 'clases' ? (
           <>
             {esRecuperar && (
-              <div className="mb-4 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-4 shadow-sm">
+              <div
+                className={`mb-4 p-4 ${cardCls} ${
+                  isSavia
+                    ? 'bg-gradient-to-br from-savia-oliveSoft/80 via-white/90 to-savia-cream'
+                    : 'border border-violet-200 bg-gradient-to-br from-violet-50 to-white'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Esta semana</p>
-                    <p className="mt-1 text-base font-bold text-gray-900">{semanaActualLabel}</p>
-                    <p className="mt-2 text-sm text-gray-600 leading-snug">
+                    <p
+                      className={`text-xs font-semibold uppercase tracking-wide ${
+                        isSavia ? 'text-savia-oliveDeep' : 'text-violet-700'
+                      }`}
+                    >
+                      Esta semana
+                    </p>
+                    <p className={`mt-1 text-base font-bold ${ink}`}>{semanaActualLabel}</p>
+                    <p className={`mt-2 text-sm leading-snug ${muted}`}>
                       Solo podés recuperar en la semana en curso. Los horarios que ya pasaron no se muestran.
                     </p>
                   </div>
@@ -853,21 +1066,37 @@ const MiClase = () => {
                     type="button"
                     onClick={() => void recargarRecuperar()}
                     disabled={cargandoSemana}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-medium text-violet-800 hover:bg-violet-50 disabled:opacity-50"
+                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50 ${
+                      isSavia
+                        ? 'border border-savia-sand bg-white/80 text-savia-oliveDeep hover:bg-savia-oliveSoft'
+                        : 'border border-violet-200 bg-white text-violet-800 hover:bg-violet-50'
+                    }`}
                     title="Actualizar"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${cargandoSemana ? 'animate-spin' : ''}`} />
                     Actualizar
                   </button>
                 </div>
-                <div className="mt-3 rounded-xl border border-violet-200 bg-white px-4 py-3 flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-violet-900">Clases para recuperar</p>
-                  <p className="text-2xl font-bold tabular-nums text-violet-950">
+                <div
+                  className={`mt-3 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 ${
+                    isSavia
+                      ? 'border border-savia-sand bg-white/90'
+                      : 'border border-violet-200 bg-white'
+                  }`}
+                >
+                  <p className={`text-sm font-medium ${isSavia ? 'text-savia-oliveDeep' : 'text-violet-900'}`}>
+                    Clases para recuperar
+                  </p>
+                  <p
+                    className={`text-2xl font-bold tabular-nums ${
+                      isSavia ? 'text-savia-terraDeep' : 'text-violet-950'
+                    }`}
+                  >
                     {data.alumno.clasesParaRecuperar || 0}
                   </p>
                 </div>
                 {cuotaVencida && (
-                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
                     <p className="text-sm font-semibold text-red-800">Cuota vencida</p>
                     <p className="text-xs text-red-700 mt-1 leading-snug">
                       Regularizá el pago para poder recuperar una clase.
@@ -875,40 +1104,81 @@ const MiClase = () => {
                     </p>
                   </div>
                 )}
-                <ol className="mt-3 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
-                  <li className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2">
-                    <span className="font-semibold text-violet-800">1.</span> Liberá tu clase fija si no vas
+                <ol className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                  <li
+                    className={`rounded-2xl px-3 py-2 ${
+                      isSavia
+                        ? 'border border-savia-sandSoft bg-white/80 text-savia-ink'
+                        : 'border border-violet-100 bg-white/80 text-gray-700'
+                    }`}
+                  >
+                    <span className={`font-semibold ${isSavia ? 'text-savia-terra' : 'text-violet-800'}`}>
+                      1.
+                    </span>{' '}
+                    Liberá tu clase fija si no vas
                   </li>
-                  <li className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2">
-                    <span className="font-semibold text-violet-800">2.</span> Elegí otro horario con lugar
+                  <li
+                    className={`rounded-2xl px-3 py-2 ${
+                      isSavia
+                        ? 'border border-savia-sandSoft bg-white/80 text-savia-ink'
+                        : 'border border-violet-100 bg-white/80 text-gray-700'
+                    }`}
+                  >
+                    <span className={`font-semibold ${isSavia ? 'text-savia-olive' : 'text-violet-800'}`}>
+                      2.
+                    </span>{' '}
+                    Elegí otro horario con lugar
                   </li>
                 </ol>
               </div>
             )}
 
-            <div className="bg-white rounded-xl shadow p-4 mb-4">
+            <div className={`${cardCls} p-4 mb-4`}>
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-4 h-4 text-primary-600" />
-                <h2 className="text-sm font-semibold text-gray-900">
+                <Sparkles className={`w-4 h-4 ${isSavia ? 'text-savia-terra' : 'text-primary-600'}`} />
+                <h2 className={`text-sm font-semibold ${ink}`}>
                   {esRecuperar ? 'Tu semana' : 'Mis clases'}
                 </h2>
               </div>
               {clasesFijasOrdenadas.length === 0 && recuperacionesOrdenadas.length === 0 ? (
-                <p className="text-sm text-gray-500">Todavía no tenés clases cargadas.</p>
+                <p className={`text-sm ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Todavía no tenés clases cargadas.
+                </p>
               ) : (
                 <div className="space-y-2">
                   {clasesFijasOrdenadas.map((turno) => {
                     const turnoActual = turnosById.get(turno.id);
                     return (
-                      <div key={turno.id} className="rounded-lg border border-gray-200 px-3 py-3 flex items-center justify-between gap-3">
+                      <div
+                        key={turno.id}
+                        className={`rounded-2xl px-3 py-3 flex items-center justify-between gap-3 ${
+                          isSavia
+                            ? 'border border-savia-sandSoft bg-savia-cream/40'
+                            : 'rounded-lg border border-gray-200'
+                        }`}
+                      >
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
-                          <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
+                          <p className={`text-sm font-semibold ${ink}`}>
+                            {NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}
+                          </p>
+                          <p className={`text-xs mt-0.5 ${muted}`}>{turno.titulo || 'Clase'}</p>
                           {esRecuperar && turnoActual?.claseLiberada && (
-                            <p className="text-xs text-emerald-700 mt-1">La liberaste para esta semana</p>
+                            <p
+                              className={`text-xs mt-1 ${
+                                isSavia ? 'text-savia-oliveDeep' : 'text-emerald-700'
+                              }`}
+                            >
+                              La liberaste para esta semana
+                            </p>
                           )}
                           {esRecuperar && turnoActual?.esClaseFija && !turnoActual?.claseLiberada && (
-                            <p className="text-xs text-amber-700 mt-1">Tu clase fija de esta semana</p>
+                            <p
+                              className={`text-xs mt-1 ${
+                                isSavia ? 'text-savia-terra' : 'text-amber-700'
+                              }`}
+                            >
+                              Tu clase fija de esta semana
+                            </p>
                           )}
                         </div>
                         {turnoActual && (
@@ -918,9 +1188,13 @@ const MiClase = () => {
                                 type="button"
                                 onClick={() => restaurarClaseSemana(turnoActual.id, turnoActual.liberacionId)}
                                 disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaRestaurar}`}
                               >
-                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                                {actioning === turnoActual.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <UserPlus className="w-4 h-4" />
+                                )}
                                 Volver a tomarla
                               </button>
                             ) : esRecuperar && turnoActual.esClaseFija ? (
@@ -928,9 +1202,13 @@ const MiClase = () => {
                                 type="button"
                                 onClick={() => liberarClaseSemana(turnoActual.id)}
                                 disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
                               >
-                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                                {actioning === turnoActual.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <UserMinus className="w-4 h-4" />
+                                )}
                                 Liberar esta clase
                               </button>
                             ) : turnoActual.yaInscripto ? (
@@ -938,9 +1216,13 @@ const MiClase = () => {
                                 type="button"
                                 onClick={() => liberar(turnoActual.id, turnoActual.recuperacionId)}
                                 disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
                               >
-                                {actioning === turnoActual.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                                {actioning === turnoActual.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <UserMinus className="w-4 h-4" />
+                                )}
                                 Liberar cupo
                               </button>
                             ) : null}
@@ -950,22 +1232,43 @@ const MiClase = () => {
                     );
                   })}
                   {recuperacionesOrdenadas.map((turno) => {
-                    const fechaRecuperacion = formatDate(getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), turno.diaSemana));
+                    const fechaRecuperacion = formatDate(
+                      getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), turno.diaSemana)
+                    );
                     return (
-                      <div key={`rec-${turno.id}-${turno.recuperacionId}`} className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-3 flex items-center justify-between gap-3">
+                      <div
+                        key={`rec-${turno.id}-${turno.recuperacionId}`}
+                        className={`rounded-2xl px-3 py-3 flex items-center justify-between gap-3 ${
+                          isSavia
+                            ? 'border border-savia-olive/30 bg-savia-oliveSoft/60'
+                            : 'rounded-lg border border-violet-200 bg-violet-50'
+                        }`}
+                      >
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-gray-900">{NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}</p>
-                          <p className="text-xs text-gray-600 mt-0.5">{turno.titulo || 'Clase'}</p>
-                          <p className="text-xs text-violet-700 mt-1">Recuperación · {fechaRecuperacion}</p>
+                          <p className={`text-sm font-semibold ${ink}`}>
+                            {NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}
+                          </p>
+                          <p className={`text-xs mt-0.5 ${muted}`}>{turno.titulo || 'Clase'}</p>
+                          <p
+                            className={`text-xs mt-1 ${
+                              isSavia ? 'text-savia-oliveDeep' : 'text-violet-700'
+                            }`}
+                          >
+                            Recuperación · {fechaRecuperacion}
+                          </p>
                         </div>
                         <div className="flex-shrink-0">
                           <button
                             type="button"
                             onClick={() => liberar(turno.id, turno.recuperacionId)}
                             disabled={!!actioning}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
                           >
-                            {actioning === turno.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                            {actioning === turno.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <UserMinus className="w-4 h-4" />
+                            )}
                             Liberar recuperación
                           </button>
                         </div>
@@ -977,19 +1280,25 @@ const MiClase = () => {
             </div>
 
             {esRecuperar ? (
-              <div className="bg-white rounded-2xl shadow p-4 mb-4">
+              <div className={`${cardCls} p-4 mb-4`}>
                 <div className="mb-3">
-                  <h2 className="text-sm font-semibold text-gray-900">Elegí un horario para recuperar</h2>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <h2 className={`text-sm font-semibold ${ink}`}>Elegí un horario para recuperar</h2>
+                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
                     Filtrá por día u horario. Tocá <strong>Recuperar acá</strong> en el que quieras.
                   </p>
                   {cuotaVencida && (
-                    <p className="text-xs text-red-700 mt-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 leading-snug">
+                    <p className="text-xs text-red-700 mt-2 rounded-xl border border-red-200 bg-red-50 px-2.5 py-2 leading-snug">
                       No podés recuperar: tu cuota está vencida. Regularizá el pago primero.
                     </p>
                   )}
                   {hayPoliticaAnticipacion && (
-                    <p className="text-xs text-gray-600 mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 leading-snug">
+                    <p
+                      className={`text-xs mt-2 rounded-xl px-2.5 py-2 leading-snug ${
+                        isSavia
+                          ? 'border border-savia-sandSoft bg-savia-creamDeep/60 text-savia-muted'
+                          : 'border border-gray-200 bg-gray-50 text-gray-600'
+                      }`}
+                    >
                       Liberar: <strong>{textoPlazoMinutos(mLib)}</strong> antes · Anotarse:{' '}
                       <strong>{textoPlazoMinutos(mAnot)}</strong> antes
                     </p>
@@ -999,7 +1308,9 @@ const MiClase = () => {
                   <button
                     type="button"
                     onClick={() => setFiltroDia(null)}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroDia === null ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                      filtroDia === null ? chipRecuperar : chipIdle
+                    }`}
                   >
                     Todos
                   </button>
@@ -1008,7 +1319,9 @@ const MiClase = () => {
                       key={d}
                       type="button"
                       onClick={() => setFiltroDia(d)}
-                      className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroDia === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                      className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                        filtroDia === d ? (isSavia ? chipRecuperar : 'bg-violet-600 text-white') : chipIdle
+                      }`}
                     >
                       {DIAS_CORTOS[d]}
                     </button>
@@ -1018,99 +1331,156 @@ const MiClase = () => {
                   <button
                     type="button"
                     onClick={() => setFiltroHorario('todos')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroHorario === 'todos' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                      filtroHorario === 'todos'
+                        ? isSavia
+                          ? chipActive
+                          : 'bg-violet-600 text-white'
+                        : chipIdle
+                    }`}
                   >
                     Todo el día
                   </button>
                   <button
                     type="button"
                     onClick={() => setFiltroHorario('manana')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroHorario === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                      filtroHorario === 'manana'
+                        ? isSavia
+                          ? 'bg-savia-sand text-savia-ink'
+                          : 'bg-amber-500 text-white'
+                        : isSavia
+                          ? 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                    }`}
                   >
                     Mañana
                   </button>
                   <button
                     type="button"
                     onClick={() => setFiltroHorario('tarde')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroHorario === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                      filtroHorario === 'tarde'
+                        ? isSavia
+                          ? 'bg-savia-olive text-white'
+                          : 'bg-blue-600 text-white'
+                        : isSavia
+                          ? 'bg-savia-oliveSoft text-savia-oliveDeep border border-savia-olive/25'
+                          : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
+                    }`}
                   >
                     Tarde
                   </button>
                 </div>
               </div>
             ) : (
-            <div className="bg-white rounded-xl shadow p-3 mb-4">
-              <div className="mb-3">
-                <h2 className="text-sm font-semibold text-gray-900">Anotarte o liberar una clase</h2>
-                <p className="text-xs text-gray-500 mt-1">
-                  Filtrá por día u horario para encontrar rápido tu clase.
-                </p>
-                {hayPoliticaAnticipacion && (
-                  <p className="text-xs text-gray-600 mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 leading-snug">
-                    Liberar cupo: <strong>{textoPlazoMinutos(mLib)}</strong> antes de cada turno. Anotarse o recuperar:{' '}
-                    <strong>{textoPlazoMinutos(mAnot)}</strong> antes de cada turno.
+              <div className={`${cardCls} p-4 mb-4`}>
+                <div className="mb-3">
+                  <h2 className={`text-sm font-semibold ${ink}`}>Anotarte o liberar una clase</h2>
+                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                    Filtrá por día u horario para encontrar rápido tu clase.
                   </p>
-                )}
-              </div>
-              <p className="text-xs font-medium text-gray-500 mb-2">Ver día</p>
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                <button
-                  type="button"
-                  onClick={() => setFiltroDia(null)}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroDia === null ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                >
-                  Todos
-                </button>
-                {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+                  {hayPoliticaAnticipacion && (
+                    <p
+                      className={`text-xs mt-2 rounded-xl px-2.5 py-2 leading-snug ${
+                        isSavia
+                          ? 'border border-savia-sandSoft bg-savia-creamDeep/60 text-savia-muted'
+                          : 'border border-gray-200 bg-gray-50 text-gray-600'
+                      }`}
+                    >
+                      Liberar cupo: <strong>{textoPlazoMinutos(mLib)}</strong> antes de cada turno.
+                      Anotarse o recuperar: <strong>{textoPlazoMinutos(mAnot)}</strong> antes de cada
+                      turno.
+                    </p>
+                  )}
+                </div>
+                <p className={`text-xs font-medium mb-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Ver día
+                </p>
+                <div className="flex flex-wrap gap-1.5 mb-3">
                   <button
-                    key={d}
                     type="button"
-                    onClick={() => setFiltroDia(d)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroDia === d ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    onClick={() => setFiltroDia(null)}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                      filtroDia === null ? chipActive : chipIdle
+                    }`}
                   >
-                    {DIAS_CORTOS[d]}
+                    Todos
                   </button>
-                ))}
+                  {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setFiltroDia(d)}
+                      className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                        filtroDia === d ? chipActive : chipIdle
+                      }`}
+                    >
+                      {DIAS_CORTOS[d]}
+                    </button>
+                  ))}
+                </div>
+                <p className={`text-xs font-medium mb-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Ver horario (según tu sede)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setFiltroHorario('todos')}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                      filtroHorario === 'todos' ? chipActive : chipIdle
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroHorario('manana')}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                      filtroHorario === 'manana'
+                        ? isSavia
+                          ? 'bg-savia-sand text-savia-ink'
+                          : 'bg-amber-500 text-white'
+                        : isSavia
+                          ? 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                    }`}
+                  >
+                    Mañana ({labelManana})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroHorario('tarde')}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                      filtroHorario === 'tarde'
+                        ? isSavia
+                          ? 'bg-savia-olive text-white'
+                          : 'bg-blue-600 text-white'
+                        : isSavia
+                          ? 'bg-savia-oliveSoft text-savia-oliveDeep border border-savia-olive/25'
+                          : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
+                    }`}
+                  >
+                    Tarde ({labelTarde})
+                  </button>
+                </div>
+                <p className={`text-xs mt-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Si no ves una clase, probá con «Todos».
+                </p>
               </div>
-              <p className="text-xs font-medium text-gray-500 mb-2">Ver horario (según tu sede)</p>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setFiltroHorario('todos')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'todos' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                >
-                  Todos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroHorario('manana')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
-                >
-                  Mañana ({labelManana})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroHorario('tarde')}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${filtroHorario === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
-                >
-                  Tarde ({labelTarde})
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">Si no ves una clase, probá con «Todos».</p>
-            </div>
             )}
 
             <div className="space-y-4">
               {data.turnos.length === 0 ? (
-                <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500">
+                <div className={`${cardCls} p-6 text-center ${muted}`}>
                   Todavía no hay clases cargadas. Cuando el estudio agregue turnos, van a aparecer acá.
                 </div>
               ) : turnosOrdenados.length === 0 ? (
-                <div className="bg-white rounded-2xl shadow p-6 text-center">
-                  <p className="text-gray-800 font-medium">
+                <div className={`${cardCls} p-6 text-center`}>
+                  <p className={`font-medium ${ink}`}>
                     {esRecuperar ? 'No hay horarios disponibles ahora' : 'No hay clases con el filtro elegido'}
                   </p>
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className={`text-sm mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
                     {esRecuperar
                       ? 'Probá otro día, o volvé más tarde cuando se libere un lugar.'
                       : 'Probá con otro día u horario.'}
@@ -1119,10 +1489,10 @@ const MiClase = () => {
               ) : (
                 diasConTurnos.map((dia) => (
                   <div key={dia}>
-                    <h2 className={`text-sm font-semibold mb-2 px-1 ${esRecuperar ? 'text-violet-700' : 'text-primary-700'}`}>
+                    <h2 className={`text-sm font-semibold mb-2 px-1 ${headingDay}`}>
                       {NOMBRE_DIA[dia] ?? `Día ${dia}`}
                       {esRecuperar && (
-                        <span className="ml-2 font-normal text-gray-500">
+                        <span className={`ml-2 font-normal ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
                           · {formatDate(getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), dia))}
                         </span>
                       )}
@@ -1133,98 +1503,152 @@ const MiClase = () => {
                         const llena = t.inscriptos >= t.cupo;
                         const pct = t.cupo > 0 ? Math.min(100, Math.round((t.inscriptos / t.cupo) * 100)) : 0;
                         return (
-                        <div
-                          key={t.id}
-                          className={`bg-white rounded-2xl shadow p-4 flex items-center justify-between gap-3 ${
-                            esRecuperar && t.esClaseFija && !t.claseLiberada
-                              ? 'border border-amber-200'
-                              : esRecuperar && t.yaInscripto
-                                ? 'border border-violet-200'
-                                : esRecuperar
-                                  ? 'border border-gray-100'
+                          <div
+                            key={t.id}
+                            className={`${cardCls} p-4 flex items-center justify-between gap-3 ${
+                              esRecuperar && t.esClaseFija && !t.claseLiberada
+                                ? isSavia
+                                  ? 'border-savia-sand'
+                                  : 'border border-amber-200'
+                                : esRecuperar && t.yaInscripto
+                                  ? isSavia
+                                    ? 'border-savia-olive/40'
+                                    : 'border border-violet-200'
                                   : ''
-                          }`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-gray-900 truncate">{t.titulo || 'Clase'}</p>
-                            <p className="text-sm text-gray-600">{t.hora}</p>
-                            {esRecuperar ? (
-                              <>
-                                <div className="mt-2 flex items-center gap-2">
-                                  <div className="h-1.5 flex-1 max-w-[120px] rounded-full bg-gray-100 overflow-hidden">
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className={`font-semibold truncate ${ink}`}>{t.titulo || 'Clase'}</p>
+                              <p className={`text-sm ${muted}`}>{t.hora}</p>
+                              {esRecuperar ? (
+                                <>
+                                  <div className="mt-2 flex items-center gap-2">
                                     <div
-                                      className={`h-full rounded-full ${llena ? 'bg-red-500' : libres <= 1 ? 'bg-amber-400' : 'bg-emerald-500'}`}
-                                      style={{ width: `${pct}%` }}
-                                    />
+                                      className={`h-1.5 flex-1 max-w-[120px] rounded-full overflow-hidden ${
+                                        isSavia ? 'bg-savia-sandSoft' : 'bg-gray-100'
+                                      }`}
+                                    >
+                                      <div
+                                        className={`h-full rounded-full ${
+                                          llena
+                                            ? 'bg-red-500'
+                                            : libres <= 1
+                                              ? isSavia
+                                                ? 'bg-savia-sand'
+                                                : 'bg-amber-400'
+                                              : isSavia
+                                                ? 'bg-savia-olive'
+                                                : 'bg-emerald-500'
+                                        }`}
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <span
+                                      className={`text-xs font-medium tabular-nums ${
+                                        llena ? 'text-red-600' : muted
+                                      }`}
+                                    >
+                                      {t.inscriptos}/{t.cupo}
+                                      {llena ? ' llena' : libres === 1 ? ' · 1 libre' : ` · ${libres} libres`}
+                                    </span>
                                   </div>
-                                  <span className={`text-xs font-medium tabular-nums ${llena ? 'text-red-600' : 'text-gray-600'}`}>
-                                    {t.inscriptos}/{t.cupo}
-                                    {llena ? ' llena' : libres === 1 ? ' · 1 libre' : ` · ${libres} libres`}
-                                  </span>
-                                </div>
-                                {t.esClaseFija && !t.claseLiberada && (
-                                  <p className="text-xs text-amber-700 mt-1.5 font-medium">Tu clase fija</p>
-                                )}
-                                {t.esClaseFija && t.claseLiberada && (
-                                  <p className="text-xs text-emerald-700 mt-1.5 font-medium">Ya la liberaste esta semana</p>
-                                )}
-                              </>
-                            ) : (
-                              <p className="text-xs text-gray-500">
-                                {t.inscriptos}/{t.cupo} inscriptos
-                              </p>
-                            )}
+                                  {t.esClaseFija && !t.claseLiberada && (
+                                    <p
+                                      className={`text-xs mt-1.5 font-medium ${
+                                        isSavia ? 'text-savia-terra' : 'text-amber-700'
+                                      }`}
+                                    >
+                                      Tu clase fija
+                                    </p>
+                                  )}
+                                  {t.esClaseFija && t.claseLiberada && (
+                                    <p
+                                      className={`text-xs mt-1.5 font-medium ${
+                                        isSavia ? 'text-savia-oliveDeep' : 'text-emerald-700'
+                                      }`}
+                                    >
+                                      Ya la liberaste esta semana
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <p className={`text-xs ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                                  {t.inscriptos}/{t.cupo} inscriptos
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex-shrink-0">
+                              {t.yaInscripto ? (
+                                <button
+                                  type="button"
+                                  onClick={() => liberar(t.id, t.recuperacionId)}
+                                  disabled={!!actioning}
+                                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
+                                >
+                                  {actioning === t.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <UserMinus className="w-4 h-4" />
+                                  )}
+                                  {esRecuperar ? 'Liberar' : 'Liberar cupo'}
+                                </button>
+                              ) : esRecuperar && t.esClaseFija && !t.claseLiberada ? (
+                                <button
+                                  type="button"
+                                  onClick={() => liberarClaseSemana(t.id)}
+                                  disabled={!!actioning}
+                                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
+                                >
+                                  {actioning === t.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <UserMinus className="w-4 h-4" />
+                                  )}
+                                  Liberar
+                                </button>
+                              ) : esRecuperar && t.esClaseFija && t.claseLiberada ? (
+                                <button
+                                  type="button"
+                                  onClick={() => restaurarClaseSemana(t.id, t.liberacionId)}
+                                  disabled={!!actioning}
+                                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaRestaurar}`}
+                                >
+                                  {actioning === t.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <UserPlus className="w-4 h-4" />
+                                  )}
+                                  Volver
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => inscribir(t.id)}
+                                  disabled={!!actioning || t.inscriptos >= t.cupo || (esRecuperar && cuotaVencida)}
+                                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation ${
+                                    esRecuperar
+                                      ? isSavia
+                                        ? ctaPrimary
+                                        : 'bg-violet-600 text-white hover:bg-violet-700'
+                                      : ctaPrimary
+                                  }`}
+                                >
+                                  {actioning === t.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <UserPlus className="w-4 h-4" />
+                                  )}
+                                  {esRecuperar
+                                    ? cuotaVencida
+                                      ? 'Cuota vencida'
+                                      : llena
+                                        ? 'Llena'
+                                        : 'Recuperar acá'
+                                    : 'Sumarme'}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex-shrink-0">
-                            {t.yaInscripto ? (
-                              <button
-                                type="button"
-                                onClick={() => liberar(t.id, t.recuperacionId)}
-                                disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
-                              >
-                                {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                                {esRecuperar ? 'Liberar' : 'Liberar cupo'}
-                              </button>
-                            ) : esRecuperar && t.esClaseFija && !t.claseLiberada ? (
-                              <button
-                                type="button"
-                                onClick={() => liberarClaseSemana(t.id)}
-                                disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-100 text-amber-900 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
-                              >
-                                {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                                Liberar
-                              </button>
-                            ) : esRecuperar && t.esClaseFija && t.claseLiberada ? (
-                              <button
-                                type="button"
-                                onClick={() => restaurarClaseSemana(t.id, t.liberacionId)}
-                                disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
-                              >
-                                {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                                Volver
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => inscribir(t.id)}
-                                disabled={!!actioning || t.inscriptos >= t.cupo || (esRecuperar && cuotaVencida)}
-                                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation ${
-                                  esRecuperar
-                                    ? 'bg-violet-600 text-white hover:bg-violet-700'
-                                    : 'bg-primary-600 text-white hover:bg-primary-700'
-                                }`}
-                              >
-                                {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                                {esRecuperar
-                                  ? (cuotaVencida ? 'Cuota vencida' : llena ? 'Llena' : 'Recuperar acá')
-                                  : 'Sumarme'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
                         );
                       })}
                     </div>
@@ -1236,75 +1660,186 @@ const MiClase = () => {
         ) : (
           <>
             {proximaClase && (
-              <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-xs font-medium text-emerald-700">Próxima clase</p>
-                  <p className="text-base font-semibold text-emerald-900 mt-1">
-                    {NOMBRE_DIA[proximaClase.diaSemana] ?? `Día ${proximaClase.diaSemana}`} {proximaClase.hora}
+              <div className={`${cardCls} p-4 mb-4`}>
+                <div
+                  className={`rounded-2xl px-4 py-3 ${
+                    isSavia
+                      ? 'border border-savia-olive/25 bg-savia-oliveSoft'
+                      : 'border border-emerald-200 bg-emerald-50'
+                  }`}
+                >
+                  <p
+                    className={`text-xs font-medium ${
+                      isSavia ? 'text-savia-oliveDeep' : 'text-emerald-700'
+                    }`}
+                  >
+                    Próxima clase
                   </p>
-                  <p className="text-sm text-emerald-800 mt-1">{proximaClase.titulo || 'Clase'}</p>
+                  <p
+                    className={`text-base font-semibold mt-1 ${
+                      isSavia ? 'text-savia-ink' : 'text-emerald-900'
+                    }`}
+                  >
+                    {NOMBRE_DIA[proximaClase.diaSemana] ?? `Día ${proximaClase.diaSemana}`}{' '}
+                    {proximaClase.hora}
+                  </p>
+                  <p className={`text-sm mt-1 ${isSavia ? 'text-savia-oliveDeep' : 'text-emerald-800'}`}>
+                    {proximaClase.titulo || 'Clase'}
+                  </p>
                 </div>
               </div>
             )}
 
-            <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+            <div className={`${cardCls} p-4 mb-4`}>
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                  <p className="text-xs font-medium text-gray-500">Actividad</p>
-                  <p className="text-sm font-semibold mt-1 text-gray-900">{data.alumno.actividadNombre || 'Sin actividad'}</p>
-                  <p className="text-xs mt-1 text-gray-500">Tu plan actual</p>
+                <div
+                  className={`rounded-2xl px-3 py-3 ${
+                    isSavia
+                      ? 'border border-savia-sandSoft bg-savia-cream/50'
+                      : 'border border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                    Actividad
+                  </p>
+                  <p className={`text-sm font-semibold mt-1 ${ink}`}>
+                    {data.alumno.actividadNombre || 'Sin actividad'}
+                  </p>
+                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                    Tu plan actual
+                  </p>
                 </div>
-                <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                  <p className="text-xs font-medium text-gray-500">Cuota</p>
-                  <p className={`text-sm font-semibold mt-1 ${cuotaVencida ? 'text-red-600' : cuotaPorVencer ? 'text-amber-600' : 'text-gray-900'}`}>
+                <div
+                  className={`rounded-2xl px-3 py-3 ${
+                    isSavia
+                      ? 'border border-savia-sandSoft bg-savia-cream/50'
+                      : 'border border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                    Cuota
+                  </p>
+                  <p
+                    className={`text-sm font-semibold mt-1 ${
+                      cuotaVencida
+                        ? 'text-red-600'
+                        : cuotaPorVencer
+                          ? isSavia
+                            ? 'text-savia-terra'
+                            : 'text-amber-600'
+                          : ink
+                    }`}
+                  >
                     {tieneFechaVencimiento ? formatDate(fechaVencimiento) : 'Sin fecha'}
                   </p>
-                  <p className="text-xs mt-1 text-gray-500">
-                    {cuotaVencida ? 'Vencida' : cuotaVenceHoy ? 'Vence hoy' : cuotaPorVencer ? 'Próxima a vencer' : 'Al día'}
+                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                    {cuotaVencida
+                      ? 'Vencida'
+                      : cuotaVenceHoy
+                        ? 'Vence hoy'
+                        : cuotaPorVencer
+                          ? 'Próxima a vencer'
+                          : 'Al día'}
                   </p>
                 </div>
-                <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
-                  <p className="text-xs font-medium text-gray-500">Clases fijas</p>
-                  <p className="text-sm font-semibold mt-1 text-gray-900">{clasesFijasOrdenadas.length}</p>
-                  <p className="text-xs mt-1 text-gray-500">Por semana</p>
+                <div
+                  className={`rounded-2xl px-3 py-3 ${
+                    isSavia
+                      ? 'border border-savia-sandSoft bg-savia-cream/50'
+                      : 'border border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                    Clases fijas
+                  </p>
+                  <p className={`text-sm font-semibold mt-1 ${ink}`}>{clasesFijasOrdenadas.length}</p>
+                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                    Por semana
+                  </p>
                 </div>
-                <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
-                  <p className="text-xs font-medium text-violet-700">Clases para recuperar</p>
-                  <p className="text-2xl font-bold mt-1 tabular-nums text-violet-950">
+                <div
+                  className={`rounded-2xl px-3 py-3 ${
+                    isSavia
+                      ? 'border border-savia-olive/30 bg-savia-oliveSoft/70'
+                      : 'border border-violet-200 bg-violet-50'
+                  }`}
+                >
+                  <p
+                    className={`text-xs font-medium ${
+                      isSavia ? 'text-savia-oliveDeep' : 'text-violet-700'
+                    }`}
+                  >
+                    Clases para recuperar
+                  </p>
+                  <p
+                    className={`text-2xl font-bold mt-1 tabular-nums ${
+                      isSavia ? 'text-savia-terraDeep' : 'text-violet-950'
+                    }`}
+                  >
                     {data.alumno.clasesParaRecuperar || 0}
                   </p>
                 </div>
               </div>
-
             </div>
 
-            <div className="bg-white rounded-xl shadow p-4 mb-4">
+            <div className={`${cardCls} p-4 mb-4`}>
               <div className="flex items-center gap-2 mb-3">
-                <History className="w-4 h-4 text-primary-600" />
-                <h2 className="text-sm font-semibold text-gray-900">Historial de clases</h2>
+                <History className={`w-4 h-4 ${isSavia ? 'text-savia-terra' : 'text-primary-600'}`} />
+                <h2 className={`text-sm font-semibold ${ink}`}>Historial de clases</h2>
               </div>
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2">
-                  <p className="text-xs text-green-700">Asistidas</p>
-                  <p className="text-sm font-semibold text-green-900">{totalAsistidas}</p>
+                <div
+                  className={`rounded-xl px-3 py-2 ${
+                    isSavia
+                      ? 'bg-savia-oliveSoft border border-savia-olive/25'
+                      : 'bg-green-50 border border-green-200'
+                  }`}
+                >
+                  <p className={`text-xs ${isSavia ? 'text-savia-oliveDeep' : 'text-green-700'}`}>
+                    Asistidas
+                  </p>
+                  <p
+                    className={`text-sm font-semibold ${
+                      isSavia ? 'text-savia-ink' : 'text-green-900'
+                    }`}
+                  >
+                    {totalAsistidas}
+                  </p>
                 </div>
-                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+                <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2">
                   <p className="text-xs text-red-700">Inasistencias</p>
                   <p className="text-sm font-semibold text-red-900">{totalInasistencias}</p>
                 </div>
               </div>
               {historial.length === 0 ? (
-                <p className="text-sm text-gray-500">Todavía no hay asistencias marcadas.</p>
+                <p className={`text-sm ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Todavía no hay asistencias marcadas.
+                </p>
               ) : (
                 <div className="space-y-2">
                   {historial.slice(0, 8).map((item) => (
-                    <div key={item.id} className="rounded-lg border border-gray-200 px-3 py-2">
+                    <div
+                      key={item.id}
+                      className={`rounded-2xl px-3 py-2 ${
+                        isSavia ? 'border border-savia-sandSoft' : 'border border-gray-200'
+                      }`}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900">{formatDate(item.fecha)} · {item.hora}</p>
-                          <p className="text-xs text-gray-600 mt-0.5">{item.titulo}</p>
+                          <p className={`text-sm font-semibold ${ink}`}>
+                            {formatDate(item.fecha)} · {item.hora}
+                          </p>
+                          <p className={`text-xs mt-0.5 ${muted}`}>{item.titulo}</p>
                         </div>
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${item.estado === 'asistio' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                            item.estado === 'asistio'
+                              ? isSavia
+                                ? 'bg-savia-oliveSoft text-savia-oliveDeep'
+                                : 'bg-green-100 text-green-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
                           {item.estado === 'asistio' ? 'Asistió' : 'No asistió'}
                         </span>
                       </div>

@@ -3483,7 +3483,7 @@ app.get('/api/alumno-portal', async (req, res) => {
       [turnoRows.map((r) => r.id)]
     );
     const { rows: horRows } = await db.query(
-      `SELECT hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
+      `SELECT nombre_lugar, hora_inicio_manana, hora_fin_manana, hora_inicio_tarde, hora_fin_tarde,
               horarios_no_disponibles_por_dia,
               horas_antes_anotarse_clase, horas_antes_liberar_clase,
               minutos_antes_liberar_clase, minutos_antes_anotarse_clase
@@ -3636,6 +3636,7 @@ app.get('/api/alumno-portal', async (req, res) => {
       clasesFijas,
       historialAsistencias,
       sucursalId: sid,
+      sucursalNombre: hor.nombre_lugar || '',
       modo: esRecuperar ? 'recuperar' : 'fijo',
       ...(esRecuperar && semanaVista && { semanaVista }),
       ...(recuperacionStats ? { recuperacionStats } : {}),

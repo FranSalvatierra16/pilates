@@ -364,7 +364,7 @@ async function ocupacionTurnoSemana(db, turno, semana, sucursalId) {
   if (candidateIds.size > 0) {
     const { rows: act } = await db.query(
       `SELECT id FROM alumnos
-       WHERE sucursal_id = $1 AND id = ANY($2::text[])`,
+       WHERE sucursal_id = $1 AND id = ANY($2::text[]) AND activo IS DISTINCT FROM false`,
       [sucursalId, [...candidateIds]]
     );
     valid = new Set(act.map((r) => String(r.id)));
@@ -442,7 +442,7 @@ async function ocupacionBulk(db, turnos, semanas, sucursalId) {
   if (candidateIds.size > 0) {
     const { rows: act } = await db.query(
       `SELECT id FROM alumnos
-       WHERE sucursal_id = $1 AND id = ANY($2::text[])`,
+       WHERE sucursal_id = $1 AND id = ANY($2::text[]) AND activo IS DISTINCT FROM false`,
       [sucursalId, [...candidateIds]]
     );
     valid = new Set(act.map((r) => String(r.id)));

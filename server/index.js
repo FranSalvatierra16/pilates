@@ -204,6 +204,31 @@ async function seedAdminAndSucursal(db) {
       } catch (e) { /* columna puede no existir aún */ }
     }
   }
+  // Alumnos inactivos no deben quedar en turnos (libera cupo; al reactivar se anotan de nuevo).
+  try {
+    const { rows: inactivos } = await db.query(
+      `SELECT id, sucursal_id FROM alumnos WHERE activo = false`
+    );
+    for (const a of inactivos) {
+      await db.query(
+        `UPDATE turnos
+            SET alumno_ids = array_remove(alumno_ids, $1)
+          WHERE sucursal_id = $2
+            AND $1 = ANY(alumno_ids)`,
+        [a.id, a.sucursal_id]
+      );
+      await db.query(
+        `DELETE FROM inscripciones_turno i
+          USING turnos t
+          WHERE i.turno_id = t.id
+            AND t.sucursal_id = $2
+            AND i.alumno_id = $1`,
+        [a.id, a.sucursal_id]
+      );
+    }
+  } catch (e) {
+    console.warn('Limpieza de inactivos en turnos:', e.message);
+  }
 }
 
 async function initSchema() {
@@ -625,8 +650,55 @@ app.delete('/api/alumnos/:id', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user.sucursalId;
     const alumnoId = req.params.id;
-    // Soft-delete: NO se sacan de turnos. Las clases fijas se conservan y siguen ocupando cupo.
-    await db.query('UPDATE alumnos SET activo = false WHERE id = $1 AND sucursal_id = $2', [alumnoId, sid]);
+    const { rows: alumnoRows } = await db.query(
+      'SELECT id FROM alumnos WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
+      [alumnoId, sid]
+    );
+    if (alumnoRows.length === 0) return res.status(404).json({ error: 'Alumno no encontrado' });
+
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      // Soft-delete + liberar cupos: al reactivar hay que anotarlo de nuevo.
+      await client.query('UPDATE alumnos SET activo = false WHERE id = $1 AND sucursal_id = $2', [alumnoId, sid]);
+      await client.query(
+        `UPDATE turnos
+            SET alumno_ids = array_remove(alumno_ids, $1)
+          WHERE sucursal_id = $2
+            AND $1 = ANY(alumno_ids)`,
+        [alumnoId, sid]
+      );
+      await client.query(
+        `DELETE FROM inscripciones_turno i
+          USING turnos t
+          WHERE i.turno_id = t.id
+            AND t.sucursal_id = $2
+            AND i.alumno_id = $1`,
+        [alumnoId, sid]
+      );
+      await client.query(
+        `DELETE FROM liberaciones_semana l
+          USING turnos t
+          WHERE l.turno_id = t.id
+            AND t.sucursal_id = $2
+            AND l.alumno_id = $1`,
+        [alumnoId, sid]
+      );
+      await client.query(
+        `DELETE FROM recuperaciones r
+          USING turnos t
+          WHERE r.turno_id = t.id
+            AND t.sucursal_id = $2
+            AND r.alumno_id = $1`,
+        [alumnoId, sid]
+      );
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
@@ -3152,7 +3224,7 @@ async function ocupacionEfectivaSlotSemana(db, sucursalId, diaSemana, hora, sema
   if (candidateIds.size > 0) {
     const { rows: existRows } = await db.query(
       `SELECT id FROM alumnos
-        WHERE sucursal_id = $1 AND id = ANY($2::text[])`,
+        WHERE sucursal_id = $1 AND id = ANY($2::text[]) AND activo IS DISTINCT FROM false`,
       [sucursalId, [...candidateIds]]
     );
     validAlumnoSet = new Set(existRows.map((r) => String(r.id)));
@@ -3497,7 +3569,7 @@ app.get('/api/alumno-portal', async (req, res) => {
     const insByTurno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r]));
     const insDesdePorTurnoAlumno = new Map(insRows.map((r) => [`${r.turno_id}:${r.alumno_id}`, r.semana_desde]));
     const { rows: validAlumnoRows } = await db.query(
-      'SELECT id FROM alumnos WHERE sucursal_id = $1',
+      'SELECT id FROM alumnos WHERE sucursal_id = $1 AND activo IS DISTINCT FROM false',
       [sid]
     );
     const validAlumnoSet = new Set(validAlumnoRows.map((row) => String(row.id)));

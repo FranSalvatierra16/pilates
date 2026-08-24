@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut, ArrowLeft, RefreshCw, Info } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -159,11 +159,48 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
   return out;
 }
 
+function isIosDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
+function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
+}
+
 const fetchWithTimeout = (url: string, options: RequestInit = {}, ms = 15000): Promise<Response> => {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
   return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(id));
 };
+
+async function asegurarServiceWorker(): Promise<ServiceWorkerRegistration> {
+  if (!('serviceWorker' in navigator)) {
+    throw new Error('Este navegador no soporta service workers.');
+  }
+  // Si ya hay uno activo, usarlo; si no, registrar el de la PWA.
+  try {
+    const existing = await navigator.serviceWorker.getRegistration();
+    if (existing?.active) return existing;
+  } catch {
+    // sigue al register
+  }
+  try {
+    await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  } catch {
+    // VitePWA puede registrar con otro nombre; igual esperamos ready
+  }
+  const readyPromise = navigator.serviceWorker.ready;
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('timeout-sw')), 20000)
+  );
+  return Promise.race([readyPromise, timeoutPromise]);
+}
 
 function ajustarStatsRecuperacion(
   stats: NonNullable<PortalData['recuperacionStats']>,
@@ -599,40 +636,76 @@ const MiClase = () => {
 
   const activarPushPortal = async () => {
     if (!portalAuth) return;
-    if (!useApi() || !('Notification' in window) || !('serviceWorker' in navigator)) {
+    const ios = isIosDevice();
+    const standalone = isStandalonePwa();
+
+    if (!useApi()) {
       setPushStatus('unsupported');
-      setPushMessage('Tu dispositivo no soporta notificaciones push. Si estás en iPhone, instalá la app y abrila desde el inicio.');
+      setPushMessage('Las notificaciones requieren conexión al servidor.');
       return;
     }
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setPushStatus('unsupported');
+      setPushMessage(
+        ios
+          ? 'En iPhone: tocá Compartir → “Agregar a pantalla de inicio”, abrí la app desde el ícono y volvé a activar.'
+          : 'Tu navegador no soporta notificaciones push. Probá Chrome o Edge, o instalá la app en el celular.'
+      );
+      return;
+    }
+    if (ios && !standalone) {
+      setPushStatus('unsupported');
+      setPushMessage(
+        'En iPhone las notificaciones solo funcionan si instalás la app: Compartir → “Agregar a pantalla de inicio”, y después abrila desde el ícono (no desde Safari ni WhatsApp).'
+      );
+      return;
+    }
+
     setPushStatus('loading');
     setPushMessage('');
     try {
       if (Notification.permission === 'denied') {
         setPushStatus('denied');
-        setPushMessage('Tenés bloqueadas las notificaciones. Activálas desde la configuración del navegador o del celular.');
+        setPushMessage('Tenés bloqueadas las notificaciones. Activálas desde la configuración del celular o del navegador.');
         return;
       }
       const base = getBase();
-      const vapidRes = await fetchWithTimeout(`${base}/api/alumno-portal/push-vapid-public`);
+      const vapidRes = await fetchWithTimeout(`${base}/api/alumno-portal/push-vapid-public`, {}, 10000);
       if (!vapidRes.ok) {
         setPushStatus('error');
-        setPushMessage('El servidor no tiene notificaciones configuradas.');
+        setPushMessage('El servidor no tiene notificaciones configuradas. Pedile al estudio que las active.');
         return;
       }
       const { vapidPublicKey } = await vapidRes.json();
+      if (!vapidPublicKey) {
+        setPushStatus('error');
+        setPushMessage('Faltan las claves de notificación en el servidor.');
+        return;
+      }
       const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
       if (permission !== 'granted') {
         setPushStatus('denied');
         setPushMessage('Necesitás aceptar el permiso para recibir avisos.');
         return;
       }
-      const reg = await navigator.serviceWorker.ready;
+
+      const reg = await asegurarServiceWorker();
+      if (!reg?.pushManager) {
+        setPushStatus('unsupported');
+        setPushMessage(
+          ios
+            ? 'En iPhone tenés que abrir la app instalada (ícono en el inicio), no desde el navegador.'
+            : 'No se pudo preparar el servicio de notificaciones en este dispositivo.'
+        );
+        return;
+      }
+
       const existingSub = await reg.pushManager.getSubscription();
       if (existingSub) {
         try {
           await existingSub.unsubscribe();
         } catch {
-          // ignore and request a fresh subscription anyway
+          // ignore
         }
       }
       const sub = await reg.pushManager.subscribe({
@@ -646,7 +719,7 @@ const MiClase = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-      });
+      }, 15000);
       const subscribeJson = await subscribeRes.json().catch(() => ({}));
       if (!subscribeRes.ok) {
         setPushStatus('error');
@@ -654,10 +727,20 @@ const MiClase = () => {
         return;
       }
       setPushStatus('ok');
-      setPushMessage('Avisos activados: te tendría que llegar una notificación de prueba en unos segundos.');
+      setPushMessage('Listo: te tendría que llegar una notificación de prueba en unos segundos.');
     } catch (e) {
       setPushStatus('error');
-      setPushMessage(e instanceof Error ? e.message : 'No se pudo activar las notificaciones.');
+      if (e instanceof Error && e.message === 'timeout-sw') {
+        setPushMessage(
+          ios
+            ? 'Tardó demasiado. En iPhone: agregá la app al inicio y abrila desde el ícono, no desde Safari.'
+            : 'Tardó demasiado al preparar las notificaciones. Cerrá y abrí de nuevo la página e intentá otra vez.'
+        );
+      } else if (e instanceof Error && (e.name === 'AbortError' || /aborted/i.test(e.message))) {
+        setPushMessage('La conexión tardó demasiado. Revisá internet e intentá de nuevo.');
+      } else {
+        setPushMessage(e instanceof Error ? e.message : 'No se pudo activar las notificaciones.');
+      }
     }
   };
 
@@ -860,6 +943,51 @@ const MiClase = () => {
     navigate(`/mi-clase?${params.toString()}`, { replace: true });
   };
 
+  const bloqueAvisosPush = (
+    <div className="rounded-xl border border-primary-100 bg-primary-50 px-4 py-3 mb-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
+            <Bell className="w-4 h-4 flex-shrink-0" />
+            Avisos de cupos liberados
+          </p>
+          <p className="text-xs text-primary-700 mt-1">
+            Activá las notificaciones para enterarte cuando se libere un lugar esta semana.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void activarPushPortal()}
+          disabled={pushStatus === 'loading'}
+          className="px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50 flex-shrink-0"
+        >
+          {pushStatus === 'loading' ? 'Activando...' : pushStatus === 'ok' ? 'Activadas' : 'Activar'}
+        </button>
+      </div>
+      {isIosDevice() && !isStandalonePwa() && (
+        <div className="mt-3 flex gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+          <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <p>
+            En <strong>iPhone</strong>: Compartir → <strong>Agregar a pantalla de inicio</strong>, abrí la app desde el ícono y recién ahí tocá Activar.
+          </p>
+        </div>
+      )}
+      {pushMessage && (
+        <p
+          className={`text-xs mt-2 ${
+            pushStatus === 'ok'
+              ? 'text-green-700'
+              : pushStatus === 'error' || pushStatus === 'denied' || pushStatus === 'unsupported'
+                ? 'text-amber-800'
+                : 'text-primary-700'
+          }`}
+        >
+          {pushMessage}
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-100 pb-safe">
       <div className="max-w-lg mx-auto p-4 pt-8 sm:pt-6">
@@ -916,6 +1044,8 @@ const MiClase = () => {
 
         {seccionActiva === 'clases' ? (
           <>
+            {esRecuperar && bloqueAvisosPush}
+
             {esRecuperar && (
               <div className="mb-4 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -936,6 +1066,12 @@ const MiClase = () => {
                     <RefreshCw className={`w-3.5 h-3.5 ${cargandoSemana ? 'animate-spin' : ''}`} />
                     Actualizar
                   </button>
+                </div>
+                <div className="mt-3 rounded-xl border border-violet-200 bg-white px-4 py-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-violet-900">Clases para recuperar</p>
+                  <p className="text-2xl font-bold tabular-nums text-violet-950">
+                    {data.alumno.clasesParaRecuperar || 0}
+                  </p>
                 </div>
                 <ol className="mt-3 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
                   <li className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2">
@@ -1323,47 +1459,16 @@ const MiClase = () => {
                   <p className="text-sm font-semibold mt-1 text-gray-900">{clasesFijasOrdenadas.length}</p>
                   <p className="text-xs mt-1 text-gray-500">Por semana</p>
                 </div>
-                {!esRecuperar && (
                 <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
-                  <p className="text-xs font-medium text-violet-700">Para recuperar</p>
-                  <p className="text-sm font-semibold mt-1 text-violet-900">{data.alumno.clasesParaRecuperar || 0}</p>
-                  <p className="text-xs mt-1 text-violet-700">Créditos disponibles</p>
+                  <p className="text-xs font-medium text-violet-700">Clases para recuperar</p>
+                  <p className="text-2xl font-bold mt-1 tabular-nums text-violet-950">
+                    {data.alumno.clasesParaRecuperar || 0}
+                  </p>
                 </div>
-                )}
-                {esRecuperar && (
-                <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
-                  <p className="text-xs font-medium text-violet-700">Modo</p>
-                  <p className="text-sm font-semibold mt-1 text-violet-900">Recuperar</p>
-                  <p className="text-xs mt-1 text-violet-700">Solo esta semana</p>
-                </div>
-                )}
               </div>
 
-              <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-primary-900 flex items-center gap-2">
-                      <Bell className="w-4 h-4" />
-                      Avisos de cupos liberados
-                    </p>
-                    <p className="text-xs text-primary-700 mt-1">
-                      Activá las notificaciones en este dispositivo para enterarte cuando alguien libera un lugar.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={activarPushPortal}
-                    disabled={pushStatus === 'loading'}
-                    className="px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-                  >
-                    {pushStatus === 'loading' ? 'Activando...' : pushStatus === 'ok' ? 'Activadas' : 'Activar'}
-                  </button>
-                </div>
-                {pushMessage && (
-                  <p className={`text-xs mt-2 ${pushStatus === 'ok' ? 'text-green-700' : pushStatus === 'error' || pushStatus === 'denied' ? 'text-amber-700' : 'text-primary-700'}`}>
-                    {pushMessage}
-                  </p>
-                )}
+              <div className="mt-4">
+                {bloqueAvisosPush}
               </div>
             </div>
 

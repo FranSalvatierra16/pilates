@@ -783,15 +783,6 @@ const Alumnos = () => {
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             type="button"
-            onClick={() => handleCopiarLinkGeneralClases('fijo')}
-            className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
-            title="Link para sumarse o liberar cupo (clase fija)"
-          >
-            <Link2 className="w-5 h-5" />
-            Link general (fijo)
-          </button>
-          <button
-            type="button"
             onClick={() => handleCopiarLinkGeneralClases('recuperar')}
             className="btn-secondary flex items-center justify-center gap-2 flex-1 sm:flex-none min-h-[44px]"
             title="Link para que el alumno entre a Tu clase y se anote en formato recuperación"

@@ -501,8 +501,7 @@ export async function listarClasesParaRecuperar(alumno) {
 
   const creditos = Number(alumno.clases_para_recuperar) || 0;
   const semanaActual = getSemanaActual();
-  const semanaSiguiente = semanaPortalSiguiente(semanaActual);
-  const semanas = [semanaActual, semanaSiguiente];
+  const semanas = [semanaActual];
 
   const { rows: turnoRows } = await db.query(
     `SELECT id, dia_semana, hora, titulo, cupo, alumno_ids
@@ -538,7 +537,7 @@ export async function listarClasesParaRecuperar(alumno) {
   const opciones = [];
 
   for (const semana of semanas) {
-    const etiquetaSemana = semana === semanaActual ? 'Esta semana' : 'Próxima semana';
+    const etiquetaSemana = 'Esta semana';
 
     for (const t of turnos) {
       const esFija =
@@ -566,7 +565,7 @@ export async function listarClasesParaRecuperar(alumno) {
         fecha,
         libres: occ.libres,
         cupo: occ.cupo,
-        label: `${etiquetaSemana} · ${dia} ${formatoFechaCorta(fecha)} ${hora} — ${titulo} (${occ.libres} libres)`,
+        label: `${dia} ${formatoFechaCorta(fecha)} ${hora} — ${titulo} (${occ.libres} libres)`,
       });
     }
   }
@@ -579,7 +578,7 @@ export async function listarClasesParaRecuperar(alumno) {
 
   return {
     semanaActual,
-    semanaSiguiente,
+    semanaSiguiente: '',
     opciones,
     creditos,
   };
@@ -593,6 +592,9 @@ export async function anotarRecuperacion(alumno, turnoId, semana) {
   if (!db) throw new Error('Base de datos no configurada');
 
   const semanaVista = String(semana || '').trim() || getSemanaActual();
+  if (semanaVista !== getSemanaActual()) {
+    throw Object.assign(new Error('Solo podés recuperar en la semana actual.'), { status: 400 });
+  }
   const creditos = Number(alumno.clases_para_recuperar) || 0;
   if (creditos <= 0) {
     throw Object.assign(new Error('No te quedan créditos para recuperar. Primero liberá una clase fija.'), {

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut, ArrowLeft } from 'lucide-react';
+import { Calendar, UserPlus, UserMinus, Loader2, Bell, History, Sparkles, LogOut, ArrowLeft, RefreshCw } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
-import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getSemanaSiguiente, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
+import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -290,7 +290,6 @@ const MiClase = () => {
   const modoQuery = (searchParams.get('modo') || '').toLowerCase();
   const modoFromUrl = modoQuery === 'fijo' ? 'fijo' : 'recuperar';
   const semanaActualBase = getSemanaActual();
-  const semanaSiguienteBase = getSemanaSiguiente(semanaActualBase);
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -304,10 +303,7 @@ const MiClase = () => {
   const [enviandoDni, setEnviandoDni] = useState(false);
   const [pushStatus, setPushStatus] = useState<'idle' | 'loading' | 'ok' | 'denied' | 'unsupported' | 'error'>('idle');
   const [pushMessage, setPushMessage] = useState('');
-  /** Solo en modo recuperar: 'actual' | 'siguiente' para elegir semana */
-  const [semanaElegida, setSemanaElegida] = useState<'actual' | 'siguiente'>(notifSemana === semanaSiguienteBase ? 'siguiente' : 'actual');
   const [cargandoSemana, setCargandoSemana] = useState(false);
-  const prevSemanaElegida = useRef<'actual' | 'siguiente' | null>(null);
   const notifPromptHandledRef = useRef(false);
 
   useEffect(() => {
@@ -319,7 +315,7 @@ const MiClase = () => {
           let url = `${base}/api/alumno-portal?token=${encodeURIComponent(tokenFromUrl)}`;
           if (modoFromUrl === 'recuperar') {
             url += '&modo=recuperar';
-            url += `&semana=${encodeURIComponent(semanaElegida === 'actual' ? getSemanaActual() : getSemanaSiguiente(getSemanaActual()))}`;
+            url += `&semana=${encodeURIComponent(getSemanaActual())}`;
           }
           const res = await fetch(url);
           if (!res.ok) {
@@ -345,7 +341,7 @@ const MiClase = () => {
       setLoading(false);
       setError('');
     }
-  }, [tokenFromUrl, modoFromUrl, semanaElegida]);
+  }, [tokenFromUrl, modoFromUrl]);
 
   useEffect(() => {
     const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
@@ -376,7 +372,7 @@ const MiClase = () => {
       if (sid) url += `&sucursalId=${encodeURIComponent(sid)}`;
       if (modoFromUrl === 'recuperar') {
         url += '&modo=recuperar';
-        url += `&semana=${encodeURIComponent(semanaElegida === 'actual' ? getSemanaActual() : getSemanaSiguiente(getSemanaActual()))}`;
+        url += `&semana=${encodeURIComponent(getSemanaActual())}`;
       }
       const res = await fetchWithTimeout(url);
       const json = await res.json().catch(() => ({}));
@@ -404,7 +400,7 @@ const MiClase = () => {
     if (!opts?.silencioso) setCargandoSemana(true);
     try {
       const base = getBase();
-      const semana = semanaElegida === 'actual' ? getSemanaActual() : getSemanaSiguiente(getSemanaActual());
+      const semana = getSemanaActual();
       let url: string;
       if (portalAuth.type === 'token') {
         url = `${base}/api/alumno-portal?token=${encodeURIComponent(portalAuth.token)}&modo=recuperar&semana=${encodeURIComponent(semana)}`;
@@ -420,27 +416,10 @@ const MiClase = () => {
   };
 
   useEffect(() => {
-    if (!data || data.modo !== 'recuperar' || !portalAuth || portalAuth.type === 'token') return;
-    if (prevSemanaElegida.current === null) {
-      prevSemanaElegida.current = semanaElegida;
-      return;
-    }
-    if (prevSemanaElegida.current === semanaElegida) return;
-    prevSemanaElegida.current = semanaElegida;
-    recargarRecuperar();
-  }, [semanaElegida, data, portalAuth]);
-
-  useEffect(() => {
     if (notifPromptHandledRef.current || !promptTomarDesdeNotif || !notifTurnoId || !data || !portalAuth) return;
     if (data.modo !== 'recuperar') return;
-    if (notifSemana && data.semanaVista && notifSemana !== data.semanaVista) {
-      if (notifSemana === semanaActualBase && semanaElegida !== 'actual') {
-        setSemanaElegida('actual');
-      } else if (notifSemana === semanaSiguienteBase && semanaElegida !== 'siguiente') {
-        setSemanaElegida('siguiente');
-      }
-      return;
-    }
+    // Solo semana actual: si la notif apunta a otra semana, no forzamos cambio.
+    if (notifSemana && data.semanaVista && notifSemana !== data.semanaVista) return;
     const target = data.turnos.find((t) => t.id === notifTurnoId);
     if (!target) return;
     notifPromptHandledRef.current = true;
@@ -463,7 +442,7 @@ const MiClase = () => {
       if (!confirmo) return;
       await inscribir(target.id);
     })();
-  }, [data, notifSemana, notifTurnoId, portalAuth, promptTomarDesdeNotif, semanaActualBase, semanaElegida, semanaSiguienteBase, toast]);
+  }, [data, notifSemana, notifTurnoId, portalAuth, promptTomarDesdeNotif, semanaActualBase, toast]);
 
   const inscribir = async (turnoId: string) => {
     if (!portalAuth || !data) return;
@@ -712,7 +691,7 @@ const MiClase = () => {
           </h1>
           <p className="text-sm text-gray-600 mb-2">
             {modoFromUrl === 'recuperar'
-              ? 'Ingresá tu DNI para entrar a Tu clase y anotarte en formato recuperación.'
+              ? 'Ingresá tu DNI para recuperar una clase de esta semana.'
               : 'Ingresá tu DNI para ver tus clases, sumarte o liberar cupo.'}
           </p>
           {error && (
@@ -856,7 +835,6 @@ const MiClase = () => {
   const cuotaPorVencer = tieneFechaVencimiento && !cuotaVencida && (cuotaVenceHoy || isCuotaPorVencer(fechaVencimiento, 3));
 
   const semanaActualLabel = getRangoSemana(getSemanaActual());
-  const semanaSiguienteLabel = getRangoSemana(getSemanaSiguiente(getSemanaActual()));
   const sucursalPortal =
     data.sucursalId ||
     (portalAuth?.type === 'dni' ? portalAuth.sucursalId : '') ||
@@ -873,7 +851,6 @@ const MiClase = () => {
     setDniInput('');
     setFiltroDia(null);
     setFiltroHorario('todos');
-    setSemanaElegida('actual');
     setLoading(false);
     notifPromptHandledRef.current = false;
 
@@ -916,7 +893,7 @@ const MiClase = () => {
           </div>
           <p className="text-sm text-gray-600 mt-3">
             {esRecuperar
-              ? 'Acá podés ver tu perfil, liberar tu clase fija de la semana y tomar otra para recuperar.'
+              ? 'Esta semana: liberá tu clase fija si no vas y elegí otro horario para recuperar.'
               : 'Acá podés ver tus clases, tu estado de cuota y gestionar tus reservas.'}
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
@@ -939,10 +916,44 @@ const MiClase = () => {
 
         {seccionActiva === 'clases' ? (
           <>
+            {esRecuperar && (
+              <div className="mb-4 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Esta semana</p>
+                    <p className="mt-1 text-base font-bold text-gray-900">{semanaActualLabel}</p>
+                    <p className="mt-2 text-sm text-gray-600 leading-snug">
+                      Solo podés recuperar en la semana en curso. Los horarios que ya pasaron no se muestran.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void recargarRecuperar()}
+                    disabled={cargandoSemana}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-medium text-violet-800 hover:bg-violet-50 disabled:opacity-50"
+                    title="Actualizar"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${cargandoSemana ? 'animate-spin' : ''}`} />
+                    Actualizar
+                  </button>
+                </div>
+                <ol className="mt-3 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
+                  <li className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2">
+                    <span className="font-semibold text-violet-800">1.</span> Liberá tu clase fija si no vas
+                  </li>
+                  <li className="rounded-xl border border-violet-100 bg-white/80 px-3 py-2">
+                    <span className="font-semibold text-violet-800">2.</span> Elegí otro horario con lugar
+                  </li>
+                </ol>
+              </div>
+            )}
+
             <div className="bg-white rounded-xl shadow p-4 mb-4">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="w-4 h-4 text-primary-600" />
-                <h2 className="text-sm font-semibold text-gray-900">Mis clases</h2>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  {esRecuperar ? 'Tu semana' : 'Mis clases'}
+                </h2>
               </div>
               {clasesFijasOrdenadas.length === 0 && recuperacionesOrdenadas.length === 0 ? (
                 <p className="text-sm text-gray-500">Todavía no tenés clases cargadas.</p>
@@ -1027,67 +1038,69 @@ const MiClase = () => {
               )}
             </div>
 
-            {esRecuperar && (
-              <div className="bg-white rounded-xl shadow p-3 mb-4">
-                <p className="text-xs font-medium text-gray-500 mb-2">Ver semana</p>
+            {esRecuperar ? (
+              <div className="bg-white rounded-2xl shadow p-4 mb-4">
+                <div className="mb-3">
+                  <h2 className="text-sm font-semibold text-gray-900">Elegí un horario para recuperar</h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Filtrá por día u horario. Tocá <strong>Recuperar acá</strong> en el que quieras.
+                  </p>
+                  {hayPoliticaAnticipacion && (
+                    <p className="text-xs text-gray-600 mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 leading-snug">
+                      Liberar: <strong>{textoPlazoMinutos(mLib)}</strong> antes · Anotarse:{' '}
+                      <strong>{textoPlazoMinutos(mAnot)}</strong> antes
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setFiltroDia(null)}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroDia === null ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  >
+                    Todos
+                  </button>
+                  {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setFiltroDia(d)}
+                      className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroDia === d ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    >
+                      {DIAS_CORTOS[d]}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setSemanaElegida('actual')}
-                    disabled={cargandoSemana}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${semanaElegida === 'actual' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
+                    onClick={() => setFiltroHorario('todos')}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroHorario === 'todos' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                   >
-                    Semana actual ({semanaActualLabel})
+                    Todo el día
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSemanaElegida('siguiente')}
-                    disabled={cargandoSemana}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium touch-manipulation ${semanaElegida === 'siguiente' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} disabled:opacity-50`}
+                    onClick={() => setFiltroHorario('manana')}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroHorario === 'manana' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'}`}
                   >
-                    Otra semana ({semanaSiguienteLabel})
+                    Mañana
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroHorario('tarde')}
+                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${filtroHorario === 'tarde' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'}`}
+                  >
+                    Tarde
                   </button>
                 </div>
-                {cargandoSemana && <p className="text-xs text-gray-500 mt-2">Cargando...</p>}
-                {data.recuperacionStats && (
-                  <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900">
-                    <p>
-                      Clases para recuperar: <strong>{data.recuperacionStats.clasesParaRecuperar}</strong>
-                    </p>
-                    <p>
-                      Usadas esta semana: <strong>{data.recuperacionStats.clasesUsadasSemana}</strong>
-                      {data.recuperacionStats.clasesPorSemana != null && (
-                        <>
-                          {' '}
-                          /{' '}
-                          <strong>
-                            {data.recuperacionStats.cupoPackSemana ?? data.recuperacionStats.clasesPorSemana}
-                          </strong>{' '}
-                          del plan
-                          {typeof data.recuperacionStats.actividadArrastrePack === 'number' &&
-                            data.recuperacionStats.actividadArrastrePack > 0 && (
-                              <>
-                                {' '}
-                                ({data.recuperacionStats.clasesPorSemana} base +{' '}
-                                {data.recuperacionStats.actividadArrastrePack} arrastre)
-                              </>
-                            )}
-                        </>
-                      )}
-                      {data.recuperacionStats.clasesDisponiblesSemana != null && (
-                        <> · disponibles esta semana: <strong>{data.recuperacionStats.clasesDisponiblesSemana}</strong></>
-                      )}
-                    </p>
-                  </div>
-                )}
               </div>
-            )}
-
+            ) : (
             <div className="bg-white rounded-xl shadow p-3 mb-4">
               <div className="mb-3">
-                <h2 className="text-sm font-semibold text-gray-900">{esRecuperar ? 'Recuperar o liberar' : 'Anotarte o liberar una clase'}</h2>
+                <h2 className="text-sm font-semibold text-gray-900">Anotarte o liberar una clase</h2>
                 <p className="text-xs text-gray-500 mt-1">
-                  {esRecuperar ? 'Usá este formato para liberar una fija de la semana o sumarte a otra para recuperar.' : 'Filtrá por día u horario para encontrar rápido tu clase.'}
+                  Filtrá por día u horario para encontrar rápido tu clase.
                 </p>
                 {hayPoliticaAnticipacion && (
                   <p className="text-xs text-gray-600 mt-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 leading-snug">
@@ -1142,6 +1155,7 @@ const MiClase = () => {
               </div>
               <p className="text-xs text-gray-500 mt-2">Si no ves una clase, probá con «Todos».</p>
             </div>
+            )}
 
             <div className="space-y-4">
               {data.turnos.length === 0 ? (
@@ -1149,29 +1163,73 @@ const MiClase = () => {
                   Todavía no hay clases cargadas. Cuando el estudio agregue turnos, van a aparecer acá.
                 </div>
               ) : turnosOrdenados.length === 0 ? (
-                <div className="bg-white rounded-xl shadow p-6 text-center text-gray-500">
-                  No hay clases con el filtro elegido. Probá con otro día u horario.
+                <div className="bg-white rounded-2xl shadow p-6 text-center">
+                  <p className="text-gray-800 font-medium">
+                    {esRecuperar ? 'No hay horarios disponibles ahora' : 'No hay clases con el filtro elegido'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {esRecuperar
+                      ? 'Probá otro día, o volvé más tarde cuando se libere un lugar.'
+                      : 'Probá con otro día u horario.'}
+                  </p>
                 </div>
               ) : (
                 diasConTurnos.map((dia) => (
                   <div key={dia}>
-                    <h2 className="text-sm font-semibold text-primary-700 mb-2 px-1">
+                    <h2 className={`text-sm font-semibold mb-2 px-1 ${esRecuperar ? 'text-violet-700' : 'text-primary-700'}`}>
                       {NOMBRE_DIA[dia] ?? `Día ${dia}`}
+                      {esRecuperar && (
+                        <span className="ml-2 font-normal text-gray-500">
+                          · {formatDate(getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), dia))}
+                        </span>
+                      )}
                     </h2>
                     <div className="space-y-2">
-                      {porDia[dia].map((t) => (
-                        <div key={t.id} className="bg-white rounded-xl shadow p-4 flex items-center justify-between gap-3">
+                      {porDia[dia].map((t) => {
+                        const libres = Math.max(0, t.cupo - t.inscriptos);
+                        const llena = t.inscriptos >= t.cupo;
+                        const pct = t.cupo > 0 ? Math.min(100, Math.round((t.inscriptos / t.cupo) * 100)) : 0;
+                        return (
+                        <div
+                          key={t.id}
+                          className={`bg-white rounded-2xl shadow p-4 flex items-center justify-between gap-3 ${
+                            esRecuperar && t.esClaseFija && !t.claseLiberada
+                              ? 'border border-amber-200'
+                              : esRecuperar && t.yaInscripto
+                                ? 'border border-violet-200'
+                                : esRecuperar
+                                  ? 'border border-gray-100'
+                                  : ''
+                          }`}
+                        >
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-gray-900 truncate">{t.titulo || 'Clase'}</p>
                             <p className="text-sm text-gray-600">{t.hora}</p>
-                            <p className="text-xs text-gray-500">
-                              {t.inscriptos}/{t.cupo} inscriptos
-                            </p>
-                            {esRecuperar && t.esClaseFija && !t.claseLiberada && (
-                              <p className="text-xs text-amber-700 mt-1">Tu clase fija de esta semana</p>
-                            )}
-                            {esRecuperar && t.esClaseFija && t.claseLiberada && (
-                              <p className="text-xs text-emerald-700 mt-1">La liberaste para esta semana</p>
+                            {esRecuperar ? (
+                              <>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <div className="h-1.5 flex-1 max-w-[120px] rounded-full bg-gray-100 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${llena ? 'bg-red-500' : libres <= 1 ? 'bg-amber-400' : 'bg-emerald-500'}`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <span className={`text-xs font-medium tabular-nums ${llena ? 'text-red-600' : 'text-gray-600'}`}>
+                                    {t.inscriptos}/{t.cupo}
+                                    {llena ? ' llena' : libres === 1 ? ' · 1 libre' : ` · ${libres} libres`}
+                                  </span>
+                                </div>
+                                {t.esClaseFija && !t.claseLiberada && (
+                                  <p className="text-xs text-amber-700 mt-1.5 font-medium">Tu clase fija</p>
+                                )}
+                                {t.esClaseFija && t.claseLiberada && (
+                                  <p className="text-xs text-emerald-700 mt-1.5 font-medium">Ya la liberaste esta semana</p>
+                                )}
+                              </>
+                            ) : (
+                              <p className="text-xs text-gray-500">
+                                {t.inscriptos}/{t.cupo} inscriptos
+                              </p>
                             )}
                           </div>
                           <div className="flex-shrink-0">
@@ -1180,45 +1238,50 @@ const MiClase = () => {
                                 type="button"
                                 onClick={() => liberar(t.id, t.recuperacionId)}
                                 disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
                               >
                                 {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                                {esRecuperar ? 'Liberar recuperación' : 'Liberar cupo'}
+                                {esRecuperar ? 'Liberar' : 'Liberar cupo'}
                               </button>
                             ) : esRecuperar && t.esClaseFija && !t.claseLiberada ? (
                               <button
                                 type="button"
                                 onClick={() => liberarClaseSemana(t.id)}
                                 disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-100 text-amber-900 hover:bg-amber-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
                               >
                                 {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
-                                Liberar esta clase
+                                Liberar
                               </button>
                             ) : esRecuperar && t.esClaseFija && t.claseLiberada ? (
                               <button
                                 type="button"
                                 onClick={() => restaurarClaseSemana(t.id, t.liberacionId)}
                                 disabled={!!actioning}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
+                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 font-medium text-sm disabled:opacity-50 touch-manipulation"
                               >
                                 {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                                Volver a tomarla
+                                Volver
                               </button>
                             ) : (
                               <button
                                 type="button"
                                 onClick={() => inscribir(t.id)}
                                 disabled={!!actioning || t.inscriptos >= t.cupo}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation ${
+                                  esRecuperar
+                                    ? 'bg-violet-600 text-white hover:bg-violet-700'
+                                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                                }`}
                               >
                                 {actioning === t.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                                {esRecuperar ? 'Sumarme para recuperar' : 'Sumarme'}
+                                {esRecuperar ? (llena ? 'Llena' : 'Recuperar acá') : 'Sumarme'}
                               </button>
                             )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ))
@@ -1260,11 +1323,20 @@ const MiClase = () => {
                   <p className="text-sm font-semibold mt-1 text-gray-900">{clasesFijasOrdenadas.length}</p>
                   <p className="text-xs mt-1 text-gray-500">Por semana</p>
                 </div>
+                {!esRecuperar && (
                 <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
                   <p className="text-xs font-medium text-violet-700">Para recuperar</p>
                   <p className="text-sm font-semibold mt-1 text-violet-900">{data.alumno.clasesParaRecuperar || 0}</p>
                   <p className="text-xs mt-1 text-violet-700">Créditos disponibles</p>
                 </div>
+                )}
+                {esRecuperar && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-3">
+                  <p className="text-xs font-medium text-violet-700">Modo</p>
+                  <p className="text-sm font-semibold mt-1 text-violet-900">Recuperar</p>
+                  <p className="text-xs mt-1 text-violet-700">Solo esta semana</p>
+                </div>
+                )}
               </div>
 
               <div className="mt-4 rounded-xl border border-primary-100 bg-primary-50 px-4 py-3">

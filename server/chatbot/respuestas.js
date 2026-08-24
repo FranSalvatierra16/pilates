@@ -282,15 +282,11 @@ export function respuestaLiberacionOk(alumno, opcion, creditos, menuFn, result =
     return `✅ Listo ${nombre}
 
 Cancelaste la *recuperación*:
-*${labelHorarioCorto(opcion)}*${lineaMotivo}
-
-💳 Créditos para recuperar: *${creditos}*${menu}`;
+*${labelHorarioCorto(opcion)}*${lineaMotivo}${menu}`;
   }
   return `✅ Listo ${nombre}
 
 Liberaste: *${labelHorarioCorto(opcion)}*${lineaMotivo}
-
-💳 Créditos para recuperar: *${creditos}*
 
 Ahora podés recuperar con la opción 3️⃣ del menú alumno.${menu}`;
 }
@@ -309,9 +305,7 @@ export function listaRecuperarClases(alumno, opciones, creditos, page = 0) {
     return {
       texto: `👤 ${nombre}
 
-No tenés créditos para recuperar (💳 *0*).
-
-Primero liberá una clase fija (opción 2️⃣ del menú alumno).
+Para recuperar, primero liberá una clase fija (opción 2️⃣ del menú alumno).
 
 0️⃣ Volver`,
       opciones: [],
@@ -322,9 +316,7 @@ Primero liberá una clase fija (opción 2️⃣ del menú alumno).
     return {
       texto: `👤 ${nombre}
 
-💳 Créditos: *${cred}*
-
-No hay horarios disponibles en esta semana ni la próxima.
+No hay horarios disponibles *esta semana*.
 
 Probá más tarde o pedí ayuda a una profesora (opción 4️⃣ del menú principal).
 
@@ -337,17 +329,12 @@ Probá más tarde o pedí ayuda a una profesora (opción 4️⃣ del menú princ
   return {
     texto: `👤 ${nombre}
 
-💳 Créditos: *${cred}*
-
-¿En qué horario querés *recuperar*?
+¿En qué horario querés *recuperar* esta semana?
 
 ${pag.header}${pag.lineas}
 ${pag.pie ? `\n${pag.pie}` : ''}
 
 ✏️ Escribí *día y hora*, ej: *Martes 18:00*
-(o *Martes 18:00 próxima* si querés la semana que viene)
-
-Al anotarte se descuenta 1 crédito.
 
 ${PIE_NAV}`,
     opciones,
@@ -361,9 +348,7 @@ export function respuestaRecuperacionOk(alumno, opcion, creditos, menuFn) {
   return `✅ Listo ${nombre}
 
 Te anotaste para recuperar:
-*${labelHorarioCorto(opcion)}*
-
-💳 Créditos restantes: *${creditos}*${menu}`;
+*${labelHorarioCorto(opcion)}*${menu}`;
 }
 
 export function respuestaRecuperacionYaHecha(opcion, menuFn) {

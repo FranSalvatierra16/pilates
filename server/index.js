@@ -3467,7 +3467,9 @@ app.get('/api/alumno-portal', async (req, res) => {
     const modo = (req.query.modo || 'fijo').toString().toLowerCase();
     const semanaParam = (req.query.semana || '').toString().trim();
     const esRecuperar = modo === 'recuperar';
-    const semanaVista = semanaParam || (esRecuperar ? getSemanaActual() : '');
+    const semanaHoy = getSemanaActual();
+    // Recuperar: siempre semana actual (ignoramos "próxima" si llega por query).
+    const semanaVista = esRecuperar ? semanaHoy : (semanaParam || '');
     const resolved = await resolveAlumnoPortal(db, { token, dni, sucursalId });
     if (resolved.error) {
       if (resolved.sucursales) return res.status(400).json({ error: resolved.message, sucursales: resolved.sucursales });

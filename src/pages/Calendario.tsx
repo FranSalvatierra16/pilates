@@ -1015,10 +1015,23 @@ const Calendario = () => {
         const actividad = getActividadDelAlumno(alumnoSeleccionado);
         const limiteSemanal = actividad?.clasesPorSemana ?? null;
         const clasesUsadasSemana = getClasesUsadasSemanaAlumno(alumnoSeleccionado);
+        let clasesParaRecuperar = alumnoActual.clasesParaRecuperar || 0;
         const usaCredito = limiteSemanal != null && clasesUsadasSemana >= limiteSemanal;
-        if (usaCredito && (alumnoActual.clasesParaRecuperar || 0) <= 0) {
-          toast.warning('Este alumno no tiene clases para recuperar disponibles.');
-          return;
+        if (usaCredito && clasesParaRecuperar <= 0) {
+          const ok = await toast.confirm(
+            `${alumnoActual.nombre} ${alumnoActual.apellido} no tiene clases para recuperar. ¿Le agregás 1 y la anotás igual?`,
+            {
+              title: 'Sin clases para recuperar',
+              confirmText: 'Agregar 1 y anotar',
+              cancelText: 'Cancelar',
+            }
+          );
+          if (!ok) return;
+          clasesParaRecuperar = 1;
+          await storageHybrid.alumnos.update(alumnoSeleccionado, { clasesParaRecuperar: 1 });
+          setAlumnos((prev) =>
+            prev.map((a) => (a.id === alumnoSeleccionado ? { ...a, clasesParaRecuperar: 1 } : a))
+          );
         }
         const rec: Recuperacion = {
           id: Date.now().toString(),
@@ -1045,7 +1058,7 @@ const Calendario = () => {
         await storageHybrid.recuperaciones.add(rec);
         if (usaCredito) {
           await storageHybrid.alumnos.update(alumnoSeleccionado, {
-            clasesParaRecuperar: Math.max(0, (alumnoActual.clasesParaRecuperar || 0) - 1),
+            clasesParaRecuperar: Math.max(0, clasesParaRecuperar - 1),
           });
         }
       } else {
@@ -3085,6 +3098,47 @@ const Calendario = () => {
                     <span className="text-xs text-gray-600">Solo esta semana; desaparece al reiniciar semana. Si no marcás nada, es clase fija como siempre.</span>
                   </span>
                 </label>
+                {marcarSoloRecuperacion && alumnoSeleccionado && (() => {
+                  const alum = alumnos.find((a) => a.id === alumnoSeleccionado);
+                  if (!alum) return null;
+                  const n = alum.clasesParaRecuperar || 0;
+                  return (
+                    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-violet-900">Clases para recuperar</p>
+                          <p className="text-2xl font-bold tabular-nums text-violet-950 mt-0.5">{n}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const nuevo = n + 1;
+                            try {
+                              await storageHybrid.alumnos.update(alum.id, { clasesParaRecuperar: nuevo });
+                              setAlumnos((prev) =>
+                                prev.map((a) =>
+                                  a.id === alum.id ? { ...a, clasesParaRecuperar: nuevo } : a
+                                )
+                              );
+                              toast.success(`Ahora tiene ${nuevo} clase${nuevo === 1 ? '' : 's'} para recuperar.`);
+                            } catch (e) {
+                              console.error(e);
+                              toast.error('No se pudo agregar la clase para recuperar.');
+                            }
+                          }}
+                          className="btn-secondary text-sm whitespace-nowrap min-h-[40px]"
+                        >
+                          + Agregar 1
+                        </button>
+                      </div>
+                      {n <= 0 && (
+                        <p className="text-xs text-amber-800 mt-2">
+                          No tiene clases para recuperar. Podés sumarle 1 acá y después anotarla.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 flex-shrink-0">
                 <button

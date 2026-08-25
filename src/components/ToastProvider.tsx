@@ -44,22 +44,37 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-const TOAST_STYLES: Record<ToastType, { wrapper: string; icon: ReactNode }> = {
+const TOAST_META: Record<
+  ToastType,
+  { title: string; panel: string; iconWrap: string; icon: ReactNode; accent: string }
+> = {
   success: {
-    wrapper: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    icon: <CheckCircle2 className="w-5 h-5 text-emerald-600" />,
+    title: 'Listo',
+    panel: 'bg-[#FBF8F3]/95 border-emerald-900/10',
+    iconWrap: 'bg-emerald-100/90 text-emerald-800',
+    icon: <CheckCircle2 className="w-5 h-5" strokeWidth={1.75} />,
+    accent: 'bg-emerald-700',
   },
   error: {
-    wrapper: 'border-red-200 bg-red-50 text-red-900',
-    icon: <AlertCircle className="w-5 h-5 text-red-600" />,
+    title: 'Atención',
+    panel: 'bg-[#FBF8F3]/95 border-rose-900/10',
+    iconWrap: 'bg-rose-100/90 text-rose-800',
+    icon: <AlertCircle className="w-5 h-5" strokeWidth={1.75} />,
+    accent: 'bg-rose-700',
   },
   info: {
-    wrapper: 'border-blue-200 bg-blue-50 text-blue-900',
-    icon: <Info className="w-5 h-5 text-blue-600" />,
+    title: 'Aviso',
+    panel: 'bg-[#FBF8F3]/95 border-stone-800/10',
+    iconWrap: 'bg-stone-200/90 text-stone-800',
+    icon: <Info className="w-5 h-5" strokeWidth={1.75} />,
+    accent: 'bg-stone-700',
   },
   warning: {
-    wrapper: 'border-amber-200 bg-amber-50 text-amber-900',
-    icon: <AlertTriangle className="w-5 h-5 text-amber-600" />,
+    title: 'Importante',
+    panel: 'bg-[#FBF8F3]/95 border-amber-900/10',
+    iconWrap: 'bg-amber-100/90 text-amber-900',
+    icon: <AlertTriangle className="w-5 h-5" strokeWidth={1.75} />,
+    accent: 'bg-amber-700',
   },
 };
 
@@ -84,7 +99,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (!message?.trim()) return;
     const id = nextIdRef.current++;
     const type = options?.type || 'info';
-    const duration = options?.duration ?? 4000;
+    const duration = options?.duration ?? 4500;
     setToasts((prev) => [...prev, { id, message, type }]);
     window.setTimeout(() => removeToast(id), duration);
   }, [removeToast]);
@@ -127,64 +142,108 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     confirm,
   }), [showToast, confirm]);
 
+  const hasToasts = toasts.length > 0;
+
   return (
     <ToastContext.Provider value={value}>
       {children}
       {typeof document !== 'undefined' && createPortal(
         <>
-          <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center p-4 sm:p-6">
-            <div className="w-full max-w-sm space-y-3">
-              {toasts.map((toast) => {
-                const style = TOAST_STYLES[toast.type];
-                return (
-                  <div
-                    key={toast.id}
-                    className={`pointer-events-auto w-full rounded-2xl border shadow-2xl ring-1 ring-black/5 ${style.wrapper}`}
-                    role="status"
-                  >
-                    <div className="flex items-start gap-3 px-4 py-3.5">
-                      <div className="mt-0.5 flex-shrink-0">{style.icon}</div>
-                      <p className="text-sm font-medium whitespace-pre-line flex-1 leading-snug">{toast.message}</p>
-                      <button
-                        type="button"
-                        onClick={() => removeToast(toast.id)}
-                        className="flex-shrink-0 opacity-60 hover:opacity-100"
-                        aria-label="Cerrar mensaje"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+          {hasToasts && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center p-5 sm:p-8"
+              role="presentation"
+            >
+              <div
+                className="absolute inset-0 bg-[#2C241C]/35 backdrop-blur-[2px]"
+                aria-hidden
+                onClick={() => setToasts([])}
+              />
+              <div className="relative w-full max-w-[22rem] space-y-3">
+                {toasts.map((toast) => {
+                  const meta = TOAST_META[toast.type];
+                  return (
+                    <div
+                      key={toast.id}
+                      className={`pointer-events-auto overflow-hidden rounded-3xl border shadow-[0_24px_60px_rgba(44,36,28,0.28)] backdrop-blur-xl ${meta.panel}`}
+                      role="status"
+                    >
+                      <div className={`h-1 w-full ${meta.accent}`} />
+                      <div className="flex items-start gap-3.5 px-5 py-4">
+                        <div
+                          className={`mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${meta.iconWrap}`}
+                        >
+                          {meta.icon}
+                        </div>
+                        <div className="min-w-0 flex-1 pt-0.5">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-stone-500">
+                            {meta.title}
+                          </p>
+                          <p className="mt-1 text-[15px] font-medium leading-snug text-stone-800 whitespace-pre-line">
+                            {toast.message}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeToast(toast.id)}
+                          className="flex-shrink-0 rounded-full p-1.5 text-stone-400 transition-colors hover:bg-stone-900/5 hover:text-stone-700"
+                          aria-label="Cerrar mensaje"
+                        >
+                          <X className="w-4 h-4" strokeWidth={1.75} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {confirmState.open && (
-            <div className="fixed inset-0 z-[110] bg-black/45 flex items-center justify-center p-4">
-              <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-gray-200">
-                <div className="p-5 sm:p-6">
-                  <div className="flex items-start gap-3">
-                    <div className={`mt-0.5 flex-shrink-0 rounded-full p-2 ${confirmState.tone === 'danger' ? 'bg-red-100 text-red-600' : 'bg-primary-100 text-primary-600'}`}>
-                      <AlertTriangle className="w-5 h-5" />
+            <div className="fixed inset-0 z-[110] flex items-center justify-center p-5">
+              <div className="absolute inset-0 bg-[#2C241C]/40 backdrop-blur-[3px]" aria-hidden />
+              <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-stone-800/10 bg-[#FBF8F3] shadow-[0_28px_70px_rgba(44,36,28,0.3)]">
+                <div
+                  className={`h-1 w-full ${
+                    confirmState.tone === 'danger' ? 'bg-rose-700' : 'bg-stone-800'
+                  }`}
+                />
+                <div className="p-6 sm:p-7">
+                  <div className="flex items-start gap-3.5">
+                    <div
+                      className={`mt-0.5 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl ${
+                        confirmState.tone === 'danger'
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-stone-200 text-stone-800'
+                      }`}
+                    >
+                      <AlertTriangle className="w-5 h-5" strokeWidth={1.75} />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-lg font-semibold text-gray-900">{confirmState.title}</h3>
-                      <p className="mt-2 text-sm text-gray-600 whitespace-pre-line">{confirmState.message}</p>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg font-semibold tracking-tight text-stone-900">
+                        {confirmState.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-stone-600 whitespace-pre-line">
+                        {confirmState.message}
+                      </p>
                     </div>
                   </div>
-                  <div className="mt-6 flex justify-end gap-3">
+                  <div className="mt-7 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
                     <button
                       type="button"
                       onClick={() => closeConfirm(false)}
-                      className="btn-secondary"
+                      className="rounded-2xl px-4 py-3 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-900/5"
                     >
                       {confirmState.cancelText}
                     </button>
                     <button
                       type="button"
                       onClick={() => closeConfirm(true)}
-                      className={confirmState.tone === 'danger' ? 'btn-danger' : 'btn-primary'}
+                      className={`rounded-2xl px-5 py-3 text-sm font-semibold text-white transition-colors ${
+                        confirmState.tone === 'danger'
+                          ? 'bg-rose-800 hover:bg-rose-900'
+                          : 'bg-stone-800 hover:bg-stone-900'
+                      }`}
                     >
                       {confirmState.confirmText}
                     </button>

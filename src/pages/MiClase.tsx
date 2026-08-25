@@ -626,7 +626,7 @@ const MiClase = () => {
   if (loading) {
     return (
       <div
-        className={`min-h-screen flex items-center justify-center p-4 ${
+        className={`min-h-[100dvh] flex items-center justify-center p-4 ${
           isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
         }`}
       >
@@ -652,7 +652,7 @@ const MiClase = () => {
   if (!data) {
     return (
       <div
-        className={`min-h-screen flex items-center justify-center p-4 ${
+        className={`min-h-[100dvh] flex items-center justify-center p-4 ${
           isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
         }`}
       >
@@ -1142,107 +1142,101 @@ const MiClase = () => {
 
     return (
       <div
-        className={`min-h-screen safe-bottom ${
+        className={`min-h-[100dvh] relative ${
           isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
         }`}
       >
+        {/* Acciones fijas — no empujan el saludo hacia abajo */}
         <div
-          className="max-w-lg mx-auto px-4 pb-10"
-          style={{ paddingTop: 'max(2.75rem, calc(env(safe-area-inset-top, 0px) + 1.25rem))' }}
+          className="absolute left-0 right-0 z-20 flex items-center justify-end gap-1.5 px-4"
+          style={{ top: 'max(0.75rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}
         >
-          {/* Header: logo + acción contextual + salir */}
-          <header className="animate-savia-soft-in mb-8">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={irInicio}
-                className="flex items-center gap-2.5 min-w-0 text-left"
-                aria-label="Ir al inicio"
-              >
-                <img
-                  src={logoSrc}
-                  alt={marcaTitulo}
-                  className={`w-11 h-11 rounded-full object-cover flex-shrink-0 shadow-md ${
-                    isSavia ? 'ring-2 ring-savia-sandSoft' : 'ring-2 ring-primary-100'
-                  }`}
-                />
-                <p
-                  className={`text-[11px] uppercase tracking-[0.14em] font-medium truncate ${
-                    isSavia ? 'text-savia-muted' : muted
-                  }`}
-                >
-                  {marcaTitulo}
-                </p>
-              </button>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {seccionActiva === 'perfil' ? (
-                  <button
-                    type="button"
-                    onClick={() => setSeccionActiva('clases')}
-                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-colors touch-manipulation ${
-                      isSavia
-                        ? 'bg-savia-terra text-white'
-                        : 'bg-primary-600 text-white'
-                    }`}
-                    aria-label="Liberar o recuperar"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Recuperar
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setSeccionActiva('perfil')}
-                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-colors touch-manipulation ${
-                      isSavia
-                        ? 'bg-white/80 text-savia-ink border border-savia-sandSoft hover:bg-savia-creamDeep'
-                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                    }`}
-                    aria-label="Mi perfil"
-                  >
-                    <User className="w-4 h-4" />
-                    Perfil
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={cerrarSesionPortal}
-                  className={`inline-flex items-center justify-center rounded-xl p-2.5 transition-colors touch-manipulation ${
-                    isSavia
-                      ? 'text-savia-muted/80 hover:text-savia-ink hover:bg-white/60'
-                      : 'text-gray-500 hover:text-gray-800 hover:bg-white'
-                  }`}
-                  aria-label="Cerrar sesión"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </header>
+          <button
+            type="button"
+            onClick={irInicio}
+            className={`mr-auto inline-flex items-center rounded-full p-0.5 transition-opacity opacity-80 hover:opacity-100 ${
+              isSavia ? 'hover:bg-white/40' : 'hover:bg-white'
+            }`}
+            aria-label="Ir al inicio"
+          >
+            <img
+              src={logoSrc}
+              alt=""
+              className={`w-8 h-8 rounded-full object-cover shadow-sm ${
+                isSavia ? 'ring-1 ring-savia-sandSoft' : 'ring-1 ring-primary-100'
+              }`}
+            />
+          </button>
+          {seccionActiva === 'perfil' ? (
+            <button
+              type="button"
+              onClick={() => setSeccionActiva('clases')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-medium transition-colors touch-manipulation shadow-sm ${
+                isSavia
+                  ? 'bg-savia-terra text-white'
+                  : 'bg-primary-600 text-white'
+              }`}
+              aria-label="Liberar o recuperar"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Recuperar
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSeccionActiva('perfil')}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-medium transition-colors touch-manipulation ${
+                isSavia
+                  ? 'bg-white/75 text-savia-ink border border-savia-sandSoft/80 backdrop-blur-sm'
+                  : 'bg-white text-gray-700 border border-gray-200'
+              }`}
+              aria-label="Mi perfil"
+            >
+              <User className="w-3.5 h-3.5" />
+              Perfil
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={cerrarSesionPortal}
+            className={`inline-flex items-center justify-center rounded-full p-2 transition-colors touch-manipulation ${
+              isSavia
+                ? 'text-savia-muted/70 hover:text-savia-ink hover:bg-white/50'
+                : 'text-gray-500 hover:text-gray-800 hover:bg-white'
+            }`}
+            aria-label="Cerrar sesión"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
 
+        <div
+          className="max-w-lg mx-auto px-4 pb-12"
+          style={{ paddingTop: 'max(5.5rem, calc(env(safe-area-inset-top, 0px) + 3.75rem))' }}
+        >
           {seccionActiva === 'inicio' ? (
-            <div className="animate-savia-fade-up text-center pt-2 sm:pt-4">
+            <div className="animate-savia-fade-up text-center">
               <p
                 className={
                   isSavia
-                    ? 'font-saviaDisplay text-3xl sm:text-4xl text-savia-ink tracking-tight leading-tight'
+                    ? 'font-saviaDisplay text-[2.15rem] sm:text-4xl text-savia-ink tracking-tight leading-tight'
                     : `text-3xl sm:text-4xl font-bold tracking-tight ${ink}`
                 }
               >
                 Hola, {nombreSaludo}
               </p>
               <h1
-                className={`mt-4 ${
+                className={`mt-5 ${
                   isSavia
-                    ? 'font-saviaDisplay text-2xl sm:text-[1.75rem] text-savia-terra tracking-tight leading-snug'
-                    : `text-2xl font-semibold tracking-tight ${ink}`
+                    ? 'font-saviaDisplay text-xl sm:text-2xl text-savia-terra tracking-tight leading-snug'
+                    : `text-xl font-semibold tracking-tight ${ink}`
                 }`}
               >
                 ¿Qué querés hacer?
               </h1>
               <p className={`mt-2 text-sm ${muted}`}>{semanaActualLabel}</p>
 
-              <div className="mt-8 space-y-3 text-left">
+              <div className="mt-10 space-y-3 text-left">
                 <button
                   type="button"
                   onClick={() => setSeccionActiva('clases')}
@@ -1336,27 +1330,27 @@ const MiClase = () => {
             </>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={irInicio}
-                className={`inline-flex items-center gap-1.5 text-sm font-medium mb-3 touch-manipulation ${
-                  isSavia ? 'text-savia-terra hover:text-savia-terraDeep' : 'text-primary-600'
-                }`}
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Inicio
-              </button>
-              <div className="mb-5 animate-savia-fade-up">
-                <h1
+              <div className="mb-6 text-center animate-savia-fade-up">
+                <p
                   className={
                     isSavia
-                      ? 'font-saviaDisplay text-3xl sm:text-[2.15rem] text-savia-ink tracking-tight leading-none'
+                      ? 'font-saviaDisplay text-[2rem] sm:text-4xl text-savia-ink tracking-tight leading-tight'
                       : `text-3xl font-bold tracking-tight ${ink}`
                   }
                 >
-                  Liberar / Recuperar
-                </h1>
+                  Hola, {nombreSaludo}
+                </p>
                 <p className={`mt-2 text-sm ${muted}`}>{semanaActualLabel}</p>
+                <button
+                  type="button"
+                  onClick={irInicio}
+                  className={`mt-3 inline-flex items-center gap-1 text-xs font-medium touch-manipulation ${
+                    isSavia ? 'text-savia-muted hover:text-savia-terra' : 'text-gray-500 hover:text-primary-600'
+                  }`}
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Inicio
+                </button>
               </div>
 
               {/* Guía 2 pasos */}
@@ -1934,7 +1928,7 @@ const MiClase = () => {
 
   return (
     <div
-      className={`min-h-screen safe-bottom ${
+      className={`min-h-[100dvh] ${
         isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
       }`}
     >

@@ -6,9 +6,11 @@
   html {
     /* En móvil, reservar espacio para safe area en el scroll */
     scroll-padding-bottom: env(safe-area-inset-bottom, 0px);
+    background-color: #F3EDE4;
   }
   body {
     @apply text-gray-900 antialiased;
+    background-color: #F3EDE4;
     background-image: url('/saviaFondo.png');
     background-size: cover;
     background-position: center;
@@ -20,7 +22,6 @@
     body {
       background-attachment: scroll;
       overflow-x: hidden;
-      padding-bottom: env(safe-area-inset-bottom, 0px);
     }
     html {
       overflow-x: hidden;
@@ -97,11 +98,28 @@
   position: relative;
   isolation: isolate;
   overflow-x: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: 100svh;
   background:
     radial-gradient(ellipse 90% 55% at 10% -10%, rgba(201, 178, 141, 0.35), transparent 55%),
     radial-gradient(ellipse 70% 45% at 100% 0%, rgba(118, 129, 88, 0.18), transparent 50%),
     radial-gradient(ellipse 60% 40% at 50% 100%, rgba(143, 102, 76, 0.12), transparent 55%),
     linear-gradient(180deg, #FAF7F2 0%, #F3EDE4 48%, #EFE8DE 100%);
+  /* Cubre home indicator / safe area inferior sin dejar ver el fondo global */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
+}
+.portal-savia-shell::after {
+  content: '';
+  pointer-events: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: env(safe-area-inset-bottom, 0px);
+  z-index: 2;
+  background: #EFE8DE;
 }
 .portal-savia-shell::before {
   content: '';

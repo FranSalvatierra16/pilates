@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -872,6 +872,24 @@ const MiClase = () => {
   const cuotaPorVencer = tieneFechaVencimiento && !cuotaVencida && (cuotaVenceHoy || isCuotaPorVencer(fechaVencimiento, 3));
 
   const semanaActualLabel = getRangoSemana(getSemanaActual());
+  const semanaVistaIso = data.semanaVista || getSemanaActual();
+  const nombreSaludo = (data.alumno.nombre || '').trim() || 'hola';
+  const diaNumDeSemana = (diaSemana: number) =>
+    Number(getFechaFromSemanaYDia(semanaVistaIso, diaSemana).slice(8, 10));
+  const tieneFijaSinLiberar =
+    esRecuperar &&
+    clasesFijasOrdenadas.some((c) => {
+      const t = turnosById.get(c.id);
+      return !!(t?.esClaseFija && !t.claseLiberada);
+    });
+  /** 1 = liberar fija · 2 = elegir horario · 3 = ya recuperó */
+  const pasoRecuperar: 1 | 2 | 3 = !esRecuperar
+    ? 1
+    : recuperacionesOrdenadas.length > 0
+      ? 3
+      : tieneFijaSinLiberar
+        ? 1
+        : 2;
   const sucursalPortal =
     data.sucursalId ||
     (portalAuth?.type === 'dni' ? portalAuth.sucursalId : '') ||
@@ -922,6 +940,838 @@ const MiClase = () => {
     ? (esRecuperar ? 'text-savia-oliveDeep' : 'text-savia-terra')
     : (esRecuperar ? 'text-violet-700' : 'text-primary-700');
 
+  const perfilPanel = (
+    <>
+      {proximaClase && (
+        <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
+          <div
+            className={`rounded-2xl px-4 py-3 ${
+              isSavia
+                ? 'border border-savia-olive/25 bg-savia-oliveSoft'
+                : 'border border-emerald-200 bg-emerald-50'
+            }`}
+          >
+            <p
+              className={`text-xs font-medium ${
+                isSavia ? 'text-savia-oliveDeep' : 'text-emerald-700'
+              }`}
+            >
+              Próxima clase
+            </p>
+            <p
+              className={`text-base font-semibold mt-1 ${
+                isSavia ? 'text-savia-ink' : 'text-emerald-900'
+              }`}
+            >
+              {NOMBRE_DIA[proximaClase.diaSemana] ?? `Día ${proximaClase.diaSemana}`}{' '}
+              {proximaClase.hora}
+            </p>
+            <p className={`text-sm mt-1 ${isSavia ? 'text-savia-oliveDeep' : 'text-emerald-800'}`}>
+              {proximaClase.titulo || 'Clase'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
+        <div className="grid grid-cols-2 gap-3">
+          <div
+            className={`rounded-2xl px-3 py-3 ${
+              isSavia
+                ? 'border border-savia-sandSoft bg-savia-cream/50'
+                : 'border border-gray-200 bg-gray-50'
+            }`}
+          >
+            <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+              Actividad
+            </p>
+            <p className={`text-sm font-semibold mt-1 ${ink}`}>
+              {data.alumno.actividadNombre || 'Sin actividad'}
+            </p>
+            <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+              Tu plan actual
+            </p>
+          </div>
+          <div
+            className={`rounded-2xl px-3 py-3 ${
+              isSavia
+                ? 'border border-savia-sandSoft bg-savia-cream/50'
+                : 'border border-gray-200 bg-gray-50'
+            }`}
+          >
+            <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+              Cuota
+            </p>
+            <p
+              className={`text-sm font-semibold mt-1 ${
+                cuotaVencida
+                  ? 'text-red-600'
+                  : cuotaPorVencer
+                    ? isSavia
+                      ? 'text-savia-terra'
+                      : 'text-amber-600'
+                    : ink
+              }`}
+            >
+              {tieneFechaVencimiento ? formatDate(fechaVencimiento) : 'Sin fecha'}
+            </p>
+            <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+              {cuotaVencida
+                ? 'Vencida'
+                : cuotaVenceHoy
+                  ? 'Vence hoy'
+                  : cuotaPorVencer
+                    ? 'Próxima a vencer'
+                    : 'Al día'}
+            </p>
+          </div>
+          <div
+            className={`rounded-2xl px-3 py-3 ${
+              isSavia
+                ? 'border border-savia-sandSoft bg-savia-cream/50'
+                : 'border border-gray-200 bg-gray-50'
+            }`}
+          >
+            <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+              Clases fijas
+            </p>
+            <p className={`text-sm font-semibold mt-1 ${ink}`}>{clasesFijasOrdenadas.length}</p>
+            <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+              Por semana
+            </p>
+          </div>
+          <div
+            className={`rounded-2xl px-3 py-3 ${
+              isSavia
+                ? 'border border-savia-olive/30 bg-savia-oliveSoft/70'
+                : 'border border-violet-200 bg-violet-50'
+            }`}
+          >
+            <p
+              className={`text-xs font-medium ${
+                isSavia ? 'text-savia-oliveDeep' : 'text-violet-700'
+              }`}
+            >
+              Para recuperar
+            </p>
+            <p
+              className={`text-2xl font-bold mt-1 tabular-nums ${
+                isSavia ? 'text-savia-terraDeep' : 'text-violet-950'
+              }`}
+            >
+              {data.alumno.clasesParaRecuperar || 0}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
+        <div className="flex items-center gap-2 mb-3">
+          <History className={`w-4 h-4 ${isSavia ? 'text-savia-terra' : 'text-primary-600'}`} />
+          <h2 className={`text-sm font-semibold ${ink}`}>Historial de clases</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div
+            className={`rounded-xl px-3 py-2 ${
+              isSavia
+                ? 'bg-savia-oliveSoft border border-savia-olive/25'
+                : 'bg-green-50 border border-green-200'
+            }`}
+          >
+            <p className={`text-xs ${isSavia ? 'text-savia-oliveDeep' : 'text-green-700'}`}>
+              Asistidas
+            </p>
+            <p
+              className={`text-sm font-semibold ${
+                isSavia ? 'text-savia-ink' : 'text-green-900'
+              }`}
+            >
+              {totalAsistidas}
+            </p>
+          </div>
+          <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2">
+            <p className="text-xs text-red-700">Inasistencias</p>
+            <p className="text-sm font-semibold text-red-900">{totalInasistencias}</p>
+          </div>
+        </div>
+        {historial.length === 0 ? (
+          <p className={`text-sm ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+            Todavía no hay asistencias marcadas.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {historial.slice(0, 8).map((item) => (
+              <div
+                key={item.id}
+                className={`rounded-2xl px-3 py-2 ${
+                  isSavia ? 'border border-savia-sandSoft' : 'border border-gray-200'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className={`text-sm font-semibold ${ink}`}>
+                      {formatDate(item.fecha)} · {item.hora}
+                    </p>
+                    <p className={`text-xs mt-0.5 ${muted}`}>{item.titulo}</p>
+                  </div>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      item.estado === 'asistio'
+                        ? isSavia
+                          ? 'bg-savia-oliveSoft text-savia-oliveDeep'
+                          : 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {item.estado === 'asistio' ? 'Asistió' : 'No asistió'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  /* ─── Modo recuperar: flujo premium enfocado ─── */
+  if (esRecuperar) {
+    return (
+      <div
+        className={`min-h-screen pb-safe ${
+          isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
+        }`}
+      >
+        <div className="max-w-lg mx-auto p-4 pt-6 sm:pt-5 pb-10">
+          {/* Header limpio */}
+          <header className="animate-savia-soft-in mb-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <img
+                  src={logoSrc}
+                  alt={marcaTitulo}
+                  className={`w-11 h-11 rounded-full object-cover flex-shrink-0 shadow-md ${
+                    isSavia ? 'ring-2 ring-savia-sandSoft' : 'ring-2 ring-primary-100'
+                  }`}
+                />
+                <p className={`text-sm truncate ${muted}`}>
+                  Hola, <span className={`font-semibold ${ink}`}>{nombreSaludo}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={cerrarSesionPortal}
+                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                  isSavia
+                    ? 'text-savia-muted/80 hover:text-savia-ink'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+                aria-label="Cerrar sesión"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Salir
+              </button>
+            </div>
+            <div className="mt-5 animate-savia-fade-up">
+              <h1
+                className={
+                  isSavia
+                    ? 'font-saviaDisplay text-3xl sm:text-[2.15rem] text-savia-ink tracking-tight leading-none'
+                    : `text-3xl font-bold tracking-tight ${ink}`
+                }
+              >
+                Recuperar clase
+              </h1>
+              <p className={`mt-2 text-sm ${muted}`}>{semanaActualLabel}</p>
+            </div>
+          </header>
+
+          {seccionActiva === 'perfil' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setSeccionActiva('clases')}
+                className={`inline-flex items-center gap-1.5 text-sm font-medium mb-4 ${
+                  isSavia ? 'text-savia-terra hover:text-savia-terraDeep' : 'text-primary-600'
+                }`}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Volver a recuperar
+              </button>
+              {perfilPanel}
+            </>
+          ) : (
+            <>
+              {/* Guía 2 pasos */}
+              <nav
+                className={`mb-5 rounded-2xl p-1.5 grid grid-cols-2 gap-1.5 animate-savia-fade-up ${
+                  isSavia ? 'bg-white/70 border border-savia-sandSoft' : 'bg-white border border-gray-200'
+                }`}
+                aria-label="Pasos para recuperar"
+              >
+                {[
+                  { n: 1 as const, label: 'Liberá', hint: 'si no vas' },
+                  { n: 2 as const, label: 'Elegí', hint: 'otro horario' },
+                ].map((paso) => {
+                  const activo =
+                    pasoRecuperar === paso.n || (pasoRecuperar === 3 && paso.n === 2);
+                  const hecho = paso.n === 1 && pasoRecuperar !== 1;
+                  return (
+                    <div
+                      key={paso.n}
+                      className={`rounded-xl px-3 py-2.5 transition-colors ${
+                        activo
+                          ? isSavia
+                            ? 'bg-savia-terra text-white shadow-sm'
+                            : 'bg-primary-600 text-white shadow-sm'
+                          : hecho
+                            ? isSavia
+                              ? 'bg-savia-oliveSoft/80 text-savia-oliveDeep'
+                              : 'bg-emerald-50 text-emerald-800'
+                            : isSavia
+                              ? 'text-savia-muted'
+                              : 'text-gray-500'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                            activo
+                              ? 'bg-white/20'
+                              : hecho
+                                ? isSavia
+                                  ? 'bg-savia-olive/20'
+                                  : 'bg-emerald-200/60'
+                                : isSavia
+                                  ? 'bg-savia-creamDeep'
+                                  : 'bg-gray-100'
+                          }`}
+                        >
+                          {hecho && !activo ? <CheckCircle2 className="w-3.5 h-3.5" /> : paso.n}
+                        </span>
+                        <div className="min-w-0 leading-tight">
+                          <p className="text-sm font-semibold">{paso.label}</p>
+                          <p className={`text-[11px] ${activo ? 'opacity-90' : 'opacity-70'}`}>
+                            {paso.hint}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </nav>
+
+              {pasoRecuperar === 3 && (
+                <div
+                  className={`mb-5 p-4 animate-savia-fade-up ${cardCls} ${
+                    isSavia
+                      ? 'bg-gradient-to-br from-savia-oliveSoft via-white/95 to-savia-cream border-savia-olive/25'
+                      : 'border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${
+                        isSavia ? 'bg-savia-olive text-white' : 'bg-emerald-600 text-white'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-base font-semibold ${ink}`}>Listo, ya recuperás</p>
+                      <p className={`text-sm mt-1 leading-snug ${muted}`}>
+                        Tenés tu horario anotado. Si necesitás cambiarlo, liberá la recuperación y elegí otro.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tu clase fija */}
+              {clasesFijasOrdenadas.length > 0 && (
+                <section className="mb-5 animate-savia-fade-up">
+                  <h2 className={`text-xs font-semibold uppercase tracking-wider mb-3 px-0.5 ${muted}`}>
+                    Tu clase fija
+                  </h2>
+                  <div className="space-y-3">
+                    {clasesFijasOrdenadas.map((turno) => {
+                      const turnoActual = turnosById.get(turno.id);
+                      const liberada = !!turnoActual?.claseLiberada;
+                      const fechaIso = getFechaFromSemanaYDia(semanaVistaIso, turno.diaSemana);
+                      const fechaLabel = formatDate(fechaIso);
+                      return (
+                        <div
+                          key={turno.id}
+                          className={`${cardCls} p-5 ${
+                            liberada
+                              ? isSavia
+                                ? 'border-savia-olive/30 bg-savia-oliveSoft/30'
+                                : 'border-emerald-200'
+                              : isSavia
+                                ? 'border-savia-sand'
+                                : 'border-amber-200'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p
+                                className={`text-xs font-medium uppercase tracking-wide ${
+                                  liberada
+                                    ? isSavia
+                                      ? 'text-savia-oliveDeep'
+                                      : 'text-emerald-700'
+                                    : isSavia
+                                      ? 'text-savia-terra'
+                                      : 'text-amber-700'
+                                }`}
+                              >
+                                {liberada ? 'Ya liberaste' : 'Vas esta semana'}
+                              </p>
+                              <p
+                                className={`mt-1.5 text-2xl font-semibold leading-none ${
+                                  isSavia ? 'font-saviaDisplay text-savia-ink' : ink
+                                }`}
+                              >
+                                {DIAS_CORTOS[turno.diaSemana]} {diaNumDeSemana(turno.diaSemana)}
+                              </p>
+                              <p className={`mt-2 text-3xl font-bold tabular-nums tracking-tight ${ink}`}>
+                                {turno.hora}
+                              </p>
+                              <p className={`text-sm mt-1.5 ${muted}`}>
+                                {fechaLabel}
+                                {turno.titulo ? ` · ${turno.titulo}` : ''}
+                              </p>
+                            </div>
+                          </div>
+                          {turnoActual?.esClaseFija && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                liberada
+                                  ? restaurarClaseSemana(turnoActual.id, turnoActual.liberacionId)
+                                  : liberarClaseSemana(turnoActual.id)
+                              }
+                              disabled={!!actioning}
+                              className={`mt-4 w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm disabled:opacity-50 touch-manipulation transition-colors ${
+                                liberada ? ctaRestaurar : ctaLiberar
+                              }`}
+                            >
+                              {actioning === turnoActual.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : liberada ? (
+                                <UserPlus className="w-4 h-4" />
+                              ) : (
+                                <UserMinus className="w-4 h-4" />
+                              )}
+                              {liberada ? 'Volver a tomarla' : 'No voy · Liberar'}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* Ya recuperás */}
+              {recuperacionesOrdenadas.length > 0 && (
+                <section className="mb-5 animate-savia-fade-up">
+                  <h2 className={`text-xs font-semibold uppercase tracking-wider mb-3 px-0.5 ${muted}`}>
+                    Ya recuperás
+                  </h2>
+                  <div className="space-y-3">
+                    {recuperacionesOrdenadas.map((turno) => {
+                      const fechaRecuperacion = formatDate(
+                        getFechaFromSemanaYDia(semanaVistaIso, turno.diaSemana)
+                      );
+                      return (
+                        <div
+                          key={`rec-${turno.id}-${turno.recuperacionId}`}
+                          className={`rounded-3xl p-5 ${
+                            isSavia
+                              ? 'border border-savia-olive/35 bg-gradient-to-br from-savia-oliveSoft to-savia-cream/80 shadow-[0_8px_28px_rgba(107,124,78,0.12)]'
+                              : 'rounded-2xl border border-violet-200 bg-violet-50 shadow-lg'
+                          }`}
+                        >
+                          <p
+                            className={`text-xs font-medium uppercase tracking-wide ${
+                              isSavia ? 'text-savia-oliveDeep' : 'text-violet-700'
+                            }`}
+                          >
+                            Tu recuperación
+                          </p>
+                          <p
+                            className={`mt-1.5 text-2xl font-semibold leading-none ${
+                              isSavia ? 'font-saviaDisplay text-savia-ink' : ink
+                            }`}
+                          >
+                            {DIAS_CORTOS[turno.diaSemana]} {diaNumDeSemana(turno.diaSemana)}
+                          </p>
+                          <p className={`mt-2 text-3xl font-bold tabular-nums tracking-tight ${ink}`}>
+                            {turno.hora}
+                          </p>
+                          <p className={`text-sm mt-1.5 ${muted}`}>
+                            {fechaRecuperacion}
+                            {turno.titulo ? ` · ${turno.titulo}` : ''}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => liberar(turno.id, turno.recuperacionId)}
+                            disabled={!!actioning}
+                            className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium disabled:opacity-50 touch-manipulation ${
+                              isSavia
+                                ? 'text-savia-oliveDeep/80 hover:bg-white/50'
+                                : 'text-violet-800 hover:bg-violet-100/80'
+                            }`}
+                          >
+                            {actioning === turno.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <UserMinus className="w-4 h-4" />
+                            )}
+                            Liberar recuperación
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {clasesFijasOrdenadas.length === 0 && recuperacionesOrdenadas.length === 0 && (
+                <div className={`${cardCls} p-5 mb-5 text-center animate-savia-fade-up`}>
+                  <p className={`text-sm ${muted}`}>
+                    No tenés clase fija cargada. Podés elegir un horario abajo si corresponde.
+                  </p>
+                </div>
+              )}
+
+              {/* Elegí horario — corazón */}
+              <section className="animate-savia-fade-up">
+                <div className="flex items-end justify-between gap-3 mb-3 px-0.5">
+                  <div>
+                    <h2
+                      className={`text-lg font-semibold ${
+                        isSavia ? 'font-saviaDisplay text-savia-ink' : ink
+                      }`}
+                    >
+                      Elegí horario
+                    </h2>
+                    <p className={`text-xs mt-0.5 ${muted}`}>Tocá Recuperar en el que quieras</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void recargarRecuperar()}
+                    disabled={cargandoSemana}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs disabled:opacity-50 ${
+                      isSavia
+                        ? 'text-savia-muted hover:text-savia-oliveDeep'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                    title="Actualizar"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${cargandoSemana ? 'animate-spin' : ''}`} />
+                    Actualizar
+                  </button>
+                </div>
+
+                {cuotaVencida && (
+                  <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-red-800">Cuota vencida</p>
+                    <p className="text-xs text-red-700 mt-1 leading-snug">
+                      Regularizá el pago para poder recuperar.
+                      {tieneFechaVencimiento ? ` Venció el ${formatDate(fechaVencimiento)}.` : ''}
+                    </p>
+                  </div>
+                )}
+
+                {hayPoliticaAnticipacion && (
+                  <p
+                    className={`mb-3 text-xs rounded-xl px-3 py-2 leading-snug ${
+                      isSavia
+                        ? 'border border-savia-sandSoft bg-white/60 text-savia-muted'
+                        : 'border border-gray-200 bg-white text-gray-600'
+                    }`}
+                  >
+                    Liberar: <strong>{textoPlazoMinutos(mLib)}</strong> antes · Anotarse:{' '}
+                    <strong>{textoPlazoMinutos(mAnot)}</strong> antes
+                  </p>
+                )}
+
+                {/* Filtros sticky */}
+                <div
+                  className={`sticky top-0 z-10 -mx-1 px-1 py-2 mb-3 backdrop-blur-md ${
+                    isSavia ? 'bg-savia-cream/85' : 'bg-slate-100/90'
+                  }`}
+                >
+                  <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-none">
+                    <button
+                      type="button"
+                      onClick={() => setFiltroDia(null)}
+                      className={`flex-shrink-0 px-3.5 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                        filtroDia === null ? chipRecuperar : chipIdle
+                      }`}
+                    >
+                      Todos
+                    </button>
+                    {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setFiltroDia(d)}
+                        className={`flex-shrink-0 px-3.5 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                          filtroDia === d
+                            ? isSavia
+                              ? chipRecuperar
+                              : 'bg-violet-600 text-white'
+                            : chipIdle
+                        }`}
+                      >
+                        {DIAS_CORTOS[d]} {diaNumDeSemana(d)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5 mt-1.5">
+                    {(
+                      [
+                        { id: 'todos' as const, label: 'Todos' },
+                        { id: 'manana' as const, label: 'Mañana' },
+                        { id: 'tarde' as const, label: 'Tarde' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setFiltroHorario(opt.id)}
+                        className={`px-3.5 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                          filtroHorario === opt.id
+                            ? opt.id === 'tarde'
+                              ? isSavia
+                                ? 'bg-savia-olive text-white'
+                                : 'bg-blue-600 text-white'
+                              : opt.id === 'manana'
+                                ? isSavia
+                                  ? 'bg-savia-sand text-savia-ink'
+                                  : 'bg-amber-500 text-white'
+                                : isSavia
+                                  ? chipActive
+                                  : 'bg-violet-600 text-white'
+                            : chipIdle
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {data.turnos.length === 0 ? (
+                    <div className={`${cardCls} p-8 text-center`}>
+                      <p className={`text-sm ${muted}`}>
+                        Todavía no hay horarios. Cuando el estudio los cargue, van a aparecer acá.
+                      </p>
+                    </div>
+                  ) : turnosOrdenados.length === 0 ? (
+                    <div className={`${cardCls} p-8 text-center`}>
+                      <p className={`font-medium ${ink}`}>No hay horarios con este filtro</p>
+                      <p className={`text-sm mt-1.5 ${muted}`}>
+                        Probá otro día, o volvé más tarde cuando se libere un lugar.
+                      </p>
+                      {(filtroDia !== null || filtroHorario !== 'todos') && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFiltroDia(null);
+                            setFiltroHorario('todos');
+                          }}
+                          className={`mt-4 text-sm font-medium ${
+                            isSavia ? 'text-savia-terra' : 'text-primary-600'
+                          }`}
+                        >
+                          Ver todos los horarios
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    turnosOrdenados.map((t) => {
+                      const libres = Math.max(0, t.cupo - t.inscriptos);
+                      const llena = t.inscriptos >= t.cupo;
+                      const pct =
+                        t.cupo > 0 ? Math.min(100, Math.round((t.inscriptos / t.cupo) * 100)) : 0;
+                      const fechaLabel = formatDate(
+                        getFechaFromSemanaYDia(semanaVistaIso, t.diaSemana)
+                      );
+                      return (
+                        <div
+                          key={t.id}
+                          className={`${cardCls} p-4 sm:p-5 ${
+                            t.esClaseFija && !t.claseLiberada
+                              ? isSavia
+                                ? 'ring-1 ring-savia-sand'
+                                : 'ring-1 ring-amber-200'
+                              : t.yaInscripto
+                                ? isSavia
+                                  ? 'ring-1 ring-savia-olive/40'
+                                  : 'ring-1 ring-violet-200'
+                                : ''
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p
+                                className={`text-3xl font-bold tabular-nums tracking-tight leading-none ${ink}`}
+                              >
+                                {t.hora}
+                              </p>
+                              <p className={`mt-2 text-sm font-medium ${ink}`}>
+                                {DIAS_CORTOS[t.diaSemana]} {diaNumDeSemana(t.diaSemana)}
+                                <span className={`font-normal ${muted}`}> · {fechaLabel}</span>
+                              </p>
+                              {t.titulo ? (
+                                <p className={`text-xs mt-0.5 truncate ${muted}`}>{t.titulo}</p>
+                              ) : null}
+                            </div>
+                            <div className="text-right flex-shrink-0 pt-0.5">
+                              <p
+                                className={`text-xs font-semibold tabular-nums ${
+                                  llena ? 'text-red-600' : isSavia ? 'text-savia-oliveDeep' : muted
+                                }`}
+                              >
+                                {llena ? 'Llena' : libres === 1 ? '1 libre' : `${libres} libres`}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex items-center gap-2.5">
+                            <div
+                              className={`h-2 flex-1 rounded-full overflow-hidden ${
+                                isSavia ? 'bg-savia-sandSoft' : 'bg-gray-100'
+                              }`}
+                            >
+                              <div
+                                className={`h-full rounded-full transition-[width] ${
+                                  llena
+                                    ? 'bg-red-500'
+                                    : libres <= 1
+                                      ? isSavia
+                                        ? 'bg-savia-sand'
+                                        : 'bg-amber-400'
+                                      : isSavia
+                                        ? 'bg-savia-olive'
+                                        : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {t.esClaseFija && !t.claseLiberada && (
+                            <p
+                              className={`text-xs mt-2.5 font-medium ${
+                                isSavia ? 'text-savia-terra' : 'text-amber-700'
+                              }`}
+                            >
+                              Tu clase fija
+                            </p>
+                          )}
+                          {t.esClaseFija && t.claseLiberada && (
+                            <p
+                              className={`text-xs mt-2.5 font-medium ${
+                                isSavia ? 'text-savia-oliveDeep' : 'text-emerald-700'
+                              }`}
+                            >
+                              Ya liberaste este horario
+                            </p>
+                          )}
+
+                          <div className="mt-4">
+                            {t.yaInscripto ? (
+                              <button
+                                type="button"
+                                onClick={() => liberar(t.id, t.recuperacionId)}
+                                disabled={!!actioning}
+                                className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
+                              >
+                                {actioning === t.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <UserMinus className="w-4 h-4" />
+                                )}
+                                Liberar
+                              </button>
+                            ) : t.esClaseFija && !t.claseLiberada ? (
+                              <button
+                                type="button"
+                                onClick={() => liberarClaseSemana(t.id)}
+                                disabled={!!actioning}
+                                className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
+                              >
+                                {actioning === t.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <UserMinus className="w-4 h-4" />
+                                )}
+                                No voy · Liberar
+                              </button>
+                            ) : t.esClaseFija && t.claseLiberada ? (
+                              <button
+                                type="button"
+                                onClick={() => restaurarClaseSemana(t.id, t.liberacionId)}
+                                disabled={!!actioning}
+                                className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm disabled:opacity-50 touch-manipulation ${ctaRestaurar}`}
+                              >
+                                {actioning === t.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <UserPlus className="w-4 h-4" />
+                                )}
+                                Volver a tomarla
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => inscribir(t.id)}
+                                disabled={!!actioning || llena || cuotaVencida}
+                                className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation ${
+                                  isSavia
+                                    ? 'bg-savia-olive text-white hover:bg-savia-oliveDeep shadow-sm'
+                                    : 'bg-violet-600 text-white hover:bg-violet-700'
+                                }`}
+                              >
+                                {actioning === t.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Sparkles className="w-4 h-4" />
+                                )}
+                                {cuotaVencida ? 'Cuota vencida' : llena ? 'Llena' : 'Recuperar'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+
+              <div className="mt-8 text-center animate-savia-soft-in">
+                <button
+                  type="button"
+                  onClick={() => setSeccionActiva('perfil')}
+                  className={`text-xs font-medium underline-offset-2 hover:underline ${muted}`}
+                >
+                  Mi perfil
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── Modo fijo (sin cambios mayores) ─── */
   return (
     <div
       className={`min-h-screen pb-safe ${
@@ -957,16 +1807,12 @@ const MiClase = () => {
                 <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span
                     className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                      esRecuperar
-                        ? isSavia
-                          ? 'bg-savia-oliveSoft text-savia-oliveDeep border border-savia-olive/25'
-                          : 'bg-violet-100 text-violet-800'
-                        : isSavia
-                          ? 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand'
-                          : 'bg-primary-100 text-primary-800'
+                      isSavia
+                        ? 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand'
+                        : 'bg-primary-100 text-primary-800'
                     }`}
                   >
-                    {esRecuperar ? 'Modo recuperar' : 'Modo clases'}
+                    Modo clases
                   </span>
                   {data.alumno.actividadNombre && (
                     <span
@@ -996,9 +1842,7 @@ const MiClase = () => {
             </button>
           </div>
           <p className={`text-sm mt-3 ${muted}`}>
-            {esRecuperar
-              ? 'Esta semana: liberá tu clase fija si no vas y elegí otro horario para recuperar.'
-              : 'Acá podés ver tus clases, tu estado de cuota y gestionar tus reservas.'}
+            Acá podés ver tus clases, tu estado de cuota y gestionar tus reservas.
           </p>
           <div
             className={`mt-4 grid grid-cols-2 gap-2 p-1 rounded-2xl ${
@@ -1040,107 +1884,12 @@ const MiClase = () => {
 
         {seccionActiva === 'clases' ? (
           <>
-            {esRecuperar && (
-              <div
-                className={`mb-4 p-4 ${cardCls} ${
-                  isSavia
-                    ? 'bg-gradient-to-br from-savia-oliveSoft/80 via-white/90 to-savia-cream'
-                    : 'border border-violet-200 bg-gradient-to-br from-violet-50 to-white'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p
-                      className={`text-xs font-semibold uppercase tracking-wide ${
-                        isSavia ? 'text-savia-oliveDeep' : 'text-violet-700'
-                      }`}
-                    >
-                      Esta semana
-                    </p>
-                    <p className={`mt-1 text-base font-bold ${ink}`}>{semanaActualLabel}</p>
-                    <p className={`mt-2 text-sm leading-snug ${muted}`}>
-                      Solo podés recuperar en la semana en curso. Los horarios que ya pasaron no se muestran.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void recargarRecuperar()}
-                    disabled={cargandoSemana}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50 ${
-                      isSavia
-                        ? 'border border-savia-sand bg-white/80 text-savia-oliveDeep hover:bg-savia-oliveSoft'
-                        : 'border border-violet-200 bg-white text-violet-800 hover:bg-violet-50'
-                    }`}
-                    title="Actualizar"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${cargandoSemana ? 'animate-spin' : ''}`} />
-                    Actualizar
-                  </button>
-                </div>
-                <div
-                  className={`mt-3 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 ${
-                    isSavia
-                      ? 'border border-savia-sand bg-white/90'
-                      : 'border border-violet-200 bg-white'
-                  }`}
-                >
-                  <p className={`text-sm font-medium ${isSavia ? 'text-savia-oliveDeep' : 'text-violet-900'}`}>
-                    Clases para recuperar
-                  </p>
-                  <p
-                    className={`text-2xl font-bold tabular-nums ${
-                      isSavia ? 'text-savia-terraDeep' : 'text-violet-950'
-                    }`}
-                  >
-                    {data.alumno.clasesParaRecuperar || 0}
-                  </p>
-                </div>
-                {cuotaVencida && (
-                  <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
-                    <p className="text-sm font-semibold text-red-800">Cuota vencida</p>
-                    <p className="text-xs text-red-700 mt-1 leading-snug">
-                      Regularizá el pago para poder recuperar una clase.
-                      {tieneFechaVencimiento ? ` Venció el ${formatDate(fechaVencimiento)}.` : ''}
-                    </p>
-                  </div>
-                )}
-                <ol className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                  <li
-                    className={`rounded-2xl px-3 py-2 ${
-                      isSavia
-                        ? 'border border-savia-sandSoft bg-white/80 text-savia-ink'
-                        : 'border border-violet-100 bg-white/80 text-gray-700'
-                    }`}
-                  >
-                    <span className={`font-semibold ${isSavia ? 'text-savia-terra' : 'text-violet-800'}`}>
-                      1.
-                    </span>{' '}
-                    Liberá tu clase fija si no vas
-                  </li>
-                  <li
-                    className={`rounded-2xl px-3 py-2 ${
-                      isSavia
-                        ? 'border border-savia-sandSoft bg-white/80 text-savia-ink'
-                        : 'border border-violet-100 bg-white/80 text-gray-700'
-                    }`}
-                  >
-                    <span className={`font-semibold ${isSavia ? 'text-savia-olive' : 'text-violet-800'}`}>
-                      2.
-                    </span>{' '}
-                    Elegí otro horario con lugar
-                  </li>
-                </ol>
-              </div>
-            )}
-
             <div className={`${cardCls} p-4 mb-4`}>
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className={`w-4 h-4 ${isSavia ? 'text-savia-terra' : 'text-primary-600'}`} />
-                <h2 className={`text-sm font-semibold ${ink}`}>
-                  {esRecuperar ? 'Tu semana' : 'Mis clases'}
-                </h2>
+                <h2 className={`text-sm font-semibold ${ink}`}>Mis clases</h2>
               </div>
-              {clasesFijasOrdenadas.length === 0 && recuperacionesOrdenadas.length === 0 ? (
+              {clasesFijasOrdenadas.length === 0 ? (
                 <p className={`text-sm ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
                   Todavía no tenés clases cargadas.
                 </p>
@@ -1162,116 +1911,24 @@ const MiClase = () => {
                             {NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}
                           </p>
                           <p className={`text-xs mt-0.5 ${muted}`}>{turno.titulo || 'Clase'}</p>
-                          {esRecuperar && turnoActual?.claseLiberada && (
-                            <p
-                              className={`text-xs mt-1 ${
-                                isSavia ? 'text-savia-oliveDeep' : 'text-emerald-700'
-                              }`}
-                            >
-                              La liberaste para esta semana
-                            </p>
-                          )}
-                          {esRecuperar && turnoActual?.esClaseFija && !turnoActual?.claseLiberada && (
-                            <p
-                              className={`text-xs mt-1 ${
-                                isSavia ? 'text-savia-terra' : 'text-amber-700'
-                              }`}
-                            >
-                              Tu clase fija de esta semana
-                            </p>
-                          )}
                         </div>
-                        {turnoActual && (
+                        {turnoActual?.yaInscripto && (
                           <div className="flex-shrink-0">
-                            {esRecuperar && turnoActual.esClaseFija && turnoActual.claseLiberada ? (
-                              <button
-                                type="button"
-                                onClick={() => restaurarClaseSemana(turnoActual.id, turnoActual.liberacionId)}
-                                disabled={!!actioning}
-                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaRestaurar}`}
-                              >
-                                {actioning === turnoActual.id ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <UserPlus className="w-4 h-4" />
-                                )}
-                                Volver a tomarla
-                              </button>
-                            ) : esRecuperar && turnoActual.esClaseFija ? (
-                              <button
-                                type="button"
-                                onClick={() => liberarClaseSemana(turnoActual.id)}
-                                disabled={!!actioning}
-                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
-                              >
-                                {actioning === turnoActual.id ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <UserMinus className="w-4 h-4" />
-                                )}
-                                Liberar esta clase
-                              </button>
-                            ) : turnoActual.yaInscripto ? (
-                              <button
-                                type="button"
-                                onClick={() => liberar(turnoActual.id, turnoActual.recuperacionId)}
-                                disabled={!!actioning}
-                                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
-                              >
-                                {actioning === turnoActual.id ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <UserMinus className="w-4 h-4" />
-                                )}
-                                Liberar cupo
-                              </button>
-                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => liberar(turnoActual.id, turnoActual.recuperacionId)}
+                              disabled={!!actioning}
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
+                            >
+                              {actioning === turnoActual.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <UserMinus className="w-4 h-4" />
+                              )}
+                              Liberar cupo
+                            </button>
                           </div>
                         )}
-                      </div>
-                    );
-                  })}
-                  {recuperacionesOrdenadas.map((turno) => {
-                    const fechaRecuperacion = formatDate(
-                      getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), turno.diaSemana)
-                    );
-                    return (
-                      <div
-                        key={`rec-${turno.id}-${turno.recuperacionId}`}
-                        className={`rounded-2xl px-3 py-3 flex items-center justify-between gap-3 ${
-                          isSavia
-                            ? 'border border-savia-olive/30 bg-savia-oliveSoft/60'
-                            : 'rounded-lg border border-violet-200 bg-violet-50'
-                        }`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-sm font-semibold ${ink}`}>
-                            {NOMBRE_DIA[turno.diaSemana] ?? `Día ${turno.diaSemana}`} {turno.hora}
-                          </p>
-                          <p className={`text-xs mt-0.5 ${muted}`}>{turno.titulo || 'Clase'}</p>
-                          <p
-                            className={`text-xs mt-1 ${
-                              isSavia ? 'text-savia-oliveDeep' : 'text-violet-700'
-                            }`}
-                          >
-                            Recuperación · {fechaRecuperacion}
-                          </p>
-                        </div>
-                        <div className="flex-shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => liberar(turno.id, turno.recuperacionId)}
-                            disabled={!!actioning}
-                            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
-                          >
-                            {actioning === turno.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <UserMinus className="w-4 h-4" />
-                            )}
-                            Liberar recuperación
-                          </button>
-                        </div>
                       </div>
                     );
                   })}
@@ -1279,196 +1936,100 @@ const MiClase = () => {
               )}
             </div>
 
-            {esRecuperar ? (
-              <div className={`${cardCls} p-4 mb-4`}>
-                <div className="mb-3">
-                  <h2 className={`text-sm font-semibold ${ink}`}>Elegí un horario para recuperar</h2>
-                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    Filtrá por día u horario. Tocá <strong>Recuperar acá</strong> en el que quieras.
+            <div className={`${cardCls} p-4 mb-4`}>
+              <div className="mb-3">
+                <h2 className={`text-sm font-semibold ${ink}`}>Anotarte o liberar una clase</h2>
+                <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Filtrá por día u horario para encontrar rápido tu clase.
+                </p>
+                {hayPoliticaAnticipacion && (
+                  <p
+                    className={`text-xs mt-2 rounded-xl px-2.5 py-2 leading-snug ${
+                      isSavia
+                        ? 'border border-savia-sandSoft bg-savia-creamDeep/60 text-savia-muted'
+                        : 'border border-gray-200 bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    Liberar cupo: <strong>{textoPlazoMinutos(mLib)}</strong> antes de cada turno.
+                    Anotarse o recuperar: <strong>{textoPlazoMinutos(mAnot)}</strong> antes de cada
+                    turno.
                   </p>
-                  {cuotaVencida && (
-                    <p className="text-xs text-red-700 mt-2 rounded-xl border border-red-200 bg-red-50 px-2.5 py-2 leading-snug">
-                      No podés recuperar: tu cuota está vencida. Regularizá el pago primero.
-                    </p>
-                  )}
-                  {hayPoliticaAnticipacion && (
-                    <p
-                      className={`text-xs mt-2 rounded-xl px-2.5 py-2 leading-snug ${
-                        isSavia
-                          ? 'border border-savia-sandSoft bg-savia-creamDeep/60 text-savia-muted'
-                          : 'border border-gray-200 bg-gray-50 text-gray-600'
-                      }`}
-                    >
-                      Liberar: <strong>{textoPlazoMinutos(mLib)}</strong> antes · Anotarse:{' '}
-                      <strong>{textoPlazoMinutos(mAnot)}</strong> antes
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => setFiltroDia(null)}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                      filtroDia === null ? chipRecuperar : chipIdle
-                    }`}
-                  >
-                    Todos
-                  </button>
-                  {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setFiltroDia(d)}
-                      className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                        filtroDia === d ? (isSavia ? chipRecuperar : 'bg-violet-600 text-white') : chipIdle
-                      }`}
-                    >
-                      {DIAS_CORTOS[d]}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setFiltroHorario('todos')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                      filtroHorario === 'todos'
-                        ? isSavia
-                          ? chipActive
-                          : 'bg-violet-600 text-white'
-                        : chipIdle
-                    }`}
-                  >
-                    Todo el día
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltroHorario('manana')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                      filtroHorario === 'manana'
-                        ? isSavia
-                          ? 'bg-savia-sand text-savia-ink'
-                          : 'bg-amber-500 text-white'
-                        : isSavia
-                          ? 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand'
-                          : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
-                    }`}
-                  >
-                    Mañana
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltroHorario('tarde')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                      filtroHorario === 'tarde'
-                        ? isSavia
-                          ? 'bg-savia-olive text-white'
-                          : 'bg-blue-600 text-white'
-                        : isSavia
-                          ? 'bg-savia-oliveSoft text-savia-oliveDeep border border-savia-olive/25'
-                          : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
-                    }`}
-                  >
-                    Tarde
-                  </button>
-                </div>
+                )}
               </div>
-            ) : (
-              <div className={`${cardCls} p-4 mb-4`}>
-                <div className="mb-3">
-                  <h2 className={`text-sm font-semibold ${ink}`}>Anotarte o liberar una clase</h2>
-                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    Filtrá por día u horario para encontrar rápido tu clase.
-                  </p>
-                  {hayPoliticaAnticipacion && (
-                    <p
-                      className={`text-xs mt-2 rounded-xl px-2.5 py-2 leading-snug ${
-                        isSavia
-                          ? 'border border-savia-sandSoft bg-savia-creamDeep/60 text-savia-muted'
-                          : 'border border-gray-200 bg-gray-50 text-gray-600'
-                      }`}
-                    >
-                      Liberar cupo: <strong>{textoPlazoMinutos(mLib)}</strong> antes de cada turno.
-                      Anotarse o recuperar: <strong>{textoPlazoMinutos(mAnot)}</strong> antes de cada
-                      turno.
-                    </p>
-                  )}
-                </div>
-                <p className={`text-xs font-medium mb-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                  Ver día
-                </p>
-                <div className="flex flex-wrap gap-1.5 mb-3">
+              <p className={`text-xs font-medium mb-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                Ver día
+              </p>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                <button
+                  type="button"
+                  onClick={() => setFiltroDia(null)}
+                  className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                    filtroDia === null ? chipActive : chipIdle
+                  }`}
+                >
+                  Todos
+                </button>
+                {[0, 1, 2, 3, 4, 5, 6].map((d) => (
                   <button
+                    key={d}
                     type="button"
-                    onClick={() => setFiltroDia(null)}
+                    onClick={() => setFiltroDia(d)}
                     className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                      filtroDia === null ? chipActive : chipIdle
+                      filtroDia === d ? chipActive : chipIdle
                     }`}
                   >
-                    Todos
+                    {DIAS_CORTOS[d]}
                   </button>
-                  {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setFiltroDia(d)}
-                      className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                        filtroDia === d ? chipActive : chipIdle
-                      }`}
-                    >
-                      {DIAS_CORTOS[d]}
-                    </button>
-                  ))}
-                </div>
-                <p className={`text-xs font-medium mb-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                  Ver horario (según tu sede)
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setFiltroHorario('todos')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                      filtroHorario === 'todos' ? chipActive : chipIdle
-                    }`}
-                  >
-                    Todos
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltroHorario('manana')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                      filtroHorario === 'manana'
-                        ? isSavia
-                          ? 'bg-savia-sand text-savia-ink'
-                          : 'bg-amber-500 text-white'
-                        : isSavia
-                          ? 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand'
-                          : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
-                    }`}
-                  >
-                    Mañana ({labelManana})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltroHorario('tarde')}
-                    className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
-                      filtroHorario === 'tarde'
-                        ? isSavia
-                          ? 'bg-savia-olive text-white'
-                          : 'bg-blue-600 text-white'
-                        : isSavia
-                          ? 'bg-savia-oliveSoft text-savia-oliveDeep border border-savia-olive/25'
-                          : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
-                    }`}
-                  >
-                    Tarde ({labelTarde})
-                  </button>
-                </div>
-                <p className={`text-xs mt-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                  Si no ves una clase, probá con «Todos».
-                </p>
+                ))}
               </div>
-            )}
+              <p className={`text-xs font-medium mb-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                Ver horario (según tu sede)
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setFiltroHorario('todos')}
+                  className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                    filtroHorario === 'todos' ? chipActive : chipIdle
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroHorario('manana')}
+                  className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                    filtroHorario === 'manana'
+                      ? isSavia
+                        ? 'bg-savia-sand text-savia-ink'
+                        : 'bg-amber-500 text-white'
+                      : isSavia
+                        ? 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand'
+                        : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                  }`}
+                >
+                  Mañana ({labelManana})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroHorario('tarde')}
+                  className={`px-3 py-2 rounded-full text-sm font-medium touch-manipulation ${
+                    filtroHorario === 'tarde'
+                      ? isSavia
+                        ? 'bg-savia-olive text-white'
+                        : 'bg-blue-600 text-white'
+                      : isSavia
+                        ? 'bg-savia-oliveSoft text-savia-oliveDeep border border-savia-olive/25'
+                        : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
+                  }`}
+                >
+                  Tarde ({labelTarde})
+                </button>
+              </div>
+              <p className={`text-xs mt-2 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                Si no ves una clase, probá con «Todos».
+              </p>
+            </div>
 
             <div className="space-y-4">
               {data.turnos.length === 0 ? (
@@ -1477,13 +2038,9 @@ const MiClase = () => {
                 </div>
               ) : turnosOrdenados.length === 0 ? (
                 <div className={`${cardCls} p-6 text-center`}>
-                  <p className={`font-medium ${ink}`}>
-                    {esRecuperar ? 'No hay horarios disponibles ahora' : 'No hay clases con el filtro elegido'}
-                  </p>
+                  <p className={`font-medium ${ink}`}>No hay clases con el filtro elegido</p>
                   <p className={`text-sm mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    {esRecuperar
-                      ? 'Probá otro día, o volvé más tarde cuando se libere un lugar.'
-                      : 'Probá con otro día u horario.'}
+                    Probá con otro día u horario.
                   </p>
                 </div>
               ) : (
@@ -1491,166 +2048,53 @@ const MiClase = () => {
                   <div key={dia}>
                     <h2 className={`text-sm font-semibold mb-2 px-1 ${headingDay}`}>
                       {NOMBRE_DIA[dia] ?? `Día ${dia}`}
-                      {esRecuperar && (
-                        <span className={`ml-2 font-normal ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                          · {formatDate(getFechaFromSemanaYDia(data.semanaVista || getSemanaActual(), dia))}
-                        </span>
-                      )}
                     </h2>
                     <div className="space-y-2">
-                      {porDia[dia].map((t) => {
-                        const libres = Math.max(0, t.cupo - t.inscriptos);
-                        const llena = t.inscriptos >= t.cupo;
-                        const pct = t.cupo > 0 ? Math.min(100, Math.round((t.inscriptos / t.cupo) * 100)) : 0;
-                        return (
-                          <div
-                            key={t.id}
-                            className={`${cardCls} p-4 flex items-center justify-between gap-3 ${
-                              esRecuperar && t.esClaseFija && !t.claseLiberada
-                                ? isSavia
-                                  ? 'border-savia-sand'
-                                  : 'border border-amber-200'
-                                : esRecuperar && t.yaInscripto
-                                  ? isSavia
-                                    ? 'border-savia-olive/40'
-                                    : 'border border-violet-200'
-                                  : ''
-                            }`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <p className={`font-semibold truncate ${ink}`}>{t.titulo || 'Clase'}</p>
-                              <p className={`text-sm ${muted}`}>{t.hora}</p>
-                              {esRecuperar ? (
-                                <>
-                                  <div className="mt-2 flex items-center gap-2">
-                                    <div
-                                      className={`h-1.5 flex-1 max-w-[120px] rounded-full overflow-hidden ${
-                                        isSavia ? 'bg-savia-sandSoft' : 'bg-gray-100'
-                                      }`}
-                                    >
-                                      <div
-                                        className={`h-full rounded-full ${
-                                          llena
-                                            ? 'bg-red-500'
-                                            : libres <= 1
-                                              ? isSavia
-                                                ? 'bg-savia-sand'
-                                                : 'bg-amber-400'
-                                              : isSavia
-                                                ? 'bg-savia-olive'
-                                                : 'bg-emerald-500'
-                                        }`}
-                                        style={{ width: `${pct}%` }}
-                                      />
-                                    </div>
-                                    <span
-                                      className={`text-xs font-medium tabular-nums ${
-                                        llena ? 'text-red-600' : muted
-                                      }`}
-                                    >
-                                      {t.inscriptos}/{t.cupo}
-                                      {llena ? ' llena' : libres === 1 ? ' · 1 libre' : ` · ${libres} libres`}
-                                    </span>
-                                  </div>
-                                  {t.esClaseFija && !t.claseLiberada && (
-                                    <p
-                                      className={`text-xs mt-1.5 font-medium ${
-                                        isSavia ? 'text-savia-terra' : 'text-amber-700'
-                                      }`}
-                                    >
-                                      Tu clase fija
-                                    </p>
-                                  )}
-                                  {t.esClaseFija && t.claseLiberada && (
-                                    <p
-                                      className={`text-xs mt-1.5 font-medium ${
-                                        isSavia ? 'text-savia-oliveDeep' : 'text-emerald-700'
-                                      }`}
-                                    >
-                                      Ya la liberaste esta semana
-                                    </p>
-                                  )}
-                                </>
-                              ) : (
-                                <p className={`text-xs ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                                  {t.inscriptos}/{t.cupo} inscriptos
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex-shrink-0">
-                              {t.yaInscripto ? (
-                                <button
-                                  type="button"
-                                  onClick={() => liberar(t.id, t.recuperacionId)}
-                                  disabled={!!actioning}
-                                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
-                                >
-                                  {actioning === t.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <UserMinus className="w-4 h-4" />
-                                  )}
-                                  {esRecuperar ? 'Liberar' : 'Liberar cupo'}
-                                </button>
-                              ) : esRecuperar && t.esClaseFija && !t.claseLiberada ? (
-                                <button
-                                  type="button"
-                                  onClick={() => liberarClaseSemana(t.id)}
-                                  disabled={!!actioning}
-                                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
-                                >
-                                  {actioning === t.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <UserMinus className="w-4 h-4" />
-                                  )}
-                                  Liberar
-                                </button>
-                              ) : esRecuperar && t.esClaseFija && t.claseLiberada ? (
-                                <button
-                                  type="button"
-                                  onClick={() => restaurarClaseSemana(t.id, t.liberacionId)}
-                                  disabled={!!actioning}
-                                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaRestaurar}`}
-                                >
-                                  {actioning === t.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <UserPlus className="w-4 h-4" />
-                                  )}
-                                  Volver
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => inscribir(t.id)}
-                                  disabled={!!actioning || t.inscriptos >= t.cupo || (esRecuperar && cuotaVencida)}
-                                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation ${
-                                    esRecuperar
-                                      ? isSavia
-                                        ? ctaPrimary
-                                        : 'bg-violet-600 text-white hover:bg-violet-700'
-                                      : ctaPrimary
-                                  }`}
-                                >
-                                  {actioning === t.id ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <UserPlus className="w-4 h-4" />
-                                  )}
-                                  {esRecuperar
-                                    ? cuotaVencida
-                                      ? 'Cuota vencida'
-                                      : llena
-                                        ? 'Llena'
-                                        : 'Recuperar acá'
-                                    : 'Sumarme'}
-                                </button>
-                              )}
-                            </div>
+                      {porDia[dia].map((t) => (
+                        <div
+                          key={t.id}
+                          className={`${cardCls} p-4 flex items-center justify-between gap-3`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className={`font-semibold truncate ${ink}`}>{t.titulo || 'Clase'}</p>
+                            <p className={`text-sm ${muted}`}>{t.hora}</p>
+                            <p className={`text-xs ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                              {t.inscriptos}/{t.cupo} inscriptos
+                            </p>
                           </div>
-                        );
-                      })}
+                          <div className="flex-shrink-0">
+                            {t.yaInscripto ? (
+                              <button
+                                type="button"
+                                onClick={() => liberar(t.id, t.recuperacionId)}
+                                disabled={!!actioning}
+                                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 touch-manipulation ${ctaLiberar}`}
+                              >
+                                {actioning === t.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <UserMinus className="w-4 h-4" />
+                                )}
+                                Liberar cupo
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => inscribir(t.id)}
+                                disabled={!!actioning || t.inscriptos >= t.cupo}
+                                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation ${ctaPrimary}`}
+                              >
+                                {actioning === t.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <UserPlus className="w-4 h-4" />
+                                )}
+                                Sumarme
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))
@@ -1658,197 +2102,7 @@ const MiClase = () => {
             </div>
           </>
         ) : (
-          <>
-            {proximaClase && (
-              <div className={`${cardCls} p-4 mb-4`}>
-                <div
-                  className={`rounded-2xl px-4 py-3 ${
-                    isSavia
-                      ? 'border border-savia-olive/25 bg-savia-oliveSoft'
-                      : 'border border-emerald-200 bg-emerald-50'
-                  }`}
-                >
-                  <p
-                    className={`text-xs font-medium ${
-                      isSavia ? 'text-savia-oliveDeep' : 'text-emerald-700'
-                    }`}
-                  >
-                    Próxima clase
-                  </p>
-                  <p
-                    className={`text-base font-semibold mt-1 ${
-                      isSavia ? 'text-savia-ink' : 'text-emerald-900'
-                    }`}
-                  >
-                    {NOMBRE_DIA[proximaClase.diaSemana] ?? `Día ${proximaClase.diaSemana}`}{' '}
-                    {proximaClase.hora}
-                  </p>
-                  <p className={`text-sm mt-1 ${isSavia ? 'text-savia-oliveDeep' : 'text-emerald-800'}`}>
-                    {proximaClase.titulo || 'Clase'}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className={`${cardCls} p-4 mb-4`}>
-              <div className="grid grid-cols-2 gap-3">
-                <div
-                  className={`rounded-2xl px-3 py-3 ${
-                    isSavia
-                      ? 'border border-savia-sandSoft bg-savia-cream/50'
-                      : 'border border-gray-200 bg-gray-50'
-                  }`}
-                >
-                  <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    Actividad
-                  </p>
-                  <p className={`text-sm font-semibold mt-1 ${ink}`}>
-                    {data.alumno.actividadNombre || 'Sin actividad'}
-                  </p>
-                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    Tu plan actual
-                  </p>
-                </div>
-                <div
-                  className={`rounded-2xl px-3 py-3 ${
-                    isSavia
-                      ? 'border border-savia-sandSoft bg-savia-cream/50'
-                      : 'border border-gray-200 bg-gray-50'
-                  }`}
-                >
-                  <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    Cuota
-                  </p>
-                  <p
-                    className={`text-sm font-semibold mt-1 ${
-                      cuotaVencida
-                        ? 'text-red-600'
-                        : cuotaPorVencer
-                          ? isSavia
-                            ? 'text-savia-terra'
-                            : 'text-amber-600'
-                          : ink
-                    }`}
-                  >
-                    {tieneFechaVencimiento ? formatDate(fechaVencimiento) : 'Sin fecha'}
-                  </p>
-                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    {cuotaVencida
-                      ? 'Vencida'
-                      : cuotaVenceHoy
-                        ? 'Vence hoy'
-                        : cuotaPorVencer
-                          ? 'Próxima a vencer'
-                          : 'Al día'}
-                  </p>
-                </div>
-                <div
-                  className={`rounded-2xl px-3 py-3 ${
-                    isSavia
-                      ? 'border border-savia-sandSoft bg-savia-cream/50'
-                      : 'border border-gray-200 bg-gray-50'
-                  }`}
-                >
-                  <p className={`text-xs font-medium ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    Clases fijas
-                  </p>
-                  <p className={`text-sm font-semibold mt-1 ${ink}`}>{clasesFijasOrdenadas.length}</p>
-                  <p className={`text-xs mt-1 ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                    Por semana
-                  </p>
-                </div>
-                <div
-                  className={`rounded-2xl px-3 py-3 ${
-                    isSavia
-                      ? 'border border-savia-olive/30 bg-savia-oliveSoft/70'
-                      : 'border border-violet-200 bg-violet-50'
-                  }`}
-                >
-                  <p
-                    className={`text-xs font-medium ${
-                      isSavia ? 'text-savia-oliveDeep' : 'text-violet-700'
-                    }`}
-                  >
-                    Clases para recuperar
-                  </p>
-                  <p
-                    className={`text-2xl font-bold mt-1 tabular-nums ${
-                      isSavia ? 'text-savia-terraDeep' : 'text-violet-950'
-                    }`}
-                  >
-                    {data.alumno.clasesParaRecuperar || 0}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className={`${cardCls} p-4 mb-4`}>
-              <div className="flex items-center gap-2 mb-3">
-                <History className={`w-4 h-4 ${isSavia ? 'text-savia-terra' : 'text-primary-600'}`} />
-                <h2 className={`text-sm font-semibold ${ink}`}>Historial de clases</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div
-                  className={`rounded-xl px-3 py-2 ${
-                    isSavia
-                      ? 'bg-savia-oliveSoft border border-savia-olive/25'
-                      : 'bg-green-50 border border-green-200'
-                  }`}
-                >
-                  <p className={`text-xs ${isSavia ? 'text-savia-oliveDeep' : 'text-green-700'}`}>
-                    Asistidas
-                  </p>
-                  <p
-                    className={`text-sm font-semibold ${
-                      isSavia ? 'text-savia-ink' : 'text-green-900'
-                    }`}
-                  >
-                    {totalAsistidas}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2">
-                  <p className="text-xs text-red-700">Inasistencias</p>
-                  <p className="text-sm font-semibold text-red-900">{totalInasistencias}</p>
-                </div>
-              </div>
-              {historial.length === 0 ? (
-                <p className={`text-sm ${isSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
-                  Todavía no hay asistencias marcadas.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {historial.slice(0, 8).map((item) => (
-                    <div
-                      key={item.id}
-                      className={`rounded-2xl px-3 py-2 ${
-                        isSavia ? 'border border-savia-sandSoft' : 'border border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className={`text-sm font-semibold ${ink}`}>
-                            {formatDate(item.fecha)} · {item.hora}
-                          </p>
-                          <p className={`text-xs mt-0.5 ${muted}`}>{item.titulo}</p>
-                        </div>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            item.estado === 'asistio'
-                              ? isSavia
-                                ? 'bg-savia-oliveSoft text-savia-oliveDeep'
-                                : 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {item.estado === 'asistio' ? 'Asistió' : 'No asistió'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
+          perfilPanel
         )}
       </div>
     </div>

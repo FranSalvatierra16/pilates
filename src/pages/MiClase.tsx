@@ -1146,14 +1146,17 @@ const MiClase = () => {
           isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
         }`}
       >
-        <div className="max-w-lg mx-auto px-4 pb-10 safe-top pt-4 sm:pt-6">
-          {/* Header con espacio bajo notch + acceso a perfil */}
-          <header className="animate-savia-soft-in mb-6">
+        <div
+          className="max-w-lg mx-auto px-4 pb-10"
+          style={{ paddingTop: 'max(2.75rem, calc(env(safe-area-inset-top, 0px) + 1.25rem))' }}
+        >
+          {/* Header: logo + acción contextual + salir */}
+          <header className="animate-savia-soft-in mb-8">
             <div className="flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={irInicio}
-                className="flex items-center gap-3 min-w-0 text-left"
+                className="flex items-center gap-2.5 min-w-0 text-left"
                 aria-label="Ir al inicio"
               >
                 <img
@@ -1163,31 +1166,44 @@ const MiClase = () => {
                     isSavia ? 'ring-2 ring-savia-sandSoft' : 'ring-2 ring-primary-100'
                   }`}
                 />
-                <div className="min-w-0">
-                  <p className={`text-[11px] uppercase tracking-wider ${muted}`}>{marcaTitulo}</p>
-                  <p className={`text-sm truncate ${muted}`}>
-                    Hola, <span className={`font-semibold ${ink}`}>{nombreSaludo}</span>
-                  </p>
-                </div>
+                <p
+                  className={`text-[11px] uppercase tracking-[0.14em] font-medium truncate ${
+                    isSavia ? 'text-savia-muted' : muted
+                  }`}
+                >
+                  {marcaTitulo}
+                </p>
               </button>
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setSeccionActiva('perfil')}
-                  className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-colors touch-manipulation ${
-                    seccionActiva === 'perfil'
-                      ? isSavia
+                {seccionActiva === 'perfil' ? (
+                  <button
+                    type="button"
+                    onClick={() => setSeccionActiva('clases')}
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-colors touch-manipulation ${
+                      isSavia
                         ? 'bg-savia-terra text-white'
                         : 'bg-primary-600 text-white'
-                      : isSavia
+                    }`}
+                    aria-label="Liberar o recuperar"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Recuperar
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSeccionActiva('perfil')}
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-colors touch-manipulation ${
+                      isSavia
                         ? 'bg-white/80 text-savia-ink border border-savia-sandSoft hover:bg-savia-creamDeep'
                         : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                  }`}
-                  aria-label="Mi perfil"
-                >
-                  <User className="w-4 h-4" />
-                  Perfil
-                </button>
+                    }`}
+                    aria-label="Mi perfil"
+                  >
+                    <User className="w-4 h-4" />
+                    Perfil
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={cerrarSesionPortal}
@@ -1205,19 +1221,28 @@ const MiClase = () => {
           </header>
 
           {seccionActiva === 'inicio' ? (
-            <div className="animate-savia-fade-up">
-              <h1
+            <div className="animate-savia-fade-up text-center pt-2 sm:pt-4">
+              <p
                 className={
                   isSavia
-                    ? 'font-saviaDisplay text-3xl sm:text-[2.15rem] text-savia-ink tracking-tight leading-none'
-                    : `text-3xl font-bold tracking-tight ${ink}`
+                    ? 'font-saviaDisplay text-3xl sm:text-4xl text-savia-ink tracking-tight leading-tight'
+                    : `text-3xl sm:text-4xl font-bold tracking-tight ${ink}`
                 }
+              >
+                Hola, {nombreSaludo}
+              </p>
+              <h1
+                className={`mt-4 ${
+                  isSavia
+                    ? 'font-saviaDisplay text-2xl sm:text-[1.75rem] text-savia-terra tracking-tight leading-snug'
+                    : `text-2xl font-semibold tracking-tight ${ink}`
+                }`}
               >
                 ¿Qué querés hacer?
               </h1>
               <p className={`mt-2 text-sm ${muted}`}>{semanaActualLabel}</p>
 
-              <div className="mt-8 space-y-3">
+              <div className="mt-8 space-y-3 text-left">
                 <button
                   type="button"
                   onClick={() => setSeccionActiva('clases')}

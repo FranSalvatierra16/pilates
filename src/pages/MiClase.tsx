@@ -1146,9 +1146,9 @@ const MiClase = () => {
           isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
         }`}
       >
-        {/* Acciones fijas — no empujan el saludo hacia abajo */}
+        {/* Acciones fijas — encima del contenido para que reciban el tap */}
         <div
-          className="absolute left-0 right-0 z-20 flex items-center justify-end gap-1.5 px-4"
+          className="portal-top-bar left-0 right-0 flex items-center justify-end gap-1.5 px-4"
           style={{ top: 'max(0.75rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}
         >
           <button

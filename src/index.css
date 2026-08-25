@@ -133,9 +133,15 @@
   background-position: 110% -4%;
   background-size: min(280px, 58vw);
 }
-.portal-savia-shell > * {
+/* Contenido por encima del watermark; no forzar position (rompe barras absolute) */
+.portal-savia-shell > *:not(.portal-top-bar) {
   position: relative;
   z-index: 1;
+}
+.portal-savia-shell > .portal-top-bar {
+  position: absolute;
+  z-index: 40;
+  pointer-events: auto;
 }
 @media (prefers-reduced-motion: reduce) {
   .animate-savia-fade-up,

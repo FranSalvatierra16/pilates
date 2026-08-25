@@ -132,29 +132,32 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       {typeof document !== 'undefined' && createPortal(
         <>
-          <div className="fixed top-4 right-4 left-4 sm:left-auto z-[100] pointer-events-none space-y-3">
-            {toasts.map((toast) => {
-              const style = TOAST_STYLES[toast.type];
-              return (
-                <div
-                  key={toast.id}
-                  className={`pointer-events-auto ml-auto w-full sm:max-w-md rounded-xl border shadow-lg ${style.wrapper}`}
-                >
-                  <div className="flex items-start gap-3 px-4 py-3">
-                    <div className="mt-0.5 flex-shrink-0">{style.icon}</div>
-                    <p className="text-sm font-medium whitespace-pre-line flex-1">{toast.message}</p>
-                    <button
-                      type="button"
-                      onClick={() => removeToast(toast.id)}
-                      className="flex-shrink-0 opacity-60 hover:opacity-100"
-                      aria-label="Cerrar mensaje"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+          <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center p-4 sm:p-6">
+            <div className="w-full max-w-sm space-y-3">
+              {toasts.map((toast) => {
+                const style = TOAST_STYLES[toast.type];
+                return (
+                  <div
+                    key={toast.id}
+                    className={`pointer-events-auto w-full rounded-2xl border shadow-2xl ring-1 ring-black/5 ${style.wrapper}`}
+                    role="status"
+                  >
+                    <div className="flex items-start gap-3 px-4 py-3.5">
+                      <div className="mt-0.5 flex-shrink-0">{style.icon}</div>
+                      <p className="text-sm font-medium whitespace-pre-line flex-1 leading-snug">{toast.message}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeToast(toast.id)}
+                        className="flex-shrink-0 opacity-60 hover:opacity-100"
+                        aria-label="Cerrar mensaje"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           {confirmState.open && (

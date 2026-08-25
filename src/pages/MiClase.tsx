@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw, CheckCircle2, User } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -284,7 +284,7 @@ const MiClase = () => {
   const [actioning, setActioning] = useState<string | null>(null);
   const [filtroDia, setFiltroDia] = useState<number | null>(null);
   const [filtroHorario, setFiltroHorario] = useState<'todos' | 'manana' | 'tarde'>('todos');
-  const [seccionActiva, setSeccionActiva] = useState<'clases' | 'perfil'>('clases');
+  const [seccionActiva, setSeccionActiva] = useState<'inicio' | 'clases' | 'perfil'>('inicio');
   const [dniInput, setDniInput] = useState('');
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
   const [enviandoDni, setEnviandoDni] = useState(false);
@@ -904,6 +904,7 @@ const MiClase = () => {
     setDniInput('');
     setFiltroDia(null);
     setFiltroHorario('todos');
+    setSeccionActiva('inicio');
     setLoading(false);
     notifPromptHandledRef.current = false;
 
@@ -1136,17 +1137,25 @@ const MiClase = () => {
 
   /* ─── Modo recuperar: flujo premium enfocado ─── */
   if (esRecuperar) {
+    const irInicio = () => setSeccionActiva('inicio');
+    const clasesParaRecuperar = data.alumno.clasesParaRecuperar || 0;
+
     return (
       <div
-        className={`min-h-screen pb-safe ${
+        className={`min-h-screen safe-bottom ${
           isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
         }`}
       >
-        <div className="max-w-lg mx-auto p-4 pt-6 sm:pt-5 pb-10">
-          {/* Header limpio */}
-          <header className="animate-savia-soft-in mb-5">
+        <div className="max-w-lg mx-auto px-4 pb-10 safe-top pt-4 sm:pt-6">
+          {/* Header con espacio bajo notch + acceso a perfil */}
+          <header className="animate-savia-soft-in mb-6">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={irInicio}
+                className="flex items-center gap-3 min-w-0 text-left"
+                aria-label="Ir al inicio"
+              >
                 <img
                   src={logoSrc}
                   alt={marcaTitulo}
@@ -1154,25 +1163,49 @@ const MiClase = () => {
                     isSavia ? 'ring-2 ring-savia-sandSoft' : 'ring-2 ring-primary-100'
                   }`}
                 />
-                <p className={`text-sm truncate ${muted}`}>
-                  Hola, <span className={`font-semibold ${ink}`}>{nombreSaludo}</span>
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={cerrarSesionPortal}
-                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors ${
-                  isSavia
-                    ? 'text-savia-muted/80 hover:text-savia-ink'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-                aria-label="Cerrar sesión"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                Salir
+                <div className="min-w-0">
+                  <p className={`text-[11px] uppercase tracking-wider ${muted}`}>{marcaTitulo}</p>
+                  <p className={`text-sm truncate ${muted}`}>
+                    Hola, <span className={`font-semibold ${ink}`}>{nombreSaludo}</span>
+                  </p>
+                </div>
               </button>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSeccionActiva('perfil')}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-colors touch-manipulation ${
+                    seccionActiva === 'perfil'
+                      ? isSavia
+                        ? 'bg-savia-terra text-white'
+                        : 'bg-primary-600 text-white'
+                      : isSavia
+                        ? 'bg-white/80 text-savia-ink border border-savia-sandSoft hover:bg-savia-creamDeep'
+                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                  }`}
+                  aria-label="Mi perfil"
+                >
+                  <User className="w-4 h-4" />
+                  Perfil
+                </button>
+                <button
+                  type="button"
+                  onClick={cerrarSesionPortal}
+                  className={`inline-flex items-center justify-center rounded-xl p-2.5 transition-colors touch-manipulation ${
+                    isSavia
+                      ? 'text-savia-muted/80 hover:text-savia-ink hover:bg-white/60'
+                      : 'text-gray-500 hover:text-gray-800 hover:bg-white'
+                  }`}
+                  aria-label="Cerrar sesión"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="mt-5 animate-savia-fade-up">
+          </header>
+
+          {seccionActiva === 'inicio' ? (
+            <div className="animate-savia-fade-up">
               <h1
                 className={
                   isSavia
@@ -1180,28 +1213,127 @@ const MiClase = () => {
                     : `text-3xl font-bold tracking-tight ${ink}`
                 }
               >
-                Recuperar clase
+                ¿Qué querés hacer?
               </h1>
               <p className={`mt-2 text-sm ${muted}`}>{semanaActualLabel}</p>
-            </div>
-          </header>
 
-          {seccionActiva === 'perfil' ? (
+              <div className="mt-8 space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setSeccionActiva('clases')}
+                  className={`w-full text-left p-5 touch-manipulation transition-transform active:scale-[0.98] ${cardCls} ${
+                    isSavia
+                      ? 'hover:border-savia-terra/40'
+                      : 'hover:border-primary-300 border border-transparent'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${
+                        isSavia ? 'bg-savia-terra text-white' : 'bg-primary-600 text-white'
+                      }`}
+                    >
+                      <RefreshCw className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-lg font-semibold ${ink}`}>Liberar / Recuperar</p>
+                      <p className={`text-sm mt-1 leading-snug ${muted}`}>
+                        Liberá si no vas y anotate a otro horario.
+                      </p>
+                      <p
+                        className={`mt-3 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums ${
+                          clasesParaRecuperar > 0
+                            ? isSavia
+                              ? 'bg-savia-oliveSoft text-savia-oliveDeep'
+                              : 'bg-violet-100 text-violet-800'
+                            : isSavia
+                              ? 'bg-savia-creamDeep text-savia-muted'
+                              : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {clasesParaRecuperar > 0
+                          ? `${clasesParaRecuperar} para recuperar`
+                          : 'Sin clases para recuperar'}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSeccionActiva('perfil')}
+                  className={`w-full text-left p-5 touch-manipulation transition-transform active:scale-[0.98] ${cardCls} ${
+                    isSavia
+                      ? 'hover:border-savia-olive/40'
+                      : 'hover:border-gray-300 border border-transparent'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${
+                        isSavia ? 'bg-savia-olive text-white' : 'bg-gray-800 text-white'
+                      }`}
+                    >
+                      <User className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-lg font-semibold ${ink}`}>Mi perfil</p>
+                      <p className={`text-sm mt-1 leading-snug ${muted}`}>
+                        Cuota, historial y datos de tu plan.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          ) : seccionActiva === 'perfil' ? (
             <>
               <button
                 type="button"
-                onClick={() => setSeccionActiva('clases')}
-                className={`inline-flex items-center gap-1.5 text-sm font-medium mb-4 ${
+                onClick={irInicio}
+                className={`inline-flex items-center gap-1.5 text-sm font-medium mb-4 touch-manipulation ${
                   isSavia ? 'text-savia-terra hover:text-savia-terraDeep' : 'text-primary-600'
                 }`}
               >
                 <ArrowLeft className="w-4 h-4" />
-                Volver a recuperar
+                Volver al inicio
               </button>
+              <h1
+                className={`mb-4 ${
+                  isSavia
+                    ? 'font-saviaDisplay text-2xl text-savia-ink tracking-tight'
+                    : `text-2xl font-bold ${ink}`
+                }`}
+              >
+                Mi perfil
+              </h1>
               {perfilPanel}
             </>
           ) : (
             <>
+              <button
+                type="button"
+                onClick={irInicio}
+                className={`inline-flex items-center gap-1.5 text-sm font-medium mb-3 touch-manipulation ${
+                  isSavia ? 'text-savia-terra hover:text-savia-terraDeep' : 'text-primary-600'
+                }`}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Inicio
+              </button>
+              <div className="mb-5 animate-savia-fade-up">
+                <h1
+                  className={
+                    isSavia
+                      ? 'font-saviaDisplay text-3xl sm:text-[2.15rem] text-savia-ink tracking-tight leading-none'
+                      : `text-3xl font-bold tracking-tight ${ink}`
+                  }
+                >
+                  Liberar / Recuperar
+                </h1>
+                <p className={`mt-2 text-sm ${muted}`}>{semanaActualLabel}</p>
+              </div>
+
               {/* Guía 2 pasos */}
               <nav
                 className={`mb-5 rounded-2xl p-1.5 grid grid-cols-2 gap-1.5 animate-savia-fade-up ${
@@ -1500,9 +1632,10 @@ const MiClase = () => {
 
                 {/* Filtros sticky */}
                 <div
-                  className={`sticky top-0 z-10 -mx-1 px-1 py-2 mb-3 backdrop-blur-md ${
+                  className={`sticky z-10 -mx-1 px-1 py-2 mb-3 backdrop-blur-md ${
                     isSavia ? 'bg-savia-cream/85' : 'bg-slate-100/90'
                   }`}
+                  style={{ top: 'env(safe-area-inset-top, 0px)' }}
                 >
                   <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-none">
                     <button
@@ -1772,13 +1905,15 @@ const MiClase = () => {
   }
 
   /* ─── Modo fijo (sin cambios mayores) ─── */
+  const seccionFijo = seccionActiva === 'perfil' ? 'perfil' : 'clases';
+
   return (
     <div
-      className={`min-h-screen pb-safe ${
+      className={`min-h-screen safe-bottom ${
         isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
       }`}
     >
-      <div className="max-w-lg mx-auto p-4 pt-8 sm:pt-6 animate-savia-fade-up">
+      <div className="max-w-lg mx-auto px-4 pb-10 safe-top pt-4 sm:pt-6 animate-savia-fade-up">
         <div className={`${cardCls} p-5 mb-4`}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex items-start gap-3">
@@ -1853,7 +1988,7 @@ const MiClase = () => {
               type="button"
               onClick={() => setSeccionActiva('clases')}
               className={`rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-                seccionActiva === 'clases'
+                seccionFijo === 'clases'
                   ? isSavia
                     ? 'bg-white text-savia-terraDeep shadow-sm'
                     : 'bg-primary-600 text-white'
@@ -1868,7 +2003,7 @@ const MiClase = () => {
               type="button"
               onClick={() => setSeccionActiva('perfil')}
               className={`rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-                seccionActiva === 'perfil'
+                seccionFijo === 'perfil'
                   ? isSavia
                     ? 'bg-white text-savia-terraDeep shadow-sm'
                     : 'bg-primary-600 text-white'
@@ -1882,7 +2017,7 @@ const MiClase = () => {
           </div>
         </div>
 
-        {seccionActiva === 'clases' ? (
+        {seccionFijo === 'clases' ? (
           <>
             <div className={`${cardCls} p-4 mb-4`}>
               <div className="flex items-center gap-2 mb-3">

@@ -1146,7 +1146,8 @@ const MiClase = () => {
           isSavia ? 'portal-savia-shell font-savia' : 'bg-slate-100'
         }`}
       >
-        {/* Acciones fijas — encima del contenido para que reciban el tap */}
+        {/* Acciones fijas — no en inicio (ahí ya está Mi perfil en las cards) */}
+        {seccionActiva !== 'inicio' && (
         <div
           className="portal-top-bar left-0 right-0 flex items-center justify-end gap-1.5 px-4"
           style={{ top: 'max(0.75rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))' }}
@@ -1209,10 +1210,16 @@ const MiClase = () => {
             <LogOut className="w-4 h-4" />
           </button>
         </div>
+        )}
 
         <div
           className="max-w-lg mx-auto px-4 pb-12"
-          style={{ paddingTop: 'max(5.5rem, calc(env(safe-area-inset-top, 0px) + 3.75rem))' }}
+          style={{
+            paddingTop:
+              seccionActiva === 'inicio'
+                ? 'max(3.5rem, calc(env(safe-area-inset-top, 0px) + 2rem))'
+                : 'max(5.5rem, calc(env(safe-area-inset-top, 0px) + 3.75rem))',
+          }}
         >
           {seccionActiva === 'inicio' ? (
             <div className="animate-savia-fade-up text-center">

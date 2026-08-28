@@ -643,10 +643,17 @@ app.patch('/api/alumnos/:id', async (req, res) => {
       if (!dniNorm || dniNorm.length < 6) {
         return res.status(400).json({ error: 'El DNI debe tener al menos 6 dígitos.' });
       }
+      const { rows: actuales } = await db.query(
+        'SELECT dni FROM alumnos WHERE id = $1 AND sucursal_id = $2 LIMIT 1',
+        [alumnoId, sid]
+      );
+      const dniActualNorm = normalizarDni(actuales[0]?.dni);
+      const esCorreccionFormato = dniActualNorm === dniNorm;
       const conflicto = await resolverConflictoDniAlumno(db, {
         sucursalId: sid,
         dniNorm,
         excludeId: alumnoId,
+        soloDniCanonico: esCorreccionFormato,
       });
       if (conflicto) {
         const quien = `${conflicto.nombre || ''} ${conflicto.apellido || ''}`.trim();

@@ -163,8 +163,14 @@ export async function buscarAlumnoPorDniGlobal(dni) {
 /**
  * Antes de asignar un DNI: libera el número en fichas inactivas (histórico)
  * y detecta conflicto con otro alumno activo de la misma sucursal.
+ * @param {object} opts
+ * @param {boolean} [opts.soloDniCanonico] Si true, solo cuenta otro activo con dni = dígitos limpios
+ *   (permite corregir "39098938h" → "39098938" sin chocar con otro registro sucio).
  */
-export async function resolverConflictoDniAlumno(db, { sucursalId, dniNorm, excludeId = null }) {
+export async function resolverConflictoDniAlumno(
+  db,
+  { sucursalId, dniNorm, excludeId = null, soloDniCanonico = false }
+) {
   await db.query(
     `UPDATE alumnos
         SET dni = $1 || '-inactivo-' || id
@@ -174,12 +180,16 @@ export async function resolverConflictoDniAlumno(db, { sucursalId, dniNorm, excl
     [dniNorm, excludeId, dniNorm]
   );
 
+  const filtroDni = soloDniCanonico
+    ? 'dni = $3'
+    : "regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $3";
+
   const { rows } = await db.query(
     `SELECT id, nombre, apellido FROM alumnos
       WHERE sucursal_id = $1
         AND ($2::text IS NULL OR id <> $2)
         AND activo IS DISTINCT FROM false
-        AND regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $3
+        AND ${filtroDni}
       LIMIT 1`,
     [sucursalId, excludeId, dniNorm]
   );

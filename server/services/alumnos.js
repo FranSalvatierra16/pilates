@@ -161,6 +161,33 @@ export async function buscarAlumnoPorDniGlobal(dni) {
 }
 
 /**
+ * Antes de asignar un DNI: libera el número en fichas inactivas (histórico)
+ * y detecta conflicto con otro alumno activo de la misma sucursal.
+ */
+export async function resolverConflictoDniAlumno(db, { sucursalId, dniNorm, excludeId = null }) {
+  await db.query(
+    `UPDATE alumnos
+        SET dni = $1 || '-inactivo-' || id
+      WHERE ($2::text IS NULL OR id <> $2)
+        AND activo = false
+        AND regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $3`,
+    [dniNorm, excludeId, dniNorm]
+  );
+
+  const { rows } = await db.query(
+    `SELECT id, nombre, apellido FROM alumnos
+      WHERE sucursal_id = $1
+        AND ($2::text IS NULL OR id <> $2)
+        AND activo IS DISTINCT FROM false
+        AND regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $3
+      LIMIT 1`,
+    [sucursalId, excludeId, dniNorm]
+  );
+
+  return rows[0] || null;
+}
+
+/**
  * Turnos fijos del alumno (día + hora + título), solo de su sucursal.
  */
 export async function horariosFijosAlumno(alumnoId) {

@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import chatbotRouter from './chatbot/index.js';  
 import { getPool } from "./db/index.js";
-import { assertCuotaAlDiaParaRecuperar, normalizarDni } from './services/alumnos.js';
+import { assertCuotaAlDiaParaRecuperar, normalizarDni, resolverConflictoDniAlumno } from './services/alumnos.js';
 
 
 const JWT_SECRET = process.env.JWT_SECRET || 'savia-pilates-secret-cambiar-en-produccion';
@@ -586,15 +586,14 @@ app.post('/api/alumnos', async (req, res) => {
     if (!dniNorm || dniNorm.length < 6) {
       return res.status(400).json({ error: 'El DNI debe tener al menos 6 dígitos.' });
     }
-    const { rows: dup } = await db.query(
-      `SELECT id FROM alumnos
-       WHERE sucursal_id = $1
-         AND regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $2
-       LIMIT 1`,
-      [sid, dniNorm]
-    );
-    if (dup.length > 0) {
-      return res.status(409).json({ error: 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.' });
+    const conflicto = await resolverConflictoDniAlumno(db, { sucursalId: sid, dniNorm, excludeId: null });
+    if (conflicto) {
+      const quien = `${conflicto.nombre || ''} ${conflicto.apellido || ''}`.trim();
+      return res.status(409).json({
+        error: quien
+          ? `Ya existe un alumno activo con este DNI: ${quien}. Revisá la lista o usá otro DNI.`
+          : 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.',
+      });
     }
     await db.query(
       `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, a_prueba, clases_asistidas, clases_para_recuperar, descripcion, activo, created_at)
@@ -644,16 +643,18 @@ app.patch('/api/alumnos/:id', async (req, res) => {
       if (!dniNorm || dniNorm.length < 6) {
         return res.status(400).json({ error: 'El DNI debe tener al menos 6 dígitos.' });
       }
-      const { rows: dup } = await db.query(
-        `SELECT id FROM alumnos
-         WHERE id != $1
-           AND sucursal_id = $2
-           AND regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $3
-         LIMIT 1`,
-        [alumnoId, sid, dniNorm]
-      );
-      if (dup.length > 0) {
-        return res.status(409).json({ error: 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.' });
+      const conflicto = await resolverConflictoDniAlumno(db, {
+        sucursalId: sid,
+        dniNorm,
+        excludeId: alumnoId,
+      });
+      if (conflicto) {
+        const quien = `${conflicto.nombre || ''} ${conflicto.apellido || ''}`.trim();
+        return res.status(409).json({
+          error: quien
+            ? `Ya existe un alumno activo con este DNI: ${quien}. Revisá la lista o usá otro DNI.`
+            : 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.',
+        });
       }
       updates.push(`dni = $${i++}`);
       values.push(dniNorm);

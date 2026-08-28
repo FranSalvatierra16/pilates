@@ -500,6 +500,11 @@ const Alumnos = () => {
 
     const actividadIdFinal = formData.aPrueba ? '' : formData.actividadId.trim();
     const aPruebaFinal = formData.aPrueba;
+    const dniNorm = soloDigitos(formData.dni);
+    if (!dniNorm || dniNorm.length < 6) {
+      toast.warning('Ingresá un DNI válido (al menos 6 dígitos).');
+      return;
+    }
 
     try {
       if (editingAlumno) {
@@ -508,7 +513,7 @@ const Alumnos = () => {
         await storageHybrid.alumnos.update(editingAlumno.id, {
           nombre: formData.nombre,
           apellido: formData.apellido,
-          dni: formData.dni,
+          dni: dniNorm,
           telefono: formData.telefono,
           email: formData.email,
           fechaVencimientoCuota: fechaVencimiento,
@@ -523,7 +528,7 @@ const Alumnos = () => {
           id: Date.now().toString(),
           nombre: formData.nombre,
           apellido: formData.apellido,
-          dni: formData.dni,
+          dni: dniNorm,
           telefono: formData.telefono,
           email: formData.email,
           fechaVencimientoCuota: '', // Sin fecha hasta que se pague
@@ -543,8 +548,16 @@ const Alumnos = () => {
     } catch (error: unknown) {
       console.error('Error saving alumno:', error);
       const msg = error instanceof Error ? error.message : '';
-      if (msg.includes('Ya existe un alumno con este DNI') || msg.includes('409')) {
+      if (
+        msg.includes('Ya existe un alumno con este DNI') ||
+        msg.includes('duplicate key') ||
+        msg.includes('409')
+      ) {
         toast.warning('Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.');
+      } else if (msg.includes('al menos 6 dígitos')) {
+        toast.warning(msg);
+      } else if (msg.trim()) {
+        toast.error(msg);
       } else {
         toast.error('Error al guardar el alumno. Por favor intentá nuevamente.');
       }

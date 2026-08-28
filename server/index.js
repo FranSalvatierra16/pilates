@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import chatbotRouter from './chatbot/index.js';  
 import { getPool } from "./db/index.js";
-import { assertCuotaAlDiaParaRecuperar } from './services/alumnos.js';
+import { assertCuotaAlDiaParaRecuperar, normalizarDni } from './services/alumnos.js';
 
 
 const JWT_SECRET = process.env.JWT_SECRET || 'savia-pilates-secret-cambiar-en-produccion';
@@ -582,6 +582,20 @@ app.post('/api/alumnos', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const sid = req.user?.sucursalId;
     const b = req.body;
+    const dniNorm = normalizarDni(b.dni);
+    if (!dniNorm || dniNorm.length < 6) {
+      return res.status(400).json({ error: 'El DNI debe tener al menos 6 dígitos.' });
+    }
+    const { rows: dup } = await db.query(
+      `SELECT id FROM alumnos
+       WHERE sucursal_id = $1
+         AND regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $2
+       LIMIT 1`,
+      [sid, dniNorm]
+    );
+    if (dup.length > 0) {
+      return res.status(409).json({ error: 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.' });
+    }
     await db.query(
       `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, a_prueba, clases_asistidas, clases_para_recuperar, descripcion, activo, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
@@ -590,7 +604,7 @@ app.post('/api/alumnos', async (req, res) => {
         sid,
         b.nombre,
         b.apellido,
-        b.dni,
+        dniNorm,
         b.telefono,
         b.email,
         b.fechaVencimientoCuota || null,
@@ -617,13 +631,33 @@ app.patch('/api/alumnos/:id', async (req, res) => {
   try {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user?.sucursalId;
+    const alumnoId = req.params.id;
     const b = req.body;
     const updates = [];
     const values = [];
     let i = 1;
     if (b.nombre !== undefined) { updates.push(`nombre = $${i++}`); values.push(b.nombre); }
     if (b.apellido !== undefined) { updates.push(`apellido = $${i++}`); values.push(b.apellido); }
-    if (b.dni !== undefined) { updates.push(`dni = $${i++}`); values.push(b.dni); }
+    if (b.dni !== undefined) {
+      const dniNorm = normalizarDni(b.dni);
+      if (!dniNorm || dniNorm.length < 6) {
+        return res.status(400).json({ error: 'El DNI debe tener al menos 6 dígitos.' });
+      }
+      const { rows: dup } = await db.query(
+        `SELECT id FROM alumnos
+         WHERE id != $1
+           AND sucursal_id = $2
+           AND regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $3
+         LIMIT 1`,
+        [alumnoId, sid, dniNorm]
+      );
+      if (dup.length > 0) {
+        return res.status(409).json({ error: 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.' });
+      }
+      updates.push(`dni = $${i++}`);
+      values.push(dniNorm);
+    }
     if (b.telefono !== undefined) { updates.push(`telefono = $${i++}`); values.push(b.telefono); }
     if (b.email !== undefined) { updates.push(`email = $${i++}`); values.push(b.email); }
     if (b.fechaVencimientoCuota !== undefined) { updates.push(`fecha_vencimiento_cuota = $${i++}`); values.push(b.fechaVencimientoCuota || null); }
@@ -635,10 +669,17 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.linkToken !== undefined) { updates.push(`link_token = $${i++}`); values.push(b.linkToken || null); }
     if (b.activo !== undefined) { updates.push(`activo = $${i++}`); values.push(!!b.activo); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
-    values.push(req.params.id, req.user.sucursalId);
-    await db.query(`UPDATE alumnos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
+    values.push(alumnoId, sid);
+    const { rowCount } = await db.query(
+      `UPDATE alumnos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`,
+      values
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Alumno no encontrado' });
     res.json({ ok: true });
   } catch (e) {
+    if (e.code === '23505' && (e.constraint === 'alumnos_dni_key' || e.constraint === 'alumnos_sucursal_id_dni_key')) {
+      return res.status(409).json({ error: 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.' });
+    }
     console.error(e);
     res.status(500).json({ error: e.message });
   }

@@ -152,6 +152,10 @@ CREATE INDEX IF NOT EXISTS idx_registros_link_created_at ON registros_link(creat
 -- Índices
 CREATE INDEX IF NOT EXISTS idx_alumnos_dni ON alumnos(dni);
 CREATE INDEX IF NOT EXISTS idx_alumnos_sucursal ON alumnos(sucursal_id);
+-- DNI único por sucursal (puede repetirse entre sedes distintas)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_sucursal_dni_unique
+  ON alumnos(sucursal_id, dni)
+  WHERE sucursal_id IS NOT NULL;
 -- Permitir pagos sin alumno (aporte a caja, ingreso del dueño)
 ALTER TABLE pagos ADD COLUMN IF NOT EXISTS descripcion TEXT;
 ALTER TABLE pagos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;

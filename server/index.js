@@ -172,6 +172,19 @@ function ensureSchemaReady() {
   return schemaInitPromise;
 }
 
+async function migrateAlumnosDniPorSucursal(db) {
+  try {
+    await db.query('ALTER TABLE alumnos DROP CONSTRAINT IF EXISTS alumnos_dni_key');
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_sucursal_dni_unique
+      ON alumnos(sucursal_id, dni)
+      WHERE sucursal_id IS NOT NULL
+    `);
+  } catch (e) {
+    console.warn('Migración DNI por sucursal:', e.message);
+  }
+}
+
 async function seedAdminAndSucursal(db) {
   const adminUser = (process.env.ADMIN_USER || 'adminF').trim();
   const adminPassword = process.env.ADMIN_PASSWORD || '2401';
@@ -229,6 +242,7 @@ async function seedAdminAndSucursal(db) {
   } catch (e) {
     console.warn('Limpieza de inactivos en turnos:', e.message);
   }
+  await migrateAlumnosDniPorSucursal(db);
 }
 
 async function initSchema() {
@@ -591,8 +605,8 @@ app.post('/api/alumnos', async (req, res) => {
       const quien = `${conflicto.nombre || ''} ${conflicto.apellido || ''}`.trim();
       return res.status(409).json({
         error: quien
-          ? `Ya existe un alumno activo con este DNI: ${quien}. Revisá la lista o usá otro DNI.`
-          : 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.',
+          ? `Ya existe un alumno activo con este DNI en esta sucursal: ${quien}.`
+          : 'Ya existe un alumno con este DNI en esta sucursal.',
       });
     }
     await db.query(
@@ -619,7 +633,7 @@ app.post('/api/alumnos', async (req, res) => {
     res.status(201).json({ ok: true });
   } catch (e) {
     if (e.code === '23505' && (e.constraint === 'alumnos_dni_key' || e.constraint === 'alumnos_sucursal_id_dni_key')) {
-      return res.status(409).json({ error: 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.' });
+      return res.status(409).json({ error: 'Ya existe un alumno con este DNI en esta sucursal.' });
     }
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -659,8 +673,8 @@ app.patch('/api/alumnos/:id', async (req, res) => {
         const quien = `${conflicto.nombre || ''} ${conflicto.apellido || ''}`.trim();
         return res.status(409).json({
           error: quien
-            ? `Ya existe un alumno activo con este DNI: ${quien}. Revisá la lista o usá otro DNI.`
-            : 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.',
+            ? `Ya existe un alumno activo con este DNI en esta sucursal: ${quien}.`
+            : 'Ya existe un alumno con este DNI en esta sucursal.',
         });
       }
       updates.push(`dni = $${i++}`);
@@ -686,7 +700,7 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     if (e.code === '23505' && (e.constraint === 'alumnos_dni_key' || e.constraint === 'alumnos_sucursal_id_dni_key')) {
-      return res.status(409).json({ error: 'Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.' });
+      return res.status(409).json({ error: 'Ya existe un alumno con este DNI en esta sucursal.' });
     }
     console.error(e);
     res.status(500).json({ error: e.message });

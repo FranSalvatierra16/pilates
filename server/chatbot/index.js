@@ -53,7 +53,7 @@ import {
   replySiDuplicado,
   reclamarEstado,
 } from './sesiones.js';
-import { buscarAlumnoPorDni, buscarAlumnoPorDniGlobal, horariosFijosAlumno, normalizarDni, getSucursalChatbot, cuotaVencidaAlumno, mensajeCuotaVencidaRecuperar } from '../services/alumnos.js';
+import { buscarAlumnoPorDni, horariosFijosAlumno, normalizarDni, getSucursalChatbot, cuotaVencidaAlumno, mensajeCuotaVencidaRecuperar } from '../services/alumnos.js';
 import {
   listarClasesParaLiberar,
   liberarClaseFija,
@@ -628,7 +628,7 @@ Mandá todo junto en un mensaje, por ejemplo:
 }
 
 /**
- * Si el DNI ya existe (en Fgest u otra sucursal), responde aviso y no deja seguir el alta.
+ * Si el DNI ya existe en esta sucursal, responde aviso y no deja seguir el alta.
  */
 async function textoSiDniYaExiste(telefono, dni) {
   const dniNorm = normalizarDni(dni);
@@ -650,23 +650,6 @@ async function textoSiDniYaExiste(telefono, dni) {
 Te paso al menú de alumno:
 
 ${menuAlumno()}`;
-  }
-
-  const global = await buscarAlumnoPorDniGlobal(dniNorm);
-  if (global) {
-    await actualizarSesion(telefono, {
-      estado: ESTADOS.MENU_NUEVO,
-      ultimoMenu: ESTADOS.MENU_NUEVO,
-      contexto: {},
-      mergeContexto: false,
-    });
-    return conNav(
-      `⚠️ Ese DNI (*${dniNorm}*) ya está registrado como *${global.nombre} ${global.apellido}*.
-
-No se puede volver a cargar. Si sos vos, usá la opción *“Ya soy alumno/a”* del menú principal.
-Si el DNI es de otra persona, pedile a la profesora que lo revise.`,
-      { atrasLabel: 'Menú nuevo' }
-    );
   }
 
   return null;

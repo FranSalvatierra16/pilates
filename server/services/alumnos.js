@@ -133,8 +133,33 @@ export async function buscarAlumnoPorDni(dni) {
 }
 
 /**
+ * Busca alumno activo por DNI en una sucursal concreta.
+ */
+export async function buscarAlumnoPorDniEnSucursal(dni, sucursalId) {
+  const db = await getPool();
+  if (!db || !sucursalId) return null;
+
+  const dniNorm = normalizarDni(dni);
+  if (!dniNorm || dniNorm.length < 6) return null;
+
+  const { rows } = await db.query(
+    `SELECT a.id, a.nombre, a.apellido, a.dni, a.telefono, a.fecha_vencimiento_cuota,
+            a.clases_para_recuperar, a.sucursal_id, a.activo
+     FROM alumnos a
+     WHERE regexp_replace(COALESCE(a.dni, ''), '[^0-9]', '', 'g') = $1
+       AND a.sucursal_id = $2
+       AND a.activo IS DISTINCT FROM false
+     ORDER BY a.created_at DESC
+     LIMIT 1`,
+    [dniNorm, sucursalId]
+  );
+
+  return rows[0] || null;
+}
+
+/**
  * Busca cualquier alumno con ese DNI (cualquier sucursal, activo o no).
- * Sirve para el alta: el constraint alumnos_dni_key es global.
+ * Solo informativo (p. ej. avisos); no usar para bloquear altas entre sedes.
  */
 export async function buscarAlumnoPorDniGlobal(dni) {
   const db = await getPool();
@@ -174,10 +199,11 @@ export async function resolverConflictoDniAlumno(
   await db.query(
     `UPDATE alumnos
         SET dni = $1 || '-inactivo-' || id
-      WHERE ($2::text IS NULL OR id <> $2)
+      WHERE sucursal_id = $4
+        AND ($2::text IS NULL OR id <> $2)
         AND activo = false
         AND regexp_replace(COALESCE(dni, ''), '[^0-9]', '', 'g') = $3`,
-    [dniNorm, excludeId, dniNorm]
+    [dniNorm, excludeId, dniNorm, sucursalId]
   );
 
   const filtroDni = soloDniCanonico

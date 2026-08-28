@@ -553,7 +553,7 @@ const Alumnos = () => {
         msg.includes('duplicate key') ||
         msg.includes('409')
       ) {
-        toast.warning('Ya existe un alumno con este DNI. Revisá la lista o usá otro DNI.');
+        toast.warning('Ya existe un alumno con este DNI en esta sucursal.');
       } else if (msg.includes('al menos 6 dígitos')) {
         toast.warning(msg);
       } else if (msg.trim()) {

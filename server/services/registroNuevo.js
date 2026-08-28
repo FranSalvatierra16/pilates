@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getPool } from '../db/index.js';
-import { getSucursalChatbot, buscarAlumnoPorDni, buscarAlumnoPorDniGlobal, normalizarDni } from './alumnos.js';
+import { getSucursalChatbot, buscarAlumnoPorDni, buscarAlumnoPorDniEnSucursal, normalizarDni } from './alumnos.js';
 import {
   getSemanaActual,
   semanaPortalSiguiente,
@@ -29,14 +29,9 @@ function esErrorDniUnique(err) {
 }
 
 async function assertDniLibreParaAlta(dniNorm, sucursalId) {
-  const existente = await buscarAlumnoPorDniGlobal(dniNorm);
+  const existente = await buscarAlumnoPorDniEnSucursal(dniNorm, sucursalId);
   if (!existente) return null;
-
-  const mismoEstudio =
-    String(existente.sucursal_id) === String(sucursalId) && existente.activo !== false;
-
-  // Solo adjuntamos alumno si es de esta sucursal (para pasar al menú alumno).
-  throw errorDniDuplicado(mismoEstudio ? existente : null);
+  throw errorDniDuplicado(existente);
 }
 
 function formatoPrecio(n) {

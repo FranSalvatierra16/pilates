@@ -788,7 +788,7 @@ const Alumnos = () => {
       navigator.clipboard.writeText(url);
       toast.success(
         modo === 'recuperar'
-          ? 'Link para recuperar copiado. Cada persona ingresa su DNI y entra a recuperar.'
+          ? 'Link para recuperar copiado. El alumno entra con su DNI y puede instalar “Tu clase” desde ahí.'
           : 'Link general copiado (sede actual). Compartilo donde quieras; cada persona ingresa su DNI y se busca solo en esta sede.'
       );
     } catch {

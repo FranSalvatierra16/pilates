@@ -2,20 +2,27 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import { getPwaRole, getPwaStartPath, hasEstudioSession, isPwaStandalone } from './utils/pwa-role'
 
-/** PWA instalada: iOS a veces ignora start_url y abre /. Mandamos a /entrada antes de montar React. */
+/** PWA instalada: iOS a veces ignora start_url y abre /. Mandamos al inicio correcto. */
 function bootPwaSkipMarketingLanding() {
   const mode = String(import.meta.env.VITE_PUBLIC_SITE_MODE || '')
     .trim()
     .toLowerCase()
   if (mode === 'landing' || mode === 'marketing') return
   if (typeof window === 'undefined') return
-  const nav = window.navigator as Navigator & { standalone?: boolean }
-  const standalone =
-    window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true
-  if (!standalone) return
+  if (!isPwaStandalone()) return
   const { pathname, search, hash } = window.location
   if (pathname !== '/' && pathname !== '') return
+
+  // Preferir start_url del tipo de app (alumno vs estudio)
+  const role = getPwaRole()
+  if (role === 'alumno' || role === 'estudio' || hasEstudioSession()) {
+    window.history.replaceState(null, '', `${getPwaStartPath()}${hash || ''}`)
+    return
+  }
+
+  // App instalada desde /entrada (chooser): respetar query si viene
   window.history.replaceState(null, '', `/entrada${search}${hash}`)
 }
 
@@ -34,8 +41,8 @@ const storedFotoPerfil = localStorage.getItem(FOTO_PERFIL_KEY)
 if (storedToken && storedSucursalNombre) {
   const title = `${storedSucursalNombre} - Sistema de Gestión`
   const manifestHref = storedSucursalId
-    ? `/api/manifest.webmanifest?sucursalId=${encodeURIComponent(storedSucursalId)}`
-    : '/api/manifest.webmanifest?brand=fitgest'
+    ? `/api/manifest.webmanifest?portal=estudio&sucursalId=${encodeURIComponent(storedSucursalId)}`
+    : '/api/manifest.webmanifest?portal=estudio&brand=fitgest'
   const iconHref = storedFotoPerfil || (storedSucursalId
     ? `/api/public/sucursal-logo/${encodeURIComponent(storedSucursalId)}`
     : '/fitgest.png')
@@ -60,4 +67,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 )
-

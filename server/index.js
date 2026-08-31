@@ -5320,12 +5320,62 @@ function injectShareMetaIntoHtml(html, meta) {
   return cleaned.replace('</head>', `${injected}\n</head>`);
 }
 
-// Manifest PWA dinámico: nombre e icono según sucursal abierta
+// Manifest PWA dinámico: dos apps en el mismo origen (alumno vs estudio)
 app.get('/api/manifest.webmanifest', async (req, res) => {
+  const portalRaw = (req.query.portal || '').toString().trim().toLowerCase();
+  const esPortalAlumno = portalRaw === 'alumno';
+  const modo = (req.query.modo || 'recuperar').toString().trim() || 'recuperar';
+  const sidQuery = (req.query.sucursalId || '').toString().trim();
+
+  const buildPayload = (name, icon) => {
+    let startUrl;
+    let appId;
+    let appName;
+    let shortName;
+    let description;
+
+    if (esPortalAlumno) {
+      const q = new URLSearchParams({ modo, portal: 'alumno' });
+      if (sidQuery) q.set('sucursalId', sidQuery);
+      const token = (req.query.token || '').toString().trim();
+      if (token) q.set('token', token);
+      startUrl = `/mi-clase?${q.toString()}`;
+      appId = `/pwa/alumno${sidQuery ? `/${sidQuery}` : ''}`;
+      appName = `${name} · Tu clase`;
+      shortName = 'Tu clase';
+      description = 'Recuperar y liberar clases';
+    } else {
+      // Estudio / sucursal: sistema completo
+      startUrl = sidQuery
+        ? `/login?portal=estudio&sucursalId=${encodeURIComponent(sidQuery)}`
+        : '/login?portal=estudio';
+      appId = `/pwa/estudio${sidQuery ? `/${sidQuery}` : ''}`;
+      appName = `${name} · Gestión`;
+      shortName = name.length > 12 ? `${name.slice(0, 11)}…` : name;
+      description = 'Sistema de gestión del estudio';
+    }
+
+    return {
+      id: appId,
+      name: appName,
+      short_name: shortName,
+      description,
+      theme_color: '#0f172a',
+      background_color: '#0f172a',
+      display: 'standalone',
+      orientation: 'portrait',
+      scope: '/',
+      start_url: startUrl,
+      icons: [
+        { src: icon, sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    };
+  };
+
   try {
     const db = await getPool();
     const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
-    const esPortalAlumno = (req.query.portal || '').toString().trim().toLowerCase() === 'alumno';
     const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '');
     const fallbackName = brand === 'fitgest'
       ? 'FitGest'
@@ -5334,53 +5384,15 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
         : 'FitGest';
     const name = sucursal?.nombre_lugar || fallbackName;
     const icon = sucursal?.id ? getPublicLogoUrl(req, sucursal.id) : '/fitgest.png';
-    // PWA: abrir en elegir estudio / alumno; la landing de marketing sigue en /
-    const startUrl = esPortalAlumno ? '/mi-clase?modo=recuperar' : '/entrada';
-    const appName = esPortalAlumno ? `${name} - Tu Clase` : `${name} - Sistema de Gestión`;
-    const shortName = esPortalAlumno ? 'Tu Clase' : name;
-    const description = esPortalAlumno
-      ? 'Portal de alumnos para ver perfil, clases y recuperaciones'
-      : 'Sistema de gestión para Pilates';
-    const scope = '/';
 
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
-    res.json({
-      name: appName,
-      short_name: shortName,
-      description,
-      theme_color: '#0f172a',
-      background_color: '#0f172a',
-      display: 'standalone',
-      orientation: 'portrait',
-      scope,
-      start_url: startUrl,
-      icons: [
-        { src: icon, sizes: '192x192', type: 'image/png', purpose: 'any' },
-        { src: icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-      ],
-    });
+    res.json(buildPayload(name, icon));
   } catch (e) {
     console.error(e);
-    const esPortalAlumno = (req.query.portal || '').toString().trim().toLowerCase() === 'alumno';
-    const startUrl = esPortalAlumno ? '/mi-clase?modo=recuperar' : '/entrada';
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
-    res.json({
-      name: esPortalAlumno ? 'Tu Clase' : 'FitGest - Sistema de Gestión',
-      short_name: esPortalAlumno ? 'Tu Clase' : 'FitGest',
-      description: esPortalAlumno ? 'Portal de alumnos para ver perfil, clases y recuperaciones' : 'Sistema de gestión para Pilates',
-      theme_color: '#0f172a',
-      background_color: '#0f172a',
-      display: 'standalone',
-      orientation: 'portrait',
-      scope: '/',
-      start_url: startUrl,
-      icons: [
-        { src: '/fitgest.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-        { src: '/fitgest.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-      ],
-    });
+    res.json(buildPayload(esPortalAlumno ? 'Tu clase' : 'FitGest', '/fitgest.png'));
   }
 });
 

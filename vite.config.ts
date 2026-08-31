@@ -37,8 +37,9 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
-        // Instalación PWA: primera pantalla = elegir estudio o alumno (no la landing en /)
+        // Instalación genérica (chooser). Alumno y estudio usan manifests dinámicos con otro `id`.
         start_url: '/entrada',
+        id: '/pwa/entrada',
         icons: [
           { src: appIcon, sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: appIcon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }

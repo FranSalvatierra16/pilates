@@ -4,6 +4,8 @@ import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, Arro
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
+import InstallAppHint from '../components/InstallAppHint';
+import { buildManifestHref, isPwaStandalone, setAlumnoPortalContext } from '../utils/pwa-role';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -361,15 +363,22 @@ const MiClase = () => {
   }, [tokenFromUrl, modoFromUrl]);
 
   useEffect(() => {
+    const sid = data?.sucursalId || sucursalIdFromUrl;
+    setAlumnoPortalContext({
+      modo: modoFromUrl,
+      sucursalId: sid,
+    });
+
     const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
     const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
-    const sid = data?.sucursalId || sucursalIdFromUrl;
-    const params = new URLSearchParams({ portal: 'alumno', modo: modoFromUrl });
-    if (tokenFromUrl.trim()) params.set('token', tokenFromUrl.trim());
-    else if (sid.trim()) params.set('sucursalId', sid.trim());
-    const manifestHref = `/api/manifest.webmanifest?${params.toString()}`;
+    const manifestHref = buildManifestHref({
+      portal: 'alumno',
+      sucursalId: sid,
+      token: tokenFromUrl,
+      modo: modoFromUrl,
+    });
     const iconHref = sid.trim()
       ? `/api/public/sucursal-logo/${encodeURIComponent(sid.trim())}`
       : isSavia
@@ -379,8 +388,8 @@ const MiClase = () => {
     if (manifestLink) manifestLink.href = manifestHref;
     if (appleTouch) appleTouch.href = iconHref;
     if (favicon) favicon.href = iconHref;
-    if (appleTitle) appleTitle.content = isSavia ? 'Savia Pilates' : 'Tu clase';
-    document.title = isSavia ? 'Savia Pilates' : 'Tu clase';
+    if (appleTitle) appleTitle.content = isSavia ? 'Savia · Tu clase' : 'Tu clase';
+    document.title = isSavia ? 'Savia · Tu clase' : 'Tu clase';
   }, [data?.sucursalId, modoFromUrl, sucursalIdFromUrl, tokenFromUrl, isSavia]);
 
   const cargarPorDni = async (dni: string, sucursalIdElegida?: string) => {
@@ -663,16 +672,27 @@ const MiClase = () => {
               : 'bg-white rounded-2xl shadow-lg p-6'
           }`}
         >
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className={`inline-flex items-center gap-1.5 text-sm font-medium mb-5 ${
-              isSavia ? 'text-savia-muted hover:text-savia-ink' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Volver
-          </button>
+          {modoFromUrl !== 'recuperar' && !isPwaStandalone() && (
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className={`inline-flex items-center gap-1.5 text-sm font-medium mb-5 ${
+                isSavia ? 'text-savia-muted hover:text-savia-ink' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Volver
+            </button>
+          )}
+
+          <InstallAppHint
+            variant="alumno"
+            className={
+              isSavia
+                ? 'mb-5 border-savia-sandSoft bg-white/80 text-savia-ink [&_button]:bg-savia-olive'
+                : 'mb-5'
+            }
+          />
 
           {isSavia ? (
             <div className="text-center mb-6">

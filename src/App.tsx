@@ -4,6 +4,15 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import { ToastProvider } from './components/ToastProvider';
 import { ArrowRight, Building2, UserRound } from 'lucide-react';
+import {
+  buildManifestHref,
+  getAlumnoPortalContext,
+  getPwaRole,
+  getPwaStartPath,
+  isPwaStandalone,
+  setAlumnoPortalContext,
+  setPwaRole,
+} from './utils/pwa-role';
 
 const APP_NAME_FALLBACK = import.meta.env.VITE_APP_NAME || 'FITGEST';
 
@@ -14,24 +23,42 @@ function DocumentTitle() {
     const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
     const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
-    const manifestHref = sucursalId
-      ? `/api/manifest.webmanifest?sucursalId=${encodeURIComponent(sucursalId)}`
-      : '/api/manifest.webmanifest?brand=fitgest';
-    const iconHref = sucursalId
-      ? `/api/public/sucursal-logo/${encodeURIComponent(sucursalId)}`
-      : '/fitgest.png';
 
-    if (link) link.href = manifestHref;
-    if (appleTouch) appleTouch.href = iconHref;
-    if (favicon) favicon.href = iconHref;
+    // En rutas de estudio (logueado) forzar manifest de gestión.
+    // El portal alumno setea su propio manifest en MiClase.
+    if (isAuthenticated) {
+      setPwaRole('estudio');
+      const manifestHref = buildManifestHref({
+        portal: 'estudio',
+        sucursalId,
+        brand: sucursalId ? undefined : 'fitgest',
+      });
+      const iconHref = sucursalId
+        ? `/api/public/sucursal-logo/${encodeURIComponent(sucursalId)}`
+        : '/fitgest.png';
 
-    if (isAuthenticated && sucursalNombre) {
-      document.title = `${sucursalNombre} - Sistema de Gestión`;
-      if (appleTitle) appleTitle.content = sucursalNombre;
-    } else {
-      document.title = APP_NAME_FALLBACK === 'Sistema de Gestión' ? APP_NAME_FALLBACK : `${APP_NAME_FALLBACK} - Sistema de Gestión`;
-      if (appleTitle) appleTitle.content = APP_NAME_FALLBACK;
+      if (link) link.href = manifestHref;
+      if (appleTouch) appleTouch.href = iconHref;
+      if (favicon) favicon.href = iconHref;
+
+      if (sucursalNombre) {
+        document.title = `${sucursalNombre} - Sistema de Gestión`;
+        if (appleTitle) appleTitle.content = sucursalNombre;
+      } else {
+        document.title =
+          APP_NAME_FALLBACK === 'Sistema de Gestión'
+            ? APP_NAME_FALLBACK
+            : `${APP_NAME_FALLBACK} - Sistema de Gestión`;
+        if (appleTitle) appleTitle.content = APP_NAME_FALLBACK;
+      }
+      return;
     }
+
+    document.title =
+      APP_NAME_FALLBACK === 'Sistema de Gestión'
+        ? APP_NAME_FALLBACK
+        : `${APP_NAME_FALLBACK} - Sistema de Gestión`;
+    if (appleTitle) appleTitle.content = APP_NAME_FALLBACK;
   }, [isAuthenticated, sucursalId, sucursalNombre]);
   return null;
 }
@@ -80,28 +107,28 @@ function isPublicLandingOnlySite() {
 }
 
 function isPwaStandaloneClient() {
-  if (typeof window === 'undefined') return false;
-  const nav = window.navigator as Navigator & { standalone?: boolean };
-  return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
+  return isPwaStandalone();
 }
 
-/** En navegador normal: landing en /. En PWA instalada: / solo redirige a elegir estudio o alumno. */
+/** En navegador normal: landing en /. En PWA instalada: inicio según alumno o estudio. */
 function RootMarketingOrPwaEntry() {
   if (isPublicLandingOnlySite()) return <Landing />;
-  if (isPwaStandaloneClient()) return <Navigate to="/entrada" replace />;
+  if (isPwaStandaloneClient()) {
+    return <Navigate to={getPwaStartPath()} replace />;
+  }
   return <Landing />;
 }
 
 const ProtectedSucursalRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isAdmin } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login?portal=estudio" replace />;
   if (isAdmin) return <Navigate to="/admin" replace />;
   return <>{children}</>;
 };
 
 const ProtectedAdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isAdmin } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login?portal=estudio" replace />;
   if (!isAdmin) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
@@ -113,9 +140,36 @@ function RootRedirect() {
 
 function EntrySelector() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useAuth();
 
   if (isAuthenticated) return <RootRedirect />;
+
+  const params = new URLSearchParams(location.search);
+  const portalParam = params.get('portal');
+
+  // PWA / links con portal fijo: no mezclar inicios.
+  if (portalParam === 'alumno' || params.get('modo') === 'recuperar') {
+    const next = new URLSearchParams();
+    next.set('modo', params.get('modo') || getAlumnoPortalContext().modo || 'recuperar');
+    next.set('portal', 'alumno');
+    const sid = params.get('sucursalId') || getAlumnoPortalContext().sucursalId;
+    if (sid) next.set('sucursalId', sid);
+    const token = params.get('token');
+    if (token) next.set('token', token);
+    return <Navigate to={`/mi-clase?${next.toString()}`} replace />;
+  }
+  if (portalParam === 'estudio') {
+    return <Navigate to="/login?portal=estudio" replace />;
+  }
+
+  // App ya instalada como alumno/estudio: ir al inicio correcto.
+  if (isPwaStandalone()) {
+    const role = getPwaRole();
+    if (role === 'alumno' || role === 'estudio') {
+      return <Navigate to={getPwaStartPath()} replace />;
+    }
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10">
@@ -130,14 +184,17 @@ function EntrySelector() {
         <div className="text-center mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Elegí cómo querés entrar</h1>
           <p className="text-gray-600 text-sm sm:text-base mt-2">
-            Entrá como estudio para administrar el sistema o como alumno para abrir `Tu clase`.
+            Cada uno puede instalar su propia app: el alumno solo ve recuperar; el estudio ve todo el sistema.
           </p>
         </div>
 
         <div className="grid gap-3 sm:gap-4">
           <button
             type="button"
-            onClick={() => navigate('/login')}
+            onClick={() => {
+              setPwaRole('estudio');
+              navigate('/login?portal=estudio');
+            }}
             className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm hover:border-primary-300 hover:bg-primary-50 transition"
           >
             <div className="flex items-start gap-4">
@@ -145,8 +202,10 @@ function EntrySelector() {
                 <Building2 className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <p className="text-base font-semibold text-gray-900">Estudio</p>
-                <p className="text-sm text-gray-600 mt-1">Ingresá con tu usuario y contraseña para administrar el estudio.</p>
+                <p className="text-base font-semibold text-gray-900">Estudio / sucursal</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Login y sistema completo. Instalalo desde la pantalla de login.
+                </p>
               </div>
               <ArrowRight className="w-5 h-5 text-gray-400 mt-1" />
             </div>
@@ -154,7 +213,10 @@ function EntrySelector() {
 
           <button
             type="button"
-            onClick={() => navigate('/mi-clase?modo=recuperar')}
+            onClick={() => {
+              setAlumnoPortalContext({ modo: 'recuperar' });
+              navigate('/mi-clase?modo=recuperar&portal=alumno');
+            }}
             className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm hover:border-primary-300 hover:bg-primary-50 transition"
           >
             <div className="flex items-start gap-4">
@@ -163,7 +225,9 @@ function EntrySelector() {
               </div>
               <div className="flex-1">
                 <p className="text-base font-semibold text-gray-900">Alumno</p>
-                <p className="text-sm text-gray-600 mt-1">Entrá a `Tu clase`, poné tu DNI y anotate en formato recuperación.</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Solo Tu clase (recuperar / liberar). Instalalo desde ese link.
+                </p>
               </div>
               <ArrowRight className="w-5 h-5 text-gray-400 mt-1" />
             </div>

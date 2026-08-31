@@ -19,8 +19,12 @@ const Login = () => {
   const { login, isAuthenticated, isAdmin, sucursalId } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const esAppAlumno = isAlumnoPwa() && searchParams.get('portal') !== 'estudio';
-  const portalEstudio = searchParams.get('portal') === 'estudio' || isPwaStandalone();
+  const esAppAlumno = isAlumnoPwa();
+  // En PWA standalone, portal=estudio en la URL suele ser start_url mal instalado (app alumno).
+  const portalEstudio =
+    searchParams.get('portal') === 'estudio' && !isAlumnoPwa()
+      ? true
+      : isPwaStandalone() && !isAlumnoPwa();
 
   useEffect(() => {
     if (esAppAlumno) return;
@@ -39,7 +43,7 @@ const Login = () => {
     document.title = 'Iniciar sesión · Estudio';
   }, [searchParams, sucursalId, esAppAlumno]);
 
-  // Si este dispositivo es la app del alumno, no mostrar login del estudio.
+  // App alumno: NUNCA mostrar login (aunque el start_url viejo diga portal=estudio).
   if (esAppAlumno) {
     return <Navigate to={getPwaStartPath()} replace />;
   }

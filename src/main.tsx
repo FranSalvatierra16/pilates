@@ -75,9 +75,14 @@ function bootPwaSkipMarketingLanding() {
   const start = getPwaStartPath()
 
   // App alumno: sacar de login / entrada / home y mandar a recuperar
+  // (aunque la URL sea /login?portal=estudio por un start_url mal instalado)
   if (isAlumnoPwa()) {
     if (!pathname.startsWith('/mi-clase')) {
-      window.history.replaceState(null, '', `${start}${hash || ''}`)
+      window.history.replaceState(null, '', `${getPwaStartPath()}${hash || ''}`)
+      // Forzar navegación real en iOS standalone (replaceState a veces no alcanza)
+      if (pathname.startsWith('/login') || pathname === '/entrada' || pathname === '/' || pathname === '') {
+        window.location.replace(`${getPwaStartPath()}${hash || ''}`)
+      }
     }
     return
   }

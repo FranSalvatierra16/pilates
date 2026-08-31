@@ -12,50 +12,83 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Sistema de Gestión" />
     <link rel="apple-touch-icon" href="/fitgest.png" />
-    <!-- Manifest dinámico: se ajusta abajo según alumno (/mi-clase) o estudio -->
-    <link
-      id="app-manifest"
-      rel="manifest"
-      href="/api/manifest.webmanifest?portal=estudio&amp;brand=fitgest"
-    />
+    <!--
+      IMPORTANTE: el manifest se inserta DESPUÉS de detectar alumno/estudio.
+      Si el link nace con portal=estudio, Chrome del celu cachea start_url=/login
+      y la app de recuperar abre el login de sucursal.
+    -->
     <script>
-      /* Antes de React: si el link es de recuperar, marcar app alumno + manifest correcto para instalar. */
       (function () {
         try {
           var path = location.pathname || '';
           var params = new URLSearchParams(location.search);
-          var link = document.getElementById('app-manifest');
-          var isAlumno =
+          var isAlumnoUrl =
             path.indexOf('/mi-clase') === 0 ||
             params.get('portal') === 'alumno' ||
             params.get('modo') === 'recuperar';
-          if (isAlumno) {
+
+          function getCookie(name) {
+            var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+            return m ? decodeURIComponent(m[1]) : '';
+          }
+          function setCookie(name, value) {
+            document.cookie =
+              name + '=' + encodeURIComponent(value) + '; path=/; max-age=34560000; SameSite=Lax';
+          }
+
+          var alumnoFlag =
+            localStorage.getItem('fitgest_portal_alumno') === '1' || getCookie('fitgest_portal_alumno') === '1';
+
+          // App alumno que cayó en /login (start_url viejo): volver a recuperar YA
+          if (alumnoFlag && path.indexOf('/mi-clase') !== 0) {
+            var modoB = localStorage.getItem('fitgest_portal_alumno_modo') || getCookie('fitgest_portal_alumno_modo') || 'recuperar';
+            var sidB = localStorage.getItem('fitgest_portal_alumno_sucursal') || getCookie('fitgest_portal_alumno_sucursal') || '';
+            var qb = new URLSearchParams({ modo: modoB, portal: 'alumno' });
+            if (sidB) qb.set('sucursalId', sidB);
+            location.replace('/mi-clase?' + qb.toString());
+            return;
+          }
+
+          var manifestHref;
+          if (isAlumnoUrl) {
             localStorage.setItem('fitgest_pwa_role', 'alumno');
             localStorage.setItem('fitgest_portal_alumno', '1');
+            setCookie('fitgest_portal_alumno', '1');
             var modo = params.get('modo') || 'recuperar';
             localStorage.setItem('fitgest_portal_alumno_modo', modo);
+            setCookie('fitgest_portal_alumno_modo', modo);
             var sid = params.get('sucursalId') || '';
-            if (sid) localStorage.setItem('fitgest_portal_alumno_sucursal', sid);
+            if (sid) {
+              localStorage.setItem('fitgest_portal_alumno_sucursal', sid);
+              setCookie('fitgest_portal_alumno_sucursal', sid);
+            }
             var q = new URLSearchParams({ portal: 'alumno', modo: modo });
             if (sid) q.set('sucursalId', sid);
             var token = params.get('token');
             if (token) q.set('token', token);
-            if (link) link.setAttribute('href', '/api/manifest.webmanifest?' + q.toString());
+            manifestHref = '/api/manifest.webmanifest?' + q.toString();
             var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-            // Por defecto Savia en portal alumno de este deploy; el JS de MiClase ajusta si es otra sede.
             if (appleTitle) appleTitle.setAttribute('content', 'Savia');
             document.title = 'Savia';
             var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
-            if (appleIcon) appleIcon.setAttribute('href', '/savia.png');
+            if (appleIcon) appleIcon.setAttribute('href', '/apple-touch-savia.png');
           } else if (path.indexOf('/login') === 0 || params.get('portal') === 'estudio') {
+            // NO borrar flag alumno acá (antes eso rompía la app del celu)
             localStorage.setItem('fitgest_pwa_role', 'estudio');
-            localStorage.removeItem('fitgest_portal_alumno');
             var qs = new URLSearchParams({ portal: 'estudio' });
             var sid2 = params.get('sucursalId') || '';
             if (sid2) qs.set('sucursalId', sid2);
             else qs.set('brand', 'fitgest');
-            if (link) link.setAttribute('href', '/api/manifest.webmanifest?' + qs.toString());
+            manifestHref = '/api/manifest.webmanifest?' + qs.toString();
+          } else {
+            manifestHref = '/api/manifest.webmanifest?portal=estudio&brand=fitgest';
           }
+
+          var link = document.createElement('link');
+          link.id = 'app-manifest';
+          link.rel = 'manifest';
+          link.href = manifestHref;
+          document.head.appendChild(link);
         } catch (e) {}
       })();
     </script>

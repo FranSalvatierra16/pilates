@@ -382,12 +382,12 @@ const MiClase = () => {
     const iconHref = sid.trim()
       ? `/api/public/sucursal-logo/${encodeURIComponent(sid.trim())}`
       : isSavia
-        ? '/savia.png'
+        ? '/apple-touch-savia.png'
         : '/fitgest.png';
 
     if (manifestLink) manifestLink.href = manifestHref;
-    if (appleTouch) appleTouch.href = iconHref;
-    if (favicon) favicon.href = iconHref;
+    if (appleTouch) appleTouch.href = isSavia ? '/apple-touch-savia.png' : iconHref;
+    if (favicon) favicon.href = isSavia ? '/savia.png' : iconHref;
     // iOS "Agregar a Inicio" usa este meta (nombre corto, sin FITGEST).
     const homeName = isSavia ? 'Savia' : (marcaTitulo || 'Tu clase').slice(0, 12);
     if (appleTitle) appleTitle.content = homeName;

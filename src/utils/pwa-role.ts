@@ -6,6 +6,33 @@ const ALUMNO_FLAG_KEY = 'fitgest_portal_alumno';
 const ALUMNO_MODO_KEY = 'fitgest_portal_alumno_modo';
 const ALUMNO_SUCURSAL_KEY = 'fitgest_portal_alumno_sucursal';
 const TOKEN_KEY = 'savia_token';
+const COOKIE_ALUMNO = 'fitgest_portal_alumno';
+
+function setCookie(name: string, value: string, days = 400) {
+  try {
+    const maxAge = days * 24 * 60 * 60;
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  } catch {
+    /* ignore */
+  }
+}
+
+function getCookie(name: string): string | null {
+  try {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearCookie(name: string) {
+  try {
+    document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+  } catch {
+    /* ignore */
+  }
+}
 
 export function getPwaRole(): PwaRole | null {
   try {
@@ -21,6 +48,7 @@ export function getPwaRole(): PwaRole | null {
 export function isAlumnoPwa(): boolean {
   try {
     if (localStorage.getItem(ALUMNO_FLAG_KEY) === '1') return true;
+    if (getCookie(COOKIE_ALUMNO) === '1') return true;
     if (getPwaRole() === 'alumno') return true;
   } catch {
     /* ignore */
@@ -33,9 +61,8 @@ export function setPwaRole(role: PwaRole) {
     localStorage.setItem(ROLE_KEY, role);
     if (role === 'alumno') {
       localStorage.setItem(ALUMNO_FLAG_KEY, '1');
+      setCookie(COOKIE_ALUMNO, '1');
     }
-    // No borrar el flag alumno al pasar por /login con un token viejo:
-    // eso hacía que la app de recuperar abriera el login del estudio.
   } catch {
     /* ignore */
   }
@@ -48,6 +75,9 @@ export function adoptEstudioPwa() {
     localStorage.removeItem(ALUMNO_FLAG_KEY);
     localStorage.removeItem(ALUMNO_MODO_KEY);
     localStorage.removeItem(ALUMNO_SUCURSAL_KEY);
+    clearCookie(COOKIE_ALUMNO);
+    clearCookie('fitgest_portal_alumno_sucursal');
+    clearCookie('fitgest_portal_alumno_modo');
   } catch {
     /* ignore */
   }
@@ -57,8 +87,14 @@ export function setAlumnoPortalContext(opts: { modo?: string; sucursalId?: strin
   setPwaRole('alumno');
   try {
     localStorage.setItem(ALUMNO_FLAG_KEY, '1');
-    if (opts.modo) localStorage.setItem(ALUMNO_MODO_KEY, opts.modo);
-    if (opts.sucursalId?.trim()) localStorage.setItem(ALUMNO_SUCURSAL_KEY, opts.sucursalId.trim());
+    setCookie(COOKIE_ALUMNO, '1');
+    const modo = opts.modo || 'recuperar';
+    localStorage.setItem(ALUMNO_MODO_KEY, modo);
+    setCookie('fitgest_portal_alumno_modo', modo);
+    if (opts.sucursalId?.trim()) {
+      localStorage.setItem(ALUMNO_SUCURSAL_KEY, opts.sucursalId.trim());
+      setCookie('fitgest_portal_alumno_sucursal', opts.sucursalId.trim());
+    }
   } catch {
     /* ignore */
   }
@@ -67,8 +103,14 @@ export function setAlumnoPortalContext(opts: { modo?: string; sucursalId?: strin
 export function getAlumnoPortalContext() {
   try {
     return {
-      modo: localStorage.getItem(ALUMNO_MODO_KEY) || 'recuperar',
-      sucursalId: localStorage.getItem(ALUMNO_SUCURSAL_KEY) || '',
+      modo:
+        localStorage.getItem(ALUMNO_MODO_KEY) ||
+        getCookie('fitgest_portal_alumno_modo') ||
+        'recuperar',
+      sucursalId:
+        localStorage.getItem(ALUMNO_SUCURSAL_KEY) ||
+        getCookie('fitgest_portal_alumno_sucursal') ||
+        '',
     };
   } catch {
     return { modo: 'recuperar', sucursalId: '' };

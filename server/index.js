@@ -69,9 +69,13 @@ const authSkip = [
 ];
 
 const isAuthSkip = (path) =>
-  authSkip.some((p) => path === p || path.startsWith(p));
+  authSkip.some((p) => path === p || path.startsWith(p + '/') || path.startsWith(p + '?'));
 
 app.use('/api', (req, res, next) => {
+  // Manifest PWA: siempre público (path puede venir con query en algunos proxies)
+  if (req.path === '/manifest.webmanifest' || req.path.startsWith('/manifest.webmanifest')) {
+    return next();
+  }
   if (isAuthSkip(req.path)) return next();
   if (req.path.startsWith('/public/')) return next();
   if (req.path.startsWith('/alumno-portal')) return next();
@@ -5333,31 +5337,37 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
   const esPortalAlumno = portalRaw === 'alumno';
   const modo = (req.query.modo || 'recuperar').toString().trim() || 'recuperar';
   const sidQuery = (req.query.sucursalId || '').toString().trim();
+  const origin = getRequestOrigin(req);
 
-  const buildPayload = (name, icon) => {
+  const buildPayload = (name, brandKey) => {
     let startUrl;
     let appId;
     let appName;
     let shortName;
     let description;
+    // Íconos estáticos 192/512 (Chrome Android exige tamaños reales; el logo de API falla en el celu).
+    const icon192 = brandKey === 'savia'
+      ? `${origin}/savia-192.png`
+      : `${origin}/fitgest-192.png`;
+    const icon512 = brandKey === 'savia'
+      ? `${origin}/savia-512.png`
+      : `${origin}/fitgest-512.png`;
 
     if (esPortalAlumno) {
       const q = new URLSearchParams({ modo, portal: 'alumno' });
       if (sidQuery) q.set('sucursalId', sidQuery);
       const token = (req.query.token || '').toString().trim();
       if (token) q.set('token', token);
-      startUrl = `/mi-clase?${q.toString()}`;
-      appId = `/pwa/alumno${sidQuery ? `/${sidQuery}` : ''}`;
+      startUrl = `${origin}/mi-clase?${q.toString()}`;
+      appId = `${origin}/pwa/alumno${sidQuery ? `/${sidQuery}` : ''}`;
       appName = `${name} · Tu clase`;
-      // iOS / Android usan short_name en el ícono (ej. "Savia", no FITGEST).
       shortName = name.length > 12 ? `${name.slice(0, 11)}…` : name;
       description = 'Recuperar y liberar clases';
     } else {
-      // Estudio / sucursal: sistema completo
       startUrl = sidQuery
-        ? `/login?portal=estudio&sucursalId=${encodeURIComponent(sidQuery)}`
-        : '/login?portal=estudio';
-      appId = `/pwa/estudio${sidQuery ? `/${sidQuery}` : ''}`;
+        ? `${origin}/login?portal=estudio&sucursalId=${encodeURIComponent(sidQuery)}`
+        : `${origin}/login?portal=estudio`;
+      appId = `${origin}/pwa/estudio${sidQuery ? `/${sidQuery}` : ''}`;
       appName = `${name} · Gestión`;
       shortName = name.length > 12 ? `${name.slice(0, 11)}…` : name;
       description = 'Sistema de gestión del estudio';
@@ -5368,15 +5378,16 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
       name: appName,
       short_name: shortName,
       description,
-      theme_color: '#0f172a',
-      background_color: '#0f172a',
+      theme_color: brandKey === 'savia' ? '#8F664C' : '#0f172a',
+      background_color: brandKey === 'savia' ? '#F7F1EA' : '#0f172a',
       display: 'standalone',
       orientation: 'portrait',
-      scope: '/',
+      scope: `${origin}/`,
       start_url: startUrl,
       icons: [
-        { src: icon, sizes: '192x192', type: 'image/png', purpose: 'any' },
-        { src: icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
       ],
     };
   };
@@ -5385,22 +5396,24 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
     const db = await getPool();
     const sucursal = await resolveSucursalBrandForPublicRequest(db, req);
     const brand = (req.query.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+    const nombre = (sucursal?.nombre_lugar || '').trim();
+    const esSavia = /savia/i.test(nombre) || esPortalAlumno;
     const fallbackName = brand === 'fitgest'
       ? 'FitGest'
       : brand
         ? brand.charAt(0).toUpperCase() + brand.slice(1)
-        : 'FitGest';
-    const name = sucursal?.nombre_lugar || fallbackName;
-    const icon = sucursal?.id ? getPublicLogoUrl(req, sucursal.id) : '/fitgest.png';
+        : (esPortalAlumno ? 'Savia' : 'FitGest');
+    const name = nombre || fallbackName;
+    const brandKey = esSavia || /savia/i.test(name) ? 'savia' : 'fitgest';
 
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
-    res.json(buildPayload(name, icon));
+    res.json(buildPayload(name, brandKey));
   } catch (e) {
     console.error(e);
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
-    res.json(buildPayload(esPortalAlumno ? 'Savia' : 'FitGest', esPortalAlumno ? '/savia.png' : '/fitgest.png'));
+    res.json(buildPayload(esPortalAlumno ? 'Savia' : 'FitGest', esPortalAlumno ? 'savia' : 'fitgest'));
   }
 });
 

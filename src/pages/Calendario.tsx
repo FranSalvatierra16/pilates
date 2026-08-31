@@ -671,36 +671,17 @@ const Calendario = () => {
   const buscarLiberacionSemana = (turnoId: string, alumnoId: string, semana = semanaVista) =>
     liberacionesSemana.find((item) => item.turnoId === turnoId && item.alumnoId === alumnoId && item.semana === semana);
 
+  const contarOcupacionTurno = (items: AlumnoEnTurno[]) =>
+    items.filter((item) => item.isRecuperacion || !item.liberadaSemana).length;
+
   const contarFijasActivasTurno = (items: AlumnoEnTurno[]) =>
     items.filter((item) => !item.isRecuperacion && !item.liberadaSemana).length;
 
-  const contarRecuperacionesTurno = (items: AlumnoEnTurno[]) =>
-    items.filter((item) => item.isRecuperacion).length;
-
-  /** Cuerpos en el turno (fijas activas + recuperaciones), para tope físico al anotar. */
-  const contarOcupacionFisicaTurno = (items: AlumnoEnTurno[]) =>
-    contarFijasActivasTurno(items) + contarRecuperacionesTurno(items);
-
-  const resumenCupoTurno = (items: AlumnoEnTurno[], cupo: number) => {
-    const fijasActivas = contarFijasActivasTurno(items);
-    const recuperaciones = contarRecuperacionesTurno(items);
-    const ocupacionFisica = fijasActivas + recuperaciones;
-    const libres = Math.max(0, cupo - fijasActivas);
-    return {
-      fijasActivas,
-      recuperaciones,
-      ocupacionFisica,
-      libres,
-      llenoFijas: fijasActivas >= cupo,
-      llenoFisico: ocupacionFisica >= cupo,
-    };
-  };
-
-  const etiquetaCupoTurno = (items: AlumnoEnTurno[], cupo: number) => {
-    const { fijasActivas, libres, llenoFijas } = resumenCupoTurno(items, cupo);
-    if (llenoFijas) return `${fijasActivas}/${cupo} · Llena`;
-    if (libres > 0) return `${fijasActivas}/${cupo} · ${libres} ${libres === 1 ? 'libre' : 'libres'}`;
-    return `${fijasActivas}/${cupo}`;
+  const libresFijasEnSlot = (diaSemana: number, hora: string) => {
+    if (!getTurnoRepresentativoDelSlot(diaSemana, hora)) return 0;
+    const cupo = cupoDelSlot(diaSemana, hora);
+    const fijasActivas = contarFijasActivasTurno(getAlumnosDelSlot(diaSemana, hora));
+    return Math.max(0, cupo - fijasActivas);
   };
 
   const getAlumnosDelTurno = (turno: Turno | undefined): AlumnoEnTurno[] => {
@@ -772,7 +753,7 @@ const Calendario = () => {
     const ts = getTurnosDelSlot(diaSemana, hora);
     if (ts.length === 0) return undefined;
     const cupoSlot = cupoDelSlot(diaSemana, hora);
-    const occSlot = contarFijasActivasTurno(getAlumnosDelSlot(diaSemana, hora));
+    const occSlot = contarOcupacionTurno(getAlumnosDelSlot(diaSemana, hora));
     if (occSlot >= cupoSlot) return undefined;
     return ts[0];
   };
@@ -788,6 +769,15 @@ const Calendario = () => {
       </p>
     );
   };
+
+  const cuposLibresSemana = diasSemana.reduce((totalDia, diaSemana) => {
+    const fecha = getFechaFromSemanaYDia(semanaVista, diaSemana);
+    const totalHoras = todasLasHoras.reduce((totalHora, hora) => {
+      if (!isCeldaOperativaPorFecha(diaSemana, hora, fecha)) return totalHora;
+      return totalHora + libresFijasEnSlot(diaSemana, hora);
+    }, 0);
+    return totalDia + totalHoras;
+  }, 0);
 
   const getActividadDelAlumno = (alumnoId: string) => {
     const alumno = alumnos.find((a) => a.id === alumnoId);
@@ -862,14 +852,13 @@ const Calendario = () => {
           .filter((turno): turno is Turno => turno !== undefined)
           .map((turno) => {
             const alumnasSlot = getAlumnosDelSlot(diaSemana, turno.hora);
-            // Cupos libres = cupo menos fijas activas (liberados liberan lugar; recuperaciones no restan).
-            const alumnasFijasActivas = alumnasSlot.filter(
-              (item) => !item.isRecuperacion && !item.liberadaSemana
-            ).length;
+            // Para compartir disponibilidad "estable", los liberados semanales se consideran ocupados.
+            // Las recuperaciones no restan del cupo publicado, pero avisamos si hay alguna.
+            const alumnasFijasBase = alumnasSlot.filter((item) => !item.isRecuperacion).length;
             const recuperando = alumnasSlot.filter((item) => item.isRecuperacion).length;
             const cupo = cupoDelSlot(diaSemana, turno.hora);
-            const ocupacionReal = alumnasFijasActivas + recuperando;
-            const disponibles = Math.max(0, cupo - alumnasFijasActivas);
+            const ocupacionReal = alumnasFijasBase + recuperando;
+            const disponibles = Math.max(0, cupo - alumnasFijasBase);
             if (recuperando > 0 && disponibles > 0) {
               avisosRecup.push({
                 dia: diasCortos[diaSemana],
@@ -1030,8 +1019,7 @@ const Calendario = () => {
       const turnosEnSlot = getTurnosDelSlot(turnoSeleccion.diaSemana, turnoSeleccion.hora);
       const turnoDestinoFijo = elegirTurnoConCupoEnSlot(turnoSeleccion.diaSemana, turnoSeleccion.hora);
       const recsEnTurno = alumnosVisiblesEnTurno.filter((a) => a.isRecuperacion);
-      const totalEnTurno = contarOcupacionFisicaTurno(alumnosVisiblesEnTurno);
-      const fijasActivasEnTurno = contarFijasActivasTurno(alumnosVisiblesEnTurno);
+      const totalEnTurno = contarOcupacionTurno(alumnosVisiblesEnTurno);
 
       if (marcarSoloRecuperacion) {
         const yaRecuperacion = recsEnTurno.some((r) => r.alumno.id === alumnoSeleccionado);
@@ -1107,7 +1095,7 @@ const Calendario = () => {
         }
       } else {
         if (turnosEnSlot.length > 0) {
-          if (fijasActivasEnTurno >= cupo) {
+          if (totalEnTurno >= cupo) {
             toast.warning('Esta clase ya tiene el cupo completo. Aumentá el cupo desde el ícono de editar (título/profesor) o desde «Editar cupo» abajo del calendario.');
             return;
           }
@@ -1717,11 +1705,11 @@ const Calendario = () => {
               recuperacionesPorSemana[semana] || [],
               liberacionesPorSemana[semana] || []
             );
-            const fijasTurno = alumnosTurno.filter((item) => !item.isRecuperacion && !item.liberadaSemana).length;
             const recuperacionesTurno = alumnosTurno.filter((item) => item.isRecuperacion).length;
+            const fijasTurno = alumnosTurno.filter((item) => !item.isRecuperacion && !item.liberadaSemana).length;
             const cupo = turno.cupo ?? CUPO_DEFAULT;
-            const libres = Math.max(0, cupo - fijasTurno);
-            const ocupacionTurno = fijasTurno + recuperacionesTurno;
+            const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+            const libres = Math.max(0, cupo - ocupacionTurno);
             const profesor = turno.profesorId
               ? profesores.find((item) => item.id === turno.profesorId)
               : null;
@@ -1738,7 +1726,7 @@ const Calendario = () => {
               fijas: fijasTurno,
               recuperaciones: recuperacionesTurno,
               libres,
-              llena: fijasTurno >= cupo,
+              llena: ocupacionTurno >= cupo,
             };
           });
           return {
@@ -2031,6 +2019,14 @@ const Calendario = () => {
               />
             </label>
           </div>
+          <p className="text-sm font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 w-fit">
+            {cuposLibresSemana === 1
+              ? '1 cupo libre en la semana'
+              : `${cuposLibresSemana} cupos libres en la semana`}
+            <span className="block text-xs font-normal text-emerald-700/90 mt-0.5">
+              Por turnos fijos (liberados no ocupan · sin recuperaciones)
+            </span>
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <button
@@ -2198,8 +2194,8 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = cupoDelSlot(diaIndex, hora);
-                      const cupoStats = resumenCupoTurno(alumnosTurno, cupo);
-                      const lleno = cupoStats.llenoFijas;
+                      const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+                      const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaDiaMovil);
                       return (
@@ -2254,15 +2250,15 @@ const Calendario = () => {
                               {profesor && <p className="text-gray-600">Prof: {profesor.nombre} {profesor.apellido}</p>}
                               <p className={`flex items-center gap-1 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-4 h-4" />
-                                {etiquetaCupoTurno(alumnosTurno, cupo)}
+                                {ocupacionTurno}/{cupo} alumnos
                               </p>
-                              {avisoCupoDuplicadosSlot(diaIndex, hora, cupoStats.ocupacionFisica, cupo)}
+                              {avisoCupoDuplicadosSlot(diaIndex, hora, ocupacionTurno, cupo)}
                             </div>
                           )}
                           <div className="space-y-1.5">
                             {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                           </div>
-                          {horarioDisponible && !lleno && cupoStats.ocupacionFisica === 0 && (
+                          {horarioDisponible && !lleno && ocupacionTurno === 0 && (
                             <button
                               type="button"
                               onClick={() => handleAgregarAlumno(diaIndex, hora, fechaDiaMovil)}
@@ -2286,8 +2282,8 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = cupoDelSlot(diaIndex, hora);
-                      const cupoStats = resumenCupoTurno(alumnosTurno, cupo);
-                      const lleno = cupoStats.llenoFijas;
+                      const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+                      const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaDiaMovil);
                       return (
@@ -2342,15 +2338,15 @@ const Calendario = () => {
                               {profesor && <p className="text-gray-600">Prof: {profesor.nombre} {profesor.apellido}</p>}
                               <p className={`flex items-center gap-1 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-4 h-4" />
-                                {etiquetaCupoTurno(alumnosTurno, cupo)}
+                                {ocupacionTurno}/{cupo} alumnos
                               </p>
-                              {avisoCupoDuplicadosSlot(diaIndex, hora, cupoStats.ocupacionFisica, cupo)}
+                              {avisoCupoDuplicadosSlot(diaIndex, hora, ocupacionTurno, cupo)}
                             </div>
                           )}
                           <div className="space-y-1.5">
                             {alumnosTurno.map((alumno) => renderAlumnoEnTurno(alumno, turno, diaIndex, hora))}
                           </div>
-                          {horarioDisponible && !lleno && cupoStats.ocupacionFisica === 0 && (
+                          {horarioDisponible && !lleno && ocupacionTurno === 0 && (
                             <button
                               type="button"
                               onClick={() => handleAgregarAlumno(diaIndex, hora, fechaDiaMovil)}
@@ -2471,8 +2467,8 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = cupoDelSlot(diaIndex, hora);
-                      const cupoStats = resumenCupoTurno(alumnosTurno, cupo);
-                      const lleno = cupoStats.llenoFijas;
+                      const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+                      const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaCol);
                       return (
@@ -2509,7 +2505,7 @@ const Calendario = () => {
                               {profesor && <div className="text-xs text-gray-600 truncate">Prof: {profesor.nombre} {profesor.apellido}</div>}
                               <div className={`text-xs flex items-center gap-1 mt-0.5 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-3.5 h-3.5 flex-shrink-0" />
-                                {etiquetaCupoTurno(alumnosTurno, cupo)}
+                                {ocupacionTurno}/{cupo}
                               </div>
                             </div>
                           )}
@@ -2551,8 +2547,8 @@ const Calendario = () => {
                       const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
                       const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = cupoDelSlot(diaIndex, hora);
-                      const cupoStats = resumenCupoTurno(alumnosTurno, cupo);
-                      const lleno = cupoStats.llenoFijas;
+                      const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
+                      const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaCol);
                       return (
@@ -2589,7 +2585,7 @@ const Calendario = () => {
                               {profesor && <div className="text-xs text-gray-600 truncate">Prof: {profesor.nombre} {profesor.apellido}</div>}
                               <div className={`text-xs flex items-center gap-1 mt-0.5 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-3.5 h-3.5 flex-shrink-0" />
-                                {etiquetaCupoTurno(alumnosTurno, cupo)}
+                                {ocupacionTurno}/{cupo}
                               </div>
                             </div>
                           )}

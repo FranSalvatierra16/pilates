@@ -3,7 +3,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { LogIn, AlertCircle, ArrowLeft } from 'lucide-react';
 import InstallAppHint from '../components/InstallAppHint';
-import { buildManifestHref, isPwaStandalone, setPwaRole } from '../utils/pwa-role';
+import {
+  adoptEstudioPwa,
+  buildManifestHref,
+  getPwaStartPath,
+  isAlumnoPwa,
+  isPwaStandalone,
+  setPwaRole,
+} from '../utils/pwa-role';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -12,9 +19,11 @@ const Login = () => {
   const { login, isAuthenticated, isAdmin, sucursalId } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const esAppAlumno = isAlumnoPwa() && searchParams.get('portal') !== 'estudio';
   const portalEstudio = searchParams.get('portal') === 'estudio' || isPwaStandalone();
 
   useEffect(() => {
+    if (esAppAlumno) return;
     setPwaRole('estudio');
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
@@ -28,7 +37,12 @@ const Login = () => {
     }
     if (appleTitle) appleTitle.content = 'Gestión';
     document.title = 'Iniciar sesión · Estudio';
-  }, [searchParams, sucursalId]);
+  }, [searchParams, sucursalId, esAppAlumno]);
+
+  // Si este dispositivo es la app del alumno, no mostrar login del estudio.
+  if (esAppAlumno) {
+    return <Navigate to={getPwaStartPath()} replace />;
+  }
 
   if (isAuthenticated) {
     return <Navigate to={isAdmin ? '/admin' : '/dashboard'} replace />;
@@ -40,7 +54,7 @@ const Login = () => {
 
     const result = await login(username, password);
     if ('role' in result && result.role) {
-      setPwaRole('estudio');
+      adoptEstudioPwa();
       navigate(result.role === 'admin' ? '/admin' : '/dashboard');
     } else {
       setError('error' in result ? result.error : 'Usuario o contraseña incorrectos');

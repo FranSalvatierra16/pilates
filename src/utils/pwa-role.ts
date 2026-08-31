@@ -2,6 +2,7 @@
 export type PwaRole = 'alumno' | 'estudio';
 
 const ROLE_KEY = 'fitgest_pwa_role';
+const ALUMNO_FLAG_KEY = 'fitgest_portal_alumno';
 const ALUMNO_MODO_KEY = 'fitgest_portal_alumno_modo';
 const ALUMNO_SUCURSAL_KEY = 'fitgest_portal_alumno_sucursal';
 const TOKEN_KEY = 'savia_token';
@@ -16,16 +17,37 @@ export function getPwaRole(): PwaRole | null {
   return null;
 }
 
+/** True si este dispositivo se usó / instaló como portal alumno (recuperar). */
+export function isAlumnoPwa(): boolean {
+  try {
+    if (localStorage.getItem(ALUMNO_FLAG_KEY) === '1') return true;
+    if (getPwaRole() === 'alumno') return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 export function setPwaRole(role: PwaRole) {
   try {
     localStorage.setItem(ROLE_KEY, role);
-    // Compat con boot anterior
-    if (role === 'alumno') localStorage.setItem('fitgest_portal_alumno', '1');
-    else {
-      localStorage.removeItem('fitgest_portal_alumno');
-      localStorage.removeItem(ALUMNO_MODO_KEY);
-      localStorage.removeItem(ALUMNO_SUCURSAL_KEY);
+    if (role === 'alumno') {
+      localStorage.setItem(ALUMNO_FLAG_KEY, '1');
     }
+    // No borrar el flag alumno al pasar por /login con un token viejo:
+    // eso hacía que la app de recuperar abriera el login del estudio.
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Pasar a app de estudio de forma explícita (entrada Estudio o login ok). */
+export function adoptEstudioPwa() {
+  try {
+    localStorage.setItem(ROLE_KEY, 'estudio');
+    localStorage.removeItem(ALUMNO_FLAG_KEY);
+    localStorage.removeItem(ALUMNO_MODO_KEY);
+    localStorage.removeItem(ALUMNO_SUCURSAL_KEY);
   } catch {
     /* ignore */
   }
@@ -34,6 +56,7 @@ export function setPwaRole(role: PwaRole) {
 export function setAlumnoPortalContext(opts: { modo?: string; sucursalId?: string }) {
   setPwaRole('alumno');
   try {
+    localStorage.setItem(ALUMNO_FLAG_KEY, '1');
     if (opts.modo) localStorage.setItem(ALUMNO_MODO_KEY, opts.modo);
     if (opts.sucursalId?.trim()) localStorage.setItem(ALUMNO_SUCURSAL_KEY, opts.sucursalId.trim());
   } catch {
@@ -66,16 +89,15 @@ export function isPwaStandalone(): boolean {
   return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
 }
 
-/** Ruta de inicio según el tipo de app instalada. */
+/** Ruta de inicio según el tipo de app. Alumno gana siempre sobre sesión de estudio en el mismo celular. */
 export function getPwaStartPath(): string {
-  const role = getPwaRole();
-  if (role === 'alumno') {
+  if (isAlumnoPwa()) {
     const { modo, sucursalId } = getAlumnoPortalContext();
     const q = new URLSearchParams({ modo: modo || 'recuperar', portal: 'alumno' });
     if (sucursalId) q.set('sucursalId', sucursalId);
     return `/mi-clase?${q.toString()}`;
   }
-  if (role === 'estudio' || hasEstudioSession()) {
+  if (getPwaRole() === 'estudio' || hasEstudioSession()) {
     return hasEstudioSession() ? '/dashboard' : '/login?portal=estudio';
   }
   return '/entrada';

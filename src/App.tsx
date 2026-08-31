@@ -5,10 +5,12 @@ import Layout from './components/Layout';
 import { ToastProvider } from './components/ToastProvider';
 import { ArrowRight, Building2, UserRound } from 'lucide-react';
 import {
+  adoptEstudioPwa,
   buildManifestHref,
   getAlumnoPortalContext,
   getPwaRole,
   getPwaStartPath,
+  isAlumnoPwa,
   isPwaStandalone,
   setAlumnoPortalContext,
   setPwaRole,
@@ -172,21 +174,15 @@ function EntrySelector() {
     return <Navigate to="/login?portal=estudio" replace />;
   }
 
-  // App ya instalada como alumno/estudio: ir al inicio correcto (nunca mostrar el chooser).
+  // App ya instalada como alumno: nunca mostrar chooser ni login.
+  if (isPwaStandalone() && isAlumnoPwa()) {
+    return <Navigate to={getPwaStartPath()} replace />;
+  }
+
+  // App estudio
   if (isPwaStandalone()) {
-    let role = getPwaRole();
-    // Compat: instalaciones que solo dejaron el flag viejo
-    if (!role) {
-      try {
-        if (localStorage.getItem('fitgest_portal_alumno') === '1') {
-          setAlumnoPortalContext(getAlumnoPortalContext());
-          role = 'alumno';
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    if (role === 'alumno' || role === 'estudio') {
+    const role = getPwaRole();
+    if (role === 'estudio') {
       return <Navigate to={getPwaStartPath()} replace />;
     }
   }
@@ -212,7 +208,7 @@ function EntrySelector() {
           <button
             type="button"
             onClick={() => {
-              setPwaRole('estudio');
+              adoptEstudioPwa();
               navigate('/login?portal=estudio');
             }}
             className="w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm hover:border-primary-300 hover:bg-primary-50 transition"

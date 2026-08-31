@@ -7,6 +7,7 @@ import {
   getPwaRole,
   getPwaStartPath,
   hasEstudioSession,
+  isAlumnoPwa,
   isPwaStandalone,
   setAlumnoPortalContext,
   setPwaRole,
@@ -39,6 +40,9 @@ function syncPwaRoleFromUrl() {
     return
   }
 
+  // No convertir a estudio si este dispositivo es app de alumno (aunque caiga en /login).
+  if (isAlumnoPwa()) return
+
   if (path.startsWith('/login') || params.get('portal') === 'estudio') {
     setPwaRole('estudio')
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
@@ -53,8 +57,8 @@ function syncPwaRoleFromUrl() {
 }
 
 /**
- * PWA instalada: iOS a veces abre /; Chrome puede abrir start_url viejo (/entrada).
- * Mandamos al inicio correcto según alumno vs estudio.
+ * PWA instalada: iOS a veces abre / o un start_url viejo (/login, /entrada).
+ * Si es app alumno → siempre /mi-clase.
  */
 function bootPwaSkipMarketingLanding() {
   const mode = String(import.meta.env.VITE_PUBLIC_SITE_MODE || '')
@@ -68,12 +72,18 @@ function bootPwaSkipMarketingLanding() {
   if (!isPwaStandalone()) return
 
   const { pathname, search, hash } = window.location
-  const role = getPwaRole()
   const start = getPwaStartPath()
 
-  // Ya está en su portal alumno
-  if (role === 'alumno' && pathname.startsWith('/mi-clase')) return
-  // Estudio ya dentro del sistema o en login
+  // App alumno: sacar de login / entrada / home y mandar a recuperar
+  if (isAlumnoPwa()) {
+    if (!pathname.startsWith('/mi-clase')) {
+      window.history.replaceState(null, '', `${start}${hash || ''}`)
+    }
+    return
+  }
+
+  const role = getPwaRole()
+
   if (
     role === 'estudio' &&
     (pathname.startsWith('/login') ||
@@ -85,9 +95,8 @@ function bootPwaSkipMarketingLanding() {
     return
   }
 
-  // Abrir / o /entrada (chooser viejo) → ir al inicio de esa app
-  if (pathname === '/' || pathname === '' || pathname === '/entrada') {
-    if (role === 'alumno' || role === 'estudio' || hasEstudioSession()) {
+  if (pathname === '/' || pathname === '' || pathname === '/entrada' || pathname === '/login') {
+    if (role === 'estudio' || hasEstudioSession()) {
       window.history.replaceState(null, '', `${start}${hash || ''}`)
       return
     }
@@ -110,7 +119,8 @@ const storedSucursalId = localStorage.getItem(SUCURSAL_ID_KEY)
 const storedSucursalNombre = localStorage.getItem(SUCURSAL_NOMBRE_KEY)
 const storedFotoPerfil = localStorage.getItem(FOTO_PERFIL_KEY)
 
-if (storedToken && storedSucursalNombre) {
+// Token de estudio en el mismo celular NO debe pisar la app del alumno
+if (storedToken && storedSucursalNombre && !isAlumnoPwa()) {
   setPwaRole('estudio')
   const title = `${storedSucursalNombre} - Sistema de Gestión`
   const manifestHref = storedSucursalId

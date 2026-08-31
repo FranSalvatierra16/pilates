@@ -822,6 +822,8 @@ const MiClase = () => {
     if (turnoYaPaso(t)) return false;
     if (turnoCerradoPorCalendario(t)) return false;
     if ((horariosNoDisponibles?.[t.diaSemana] || []).includes(t.hora)) return false;
+    // En recuperar no mostramos clases llenas salvo las del alumno (fija o ya anotada).
+    if (esRecuperar && t.inscriptos >= t.cupo && !t.yaInscripto && !t.esClaseFija) return false;
     const h = horaToNum(t.hora);
     if (filtroHorario === 'manana') return h >= iniManana && h <= finManana;
     if (filtroHorario === 'tarde') return h >= iniTarde && h <= finTarde;

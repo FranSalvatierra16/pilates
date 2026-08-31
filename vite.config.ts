@@ -28,23 +28,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
       },
       includeAssets: [appIcon],
-      manifest: {
-        name: appName ? `${appName} - Sistema de Gestión` : 'Sistema de Gestión',
-        short_name: appName || 'Sistema',
-        description: 'Sistema de gestión para Pilates',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
-        display: 'standalone',
-        orientation: 'portrait',
-        scope: '/',
-        // Instalación genérica (chooser). Alumno y estudio usan manifests dinámicos con otro `id`.
-        start_url: '/entrada',
-        id: '/pwa/entrada',
-        icons: [
-          { src: appIcon, sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: appIcon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
-        ]
-      },
+      // Manifest dinámico vía /api/manifest.webmanifest (alumno vs estudio).
+      // El estático con start_url=/entrada hacía que la app del alumno abriera el chooser.
+      manifest: false,
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [

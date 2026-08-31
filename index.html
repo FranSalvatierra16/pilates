@@ -12,6 +12,50 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Sistema de Gestión" />
     <link rel="apple-touch-icon" href="/fitgest.png" />
+    <!-- Manifest dinámico: se ajusta abajo según alumno (/mi-clase) o estudio -->
+    <link
+      id="app-manifest"
+      rel="manifest"
+      href="/api/manifest.webmanifest?portal=estudio&amp;brand=fitgest"
+    />
+    <script>
+      /* Antes de React: si el link es de recuperar, marcar app alumno + manifest correcto para instalar. */
+      (function () {
+        try {
+          var path = location.pathname || '';
+          var params = new URLSearchParams(location.search);
+          var link = document.getElementById('app-manifest');
+          var isAlumno =
+            path.indexOf('/mi-clase') === 0 ||
+            params.get('portal') === 'alumno' ||
+            params.get('modo') === 'recuperar';
+          if (isAlumno) {
+            localStorage.setItem('fitgest_pwa_role', 'alumno');
+            localStorage.setItem('fitgest_portal_alumno', '1');
+            var modo = params.get('modo') || 'recuperar';
+            localStorage.setItem('fitgest_portal_alumno_modo', modo);
+            var sid = params.get('sucursalId') || '';
+            if (sid) localStorage.setItem('fitgest_portal_alumno_sucursal', sid);
+            var q = new URLSearchParams({ portal: 'alumno', modo: modo });
+            if (sid) q.set('sucursalId', sid);
+            var token = params.get('token');
+            if (token) q.set('token', token);
+            if (link) link.setAttribute('href', '/api/manifest.webmanifest?' + q.toString());
+            var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+            if (appleTitle) appleTitle.setAttribute('content', 'Tu clase');
+            document.title = 'Tu clase';
+          } else if (path.indexOf('/login') === 0 || params.get('portal') === 'estudio') {
+            localStorage.setItem('fitgest_pwa_role', 'estudio');
+            localStorage.removeItem('fitgest_portal_alumno');
+            var qs = new URLSearchParams({ portal: 'estudio' });
+            var sid2 = params.get('sucursalId') || '';
+            if (sid2) qs.set('sucursalId', sid2);
+            else qs.set('brand', 'fitgest');
+            if (link) link.setAttribute('href', '/api/manifest.webmanifest?' + qs.toString());
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -25,4 +69,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

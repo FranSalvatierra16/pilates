@@ -163,9 +163,20 @@ function EntrySelector() {
     return <Navigate to="/login?portal=estudio" replace />;
   }
 
-  // App ya instalada como alumno/estudio: ir al inicio correcto.
+  // App ya instalada como alumno/estudio: ir al inicio correcto (nunca mostrar el chooser).
   if (isPwaStandalone()) {
-    const role = getPwaRole();
+    let role = getPwaRole();
+    // Compat: instalaciones que solo dejaron el flag viejo
+    if (!role) {
+      try {
+        if (localStorage.getItem('fitgest_portal_alumno') === '1') {
+          setAlumnoPortalContext(getAlumnoPortalContext());
+          role = 'alumno';
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     if (role === 'alumno' || role === 'estudio') {
       return <Navigate to={getPwaStartPath()} replace />;
     }

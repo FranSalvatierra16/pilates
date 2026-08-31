@@ -770,14 +770,21 @@ const Calendario = () => {
     );
   };
 
-  const cuposLibresSemana = diasSemana.reduce((totalDia, diaSemana) => {
-    const fecha = getFechaFromSemanaYDia(semanaVista, diaSemana);
-    const totalHoras = todasLasHoras.reduce((totalHora, hora) => {
-      if (!isCeldaOperativaPorFecha(diaSemana, hora, fecha)) return totalHora;
-      return totalHora + libresFijasEnSlot(diaSemana, hora);
-    }, 0);
-    return totalDia + totalHoras;
-  }, 0);
+  const resumenCuposSemana = diasSemana.reduce(
+    (acc, diaSemana) => {
+      const fecha = getFechaFromSemanaYDia(semanaVista, diaSemana);
+      for (const hora of todasLasHoras) {
+        if (!isCeldaOperativaPorFecha(diaSemana, hora, fecha)) continue;
+        if (!getTurnoRepresentativoDelSlot(diaSemana, hora)) continue;
+        acc.total += cupoDelSlot(diaSemana, hora);
+        acc.libres += libresFijasEnSlot(diaSemana, hora);
+      }
+      return acc;
+    },
+    { libres: 0, total: 0 }
+  );
+  const cuposLibresSemana = resumenCuposSemana.libres;
+  const cuposTotalesSemana = resumenCuposSemana.total;
 
   const getActividadDelAlumno = (alumnoId: string) => {
     const alumno = alumnos.find((a) => a.id === alumnoId);
@@ -2020,9 +2027,16 @@ const Calendario = () => {
             </label>
           </div>
           <p className="text-sm font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 w-fit">
-            {cuposLibresSemana === 1
-              ? '1 cupo libre en la semana'
-              : `${cuposLibresSemana} cupos libres en la semana`}
+            {cuposTotalesSemana > 0 ? (
+              <>
+                <span className="tabular-nums">
+                  {cuposLibresSemana}/{cuposTotalesSemana}
+                </span>{' '}
+                cupos libres en la semana
+              </>
+            ) : (
+              'Sin turnos con cupo en esta semana'
+            )}
             <span className="block text-xs font-normal text-emerald-700/90 mt-0.5">
               Por turnos fijos (liberados no ocupan · sin recuperaciones)
             </span>

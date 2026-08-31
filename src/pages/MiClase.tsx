@@ -1726,7 +1726,7 @@ const MiClase = () => {
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-6">
                   {data.turnos.length === 0 ? (
                     <div className={`${cardCls} p-8 text-center`}>
                       <p className={`text-sm ${muted}`}>
@@ -1755,14 +1755,21 @@ const MiClase = () => {
                       )}
                     </div>
                   ) : (
-                    turnosOrdenados.map((t) => {
+                    diasConTurnos.map((dia) => (
+                      <div key={dia}>
+                        <h2 className={`text-base font-semibold mb-2.5 px-0.5 ${headingDay}`}>
+                          {NOMBRE_DIA[dia] ?? `Día ${dia}`}
+                          <span className={`font-normal text-sm ${muted}`}>
+                            {' '}
+                            · {formatDate(getFechaFromSemanaYDia(semanaVistaIso, dia))}
+                          </span>
+                        </h2>
+                        <div className="space-y-3">
+                          {porDia[dia].map((t) => {
                       const libres = Math.max(0, t.cupo - t.inscriptos);
                       const llena = t.inscriptos >= t.cupo;
                       const pct =
                         t.cupo > 0 ? Math.min(100, Math.round((t.inscriptos / t.cupo) * 100)) : 0;
-                      const fechaLabel = formatDate(
-                        getFechaFromSemanaYDia(semanaVistaIso, t.diaSemana)
-                      );
                       return (
                         <div
                           key={t.id}
@@ -1785,12 +1792,8 @@ const MiClase = () => {
                               >
                                 {t.hora}
                               </p>
-                              <p className={`mt-2 text-sm font-medium ${ink}`}>
-                                {DIAS_CORTOS[t.diaSemana]} {diaNumDeSemana(t.diaSemana)}
-                                <span className={`font-normal ${muted}`}> · {fechaLabel}</span>
-                              </p>
                               {t.titulo ? (
-                                <p className={`text-xs mt-0.5 truncate ${muted}`}>{t.titulo}</p>
+                                <p className={`text-sm mt-1.5 truncate ${muted}`}>{t.titulo}</p>
                               ) : null}
                             </div>
                             <div className="text-right flex-shrink-0 pt-0.5">
@@ -1911,7 +1914,10 @@ const MiClase = () => {
                           </div>
                         </div>
                       );
-                    })
+                          })}
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </section>

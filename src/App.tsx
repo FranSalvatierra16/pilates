@@ -18,14 +18,23 @@ const APP_NAME_FALLBACK = import.meta.env.VITE_APP_NAME || 'FITGEST';
 
 function DocumentTitle() {
   const { isAuthenticated, sucursalId, sucursalNombre } = useAuth();
+  const location = useLocation();
+
   useEffect(() => {
+    // Portal alumno / registro: ellos setean título y apple-mobile-web-app-title (ej. Savia).
+    if (
+      location.pathname.startsWith('/mi-clase') ||
+      location.pathname.startsWith('/registro')
+    ) {
+      return;
+    }
+
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
     const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
 
     // En rutas de estudio (logueado) forzar manifest de gestión.
-    // El portal alumno setea su propio manifest en MiClase.
     if (isAuthenticated) {
       setPwaRole('estudio');
       const manifestHref = buildManifestHref({
@@ -59,7 +68,7 @@ function DocumentTitle() {
         ? APP_NAME_FALLBACK
         : `${APP_NAME_FALLBACK} - Sistema de Gestión`;
     if (appleTitle) appleTitle.content = APP_NAME_FALLBACK;
-  }, [isAuthenticated, sucursalId, sucursalNombre]);
+  }, [isAuthenticated, sucursalId, sucursalNombre, location.pathname]);
   return null;
 }
 

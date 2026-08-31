@@ -42,8 +42,11 @@
             if (token) q.set('token', token);
             if (link) link.setAttribute('href', '/api/manifest.webmanifest?' + q.toString());
             var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-            if (appleTitle) appleTitle.setAttribute('content', 'Tu clase');
-            document.title = 'Tu clase';
+            // Por defecto Savia en portal alumno de este deploy; el JS de MiClase ajusta si es otra sede.
+            if (appleTitle) appleTitle.setAttribute('content', 'Savia');
+            document.title = 'Savia';
+            var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+            if (appleIcon) appleIcon.setAttribute('href', '/savia.png');
           } else if (path.indexOf('/login') === 0 || params.get('portal') === 'estudio') {
             localStorage.setItem('fitgest_pwa_role', 'estudio');
             localStorage.removeItem('fitgest_portal_alumno');

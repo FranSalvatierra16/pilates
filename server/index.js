@@ -5277,9 +5277,9 @@ function getPublicLogoUrl(req, sucursalId) {
 function buildShareMeta(req, sucursal) {
   const origin = getRequestOrigin(req);
   const currentUrl = `${origin}${req.originalUrl}`;
-  const nombre = sucursal?.nombre_lugar || 'FitGest';
   const esRegistro = req.path === '/registro';
   const esPortalAlumno = req.path === '/mi-clase';
+  const nombre = sucursal?.nombre_lugar || (esPortalAlumno ? 'Savia' : 'FitGest');
   const title = esRegistro
     ? `${nombre} - Inscripción`
     : esPortalAlumno
@@ -5290,13 +5290,20 @@ function buildShareMeta(req, sucursal) {
     : esPortalAlumno
       ? `Portal de alumnos de ${nombre}. Entrá a Tu Clase y gestioná tus clases y recuperaciones.`
       : `Sistema de gestión de ${nombre}.`;
-  const image = getPublicLogoUrl(req, sucursal?.id);
+  const image = sucursal?.id
+    ? getPublicLogoUrl(req, sucursal.id)
+    : esPortalAlumno
+      ? `${origin}/savia.png`
+      : getPublicLogoUrl(req, null);
   return {
     title,
     description,
     image,
     url: currentUrl,
-    appleTitle: nombre,
+    // Nombre corto del ícono en iOS (Agregar a Inicio)
+    appleTitle: esPortalAlumno
+      ? (nombre.length > 12 ? nombre.slice(0, 12) : nombre)
+      : nombre,
   };
 }
 
@@ -5342,7 +5349,8 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
       startUrl = `/mi-clase?${q.toString()}`;
       appId = `/pwa/alumno${sidQuery ? `/${sidQuery}` : ''}`;
       appName = `${name} · Tu clase`;
-      shortName = 'Tu clase';
+      // iOS / Android usan short_name en el ícono (ej. "Savia", no FITGEST).
+      shortName = name.length > 12 ? `${name.slice(0, 11)}…` : name;
       description = 'Recuperar y liberar clases';
     } else {
       // Estudio / sucursal: sistema completo
@@ -5392,7 +5400,7 @@ app.get('/api/manifest.webmanifest', async (req, res) => {
     console.error(e);
     res.set('Content-Type', 'application/manifest+json');
     res.set('Cache-Control', 'no-store');
-    res.json(buildPayload(esPortalAlumno ? 'Tu clase' : 'FitGest', '/fitgest.png'));
+    res.json(buildPayload(esPortalAlumno ? 'Savia' : 'FitGest', esPortalAlumno ? '/savia.png' : '/fitgest.png'));
   }
 });
 

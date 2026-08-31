@@ -388,9 +388,11 @@ const MiClase = () => {
     if (manifestLink) manifestLink.href = manifestHref;
     if (appleTouch) appleTouch.href = iconHref;
     if (favicon) favicon.href = iconHref;
-    if (appleTitle) appleTitle.content = isSavia ? 'Savia · Tu clase' : 'Tu clase';
-    document.title = isSavia ? 'Savia · Tu clase' : 'Tu clase';
-  }, [data?.sucursalId, modoFromUrl, sucursalIdFromUrl, tokenFromUrl, isSavia]);
+    // iOS "Agregar a Inicio" usa este meta (nombre corto, sin FITGEST).
+    const homeName = isSavia ? 'Savia' : (marcaTitulo || 'Tu clase').slice(0, 12);
+    if (appleTitle) appleTitle.content = homeName;
+    document.title = isSavia ? 'Savia' : homeName;
+  }, [data?.sucursalId, modoFromUrl, sucursalIdFromUrl, tokenFromUrl, isSavia, marcaTitulo]);
 
   const cargarPorDni = async (dni: string, sucursalIdElegida?: string) => {
     setEnviandoDni(true);

@@ -311,6 +311,8 @@ const Layout = ({ children }: LayoutProps) => {
                               <p className={`text-sm text-gray-800 min-w-0 break-words ${!n.leido ? 'font-medium' : ''}`}>
                                 {n.tipo === 'inscribio' ? (
                                   <span className="text-green-600 font-medium">Se anotó:</span>
+                                ) : n.tipo === 'restauro' ? (
+                                  <span className="text-blue-600 font-medium">Volvió a tomar:</span>
                                 ) : (
                                   <span className="text-amber-600 font-medium">Liberó cupo:</span>
                                 )}{' '}

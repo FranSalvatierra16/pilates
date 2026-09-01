@@ -189,6 +189,17 @@ async function migrateAlumnosDniPorSucursal(db) {
   }
 }
 
+async function migrateNotificacionesTipoRestauro(db) {
+  try {
+    await db.query('ALTER TABLE notificaciones DROP CONSTRAINT IF EXISTS notificaciones_tipo_check');
+    await db.query(
+      `ALTER TABLE notificaciones ADD CONSTRAINT notificaciones_tipo_check CHECK (tipo IN ('inscribio', 'liberar', 'restauro'))`
+    );
+  } catch (e) {
+    console.warn('Migración notificaciones restauro:', e.message);
+  }
+}
+
 async function seedAdminAndSucursal(db) {
   const adminUser = (process.env.ADMIN_USER || 'adminF').trim();
   const adminPassword = process.env.ADMIN_PASSWORD || '2401';
@@ -247,6 +258,7 @@ async function seedAdminAndSucursal(db) {
     console.warn('Limpieza de inactivos en turnos:', e.message);
   }
   await migrateAlumnosDniPorSucursal(db);
+  await migrateNotificacionesTipoRestauro(db);
 }
 
 async function initSchema() {
@@ -4209,6 +4221,27 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
     }
     await invalidateActividadArrastrePortal(db, alumno.id);
     res.json({ ok: true });
+
+    const { rows: infoRest } = await db.query(
+      'SELECT t.dia_semana, t.hora, t.titulo FROM turnos t WHERE t.id = $1 AND t.sucursal_id = $2',
+      [turnoIdRestaurado, alumno.sucursal_id]
+    );
+    if (infoRest.length > 0) {
+      const nombre = [alumno.apellido, alumno.nombre].filter(Boolean).join(', ');
+      const dia = DIAS_SEMANA_ES[infoRest[0].dia_semana] ?? '';
+      const turno = `${dia} ${infoRest[0].hora} - ${infoRest[0].titulo || 'Clase'}`;
+      void db
+        .query(
+          'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, $5)',
+          [crypto.randomUUID(), alumno.sucursal_id, 'restauro', alumno.id, turnoIdRestaurado]
+        )
+        .catch((err) => console.error('[restaurar-clase-semana] notificación', err));
+      queuePushToSucursal(db, alumno.sucursal_id, {
+        title: 'Volvió a tomar la clase',
+        body: `${nombre} retomó su cupo en ${turno}`,
+      });
+    }
+    return;
   } catch (e) {
     console.error(e);
     res.status(e.status || 500).json({ error: e.message });

@@ -169,7 +169,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_link_token ON alumnos(link_token) 
 CREATE TABLE IF NOT EXISTS notificaciones (
   id TEXT PRIMARY KEY,
   sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
-  tipo TEXT NOT NULL CHECK (tipo IN ('inscribio', 'liberar')),
+  tipo TEXT NOT NULL CHECK (tipo IN ('inscribio', 'liberar', 'restauro')),
   alumno_id TEXT NOT NULL REFERENCES alumnos(id) ON DELETE CASCADE,
   turno_id TEXT NOT NULL REFERENCES turnos(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

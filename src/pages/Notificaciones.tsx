@@ -24,7 +24,7 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 
 export interface NotificacionItem {
   id: string | number;
-  tipo: 'inscribio' | 'liberar';
+  tipo: 'inscribio' | 'liberar' | 'restauro';
   leido?: boolean;
   alumnoNombre: string;
   turnoDia: string;
@@ -106,10 +106,15 @@ export default function Notificaciones() {
       .catch(() => {});
   }, [pushStatus]);
 
-  const texto = (n: NotificacionItem) =>
-    n.tipo === 'inscribio'
-      ? `${n.alumnoNombre} se anotó en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`
-      : `${n.alumnoNombre} liberó cupo en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`;
+  const texto = (n: NotificacionItem) => {
+    if (n.tipo === 'inscribio') {
+      return `${n.alumnoNombre} se anotó en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`;
+    }
+    if (n.tipo === 'restauro') {
+      return `${n.alumnoNombre} volvió a tomar cupo en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`;
+    }
+    return `${n.alumnoNombre} liberó cupo en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`;
+  };
 
   const marcarTodasLeidas = () => {
     if (!useApi()) return;
@@ -348,6 +353,8 @@ export default function Notificaciones() {
                     <span className="break-words">
                       {n.tipo === 'inscribio' ? (
                         <span className="text-green-600 font-medium">Se anotó:</span>
+                      ) : n.tipo === 'restauro' ? (
+                        <span className="text-blue-600 font-medium">Volvió a tomar:</span>
                       ) : (
                         <span className="text-amber-600 font-medium">Liberó cupo:</span>
                       )}{' '}

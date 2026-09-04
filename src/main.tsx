@@ -40,8 +40,8 @@ function syncPwaRoleFromUrl() {
     return
   }
 
-  // No convertir a estudio si este dispositivo es app de alumno (aunque caiga en /login).
-  if (isAlumnoPwa()) return
+  // No convertir a estudio si este dispositivo es la app instalada de alumno.
+  if (isAlumnoPwa() && isPwaStandalone()) return
 
   if (path.startsWith('/login') || params.get('portal') === 'estudio') {
     setPwaRole('estudio')

@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical, Cake } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical, Cake, Ban } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -202,6 +202,7 @@ const Calendario = () => {
     profesorId: '',
     cupo: CUPO_DEFAULT,
     destacado: false,
+    bloquearRecuperar: false,
   });
   const [cupoTurnoInput, setCupoTurnoInput] = useState(String(CUPO_DEFAULT));
   const [showModalAumentarCupo, setShowModalAumentarCupo] = useState(false);
@@ -972,6 +973,7 @@ const Calendario = () => {
         profesorId: turno.profesorId || '',
         cupo: turno.cupo ?? CUPO_DEFAULT,
         destacado: turno.destacado ?? false,
+        bloquearRecuperar: turno.bloquearRecuperar ?? false,
       });
       setCupoTurnoInput(String(turno.cupo ?? CUPO_DEFAULT));
     } else {
@@ -990,6 +992,7 @@ const Calendario = () => {
         profesorId: '',
         cupo: CUPO_DEFAULT,
         destacado: false,
+        bloquearRecuperar: false,
       });
       setCupoTurnoInput(String(CUPO_DEFAULT));
     }
@@ -1185,6 +1188,7 @@ const Calendario = () => {
           profesorId: formDataTurno.profesorId,
           cupo,
           destacado: formDataTurno.destacado,
+          bloquearRecuperar: formDataTurno.bloquearRecuperar,
         });
       } else {
         await storageHybrid.turnos.add({
@@ -1193,6 +1197,7 @@ const Calendario = () => {
           profesorId: formDataTurno.profesorId,
           cupo,
           destacado: formDataTurno.destacado,
+          bloquearRecuperar: formDataTurno.bloquearRecuperar,
         });
       }
       
@@ -2247,6 +2252,7 @@ const Calendario = () => {
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
+                      const bloquearRecuperar = !!turno?.bloquearRecuperar;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaDiaMovil);
                       return (
                         <div
@@ -2260,7 +2266,18 @@ const Calendario = () => {
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
-                            <span className="font-semibold text-gray-900">{hora}</span>
+                            <span className="font-semibold text-gray-900 flex items-center gap-1.5">
+                              {hora}
+                              {bloquearRecuperar && horarioDisponible && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 rounded bg-rose-100 text-rose-700 px-1.5 py-0.5 text-[10px] font-semibold"
+                                  title="No disponible para recuperar"
+                                >
+                                  <Ban className="w-3 h-3" />
+                                  Sin recuperar
+                                </span>
+                              )}
+                            </span>
                             <div className="flex gap-2">
                               <button
                                 type="button"
@@ -2335,6 +2352,7 @@ const Calendario = () => {
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
+                      const bloquearRecuperar = !!turno?.bloquearRecuperar;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaDiaMovil);
                       return (
                         <div
@@ -2348,7 +2366,18 @@ const Calendario = () => {
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
-                            <span className="font-semibold text-gray-900">{hora}</span>
+                            <span className="font-semibold text-gray-900 flex items-center gap-1.5">
+                              {hora}
+                              {bloquearRecuperar && horarioDisponible && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 rounded bg-rose-100 text-rose-700 px-1.5 py-0.5 text-[10px] font-semibold"
+                                  title="No disponible para recuperar"
+                                >
+                                  <Ban className="w-3 h-3" />
+                                  Sin recuperar
+                                </span>
+                              )}
+                            </span>
                             <div className="flex gap-2">
                               <button
                                 type="button"
@@ -2525,6 +2554,7 @@ const Calendario = () => {
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
+                      const bloquearRecuperar = !!turno?.bloquearRecuperar;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaCol);
                       return (
                         <div
@@ -2533,6 +2563,14 @@ const Calendario = () => {
                             !horarioDisponible ? 'bg-slate-100' : destacado ? 'bg-amber-100' : 'hover:bg-gray-50'
                           }`}
                         >
+                          {bloquearRecuperar && horarioDisponible && (
+                            <span
+                              className="absolute bottom-1 right-1 z-10 inline-flex items-center gap-0.5 rounded bg-rose-100 text-rose-700 px-1 py-0.5 text-[9px] font-semibold"
+                              title="No disponible para recuperar"
+                            >
+                              <Ban className="w-3 h-3" />
+                            </span>
+                          )}
                           <button
                             onClick={(e) => { e.stopPropagation(); if (horarioDisponible) handleEditarTurno(diaIndex, hora); }}
                             disabled={!horarioDisponible}
@@ -2605,6 +2643,7 @@ const Calendario = () => {
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
                       const destacado = turno?.destacado ?? false;
+                      const bloquearRecuperar = !!turno?.bloquearRecuperar;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaCol);
                       return (
                         <div
@@ -2613,6 +2652,14 @@ const Calendario = () => {
                             !horarioDisponible ? 'bg-slate-100' : destacado ? 'bg-amber-100' : 'hover:bg-gray-50'
                           }`}
                         >
+                          {bloquearRecuperar && horarioDisponible && (
+                            <span
+                              className="absolute bottom-1 right-1 z-10 inline-flex items-center gap-0.5 rounded bg-rose-100 text-rose-700 px-1 py-0.5 text-[9px] font-semibold"
+                              title="No disponible para recuperar"
+                            >
+                              <Ban className="w-3 h-3" />
+                            </span>
+                          )}
                           <button
                             onClick={(e) => { e.stopPropagation(); if (horarioDisponible) handleEditarTurno(diaIndex, hora); }}
                             disabled={!horarioDisponible}
@@ -3443,6 +3490,31 @@ const Calendario = () => {
               >
                 <Star className={`w-5 h-5 flex-shrink-0 ${formDataTurno.destacado ? 'fill-amber-500 text-amber-600' : 'text-gray-400'}`} />
                 <span className="text-sm font-medium text-gray-700">Horario importante (destacado)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setFormDataTurno({ ...formDataTurno, bloquearRecuperar: !formDataTurno.bloquearRecuperar })
+                }
+                className={`w-full flex items-start gap-2 p-3 rounded-lg border-2 transition-colors text-left ${
+                  formDataTurno.bloquearRecuperar
+                    ? 'border-rose-500 bg-rose-50'
+                    : 'border-gray-200 bg-gray-50 hover:border-rose-300'
+                }`}
+              >
+                <Ban
+                  className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                    formDataTurno.bloquearRecuperar ? 'text-rose-600' : 'text-gray-400'
+                  }`}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-gray-700">
+                    No disponible para recuperar
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Aunque haya cupo, no aparece en el link de recuperar para anotarse.
+                  </span>
+                </span>
               </button>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

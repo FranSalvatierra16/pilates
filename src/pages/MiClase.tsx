@@ -22,6 +22,8 @@ type TurnoPortal = {
   liberacionId?: string;
   recuperacionId?: string;
   usaCredito?: boolean;
+  /** Estudio bloqueó este horario para anotarse a recuperar */
+  bloquearRecuperar?: boolean;
 };
 
 type HorariosPortal = {
@@ -846,6 +848,8 @@ const MiClase = () => {
     if ((horariosNoDisponibles?.[t.diaSemana] || []).includes(t.hora)) return false;
     // En recuperar no mostramos clases llenas salvo las del alumno (fija o ya anotada).
     if (esRecuperar && t.inscriptos >= t.cupo && !t.yaInscripto && !t.esClaseFija) return false;
+    // Horario deshabilitado por el estudio para anotarse (aunque haya cupo).
+    if (esRecuperar && t.bloquearRecuperar && !t.yaInscripto && !t.esClaseFija) return false;
     const h = horaToNum(t.hora);
     if (filtroHorario === 'manana') return h >= iniManana && h <= finManana;
     if (filtroHorario === 'tarde') return h >= iniTarde && h <= finTarde;

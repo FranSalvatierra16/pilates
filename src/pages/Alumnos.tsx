@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles } from 'lucide-react';
+import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles, Eye, ExternalLink } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem, Turno, DIAS_SEMANA } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -152,6 +152,7 @@ const Alumnos = () => {
   const [showModalPago, setShowModalPago] = useState(false);
   const [showModalDescripcion, setShowModalDescripcion] = useState(false);
   const [showModalConfigPortal, setShowModalConfigPortal] = useState(false);
+  const [showModalPreviewRecuperar, setShowModalPreviewRecuperar] = useState(false);
   const [alumnoDescripcion, setAlumnoDescripcion] = useState<Alumno | null>(null);
   const [textoDescripcion, setTextoDescripcion] = useState('');
   const [editingAlumno, setEditingAlumno] = useState<Alumno | null>(null);
@@ -902,16 +903,27 @@ const Alumnos = () => {
             >
               {linkPortalRecuperar}
             </a>
-            <button
-              type="button"
-              onClick={() => handleCopiarLinkGeneralClases('recuperar')}
-              className="btn-secondary whitespace-nowrap min-h-[40px] text-sm"
-            >
-              Copiar link
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowModalPreviewRecuperar(true)}
+                className="btn-secondary whitespace-nowrap min-h-[40px] text-sm inline-flex items-center gap-1.5"
+              >
+                <Eye className="w-4 h-4" />
+                Ver cómo se ve
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCopiarLinkGeneralClases('recuperar')}
+                className="btn-secondary whitespace-nowrap min-h-[40px] text-sm"
+              >
+                Copiar link
+              </button>
+            </div>
           </div>
           <p className="mt-2 text-xs text-violet-800/80">
             Compartilo con los alumnos. Entran con su DNI y solo ven la semana actual para recuperar.
+            Para ocultar un horario del link (aunque haya cupo): en el calendario → editar turno → “No disponible para recuperar”.
           </p>
         </div>
       ) : null}
@@ -1745,6 +1757,63 @@ const Alumnos = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showModalPreviewRecuperar && linkPortalRecuperar && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl w-full max-w-lg sm:max-w-3xl max-h-[92vh] flex flex-col">
+            <div className="p-4 sm:p-5 border-b border-gray-200 flex justify-between items-start gap-3 flex-shrink-0">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Así se ve el link de recuperar</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Vista del portal del alumno (pantalla de ingreso con DNI). Para ver clases, el alumno pone su DNI.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModalPreviewRecuperar(false)}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600"
+                aria-label="Cerrar"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="px-4 pt-3 pb-2 flex flex-wrap gap-2 flex-shrink-0">
+              <a
+                href={linkPortalRecuperar}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary min-h-[40px] text-sm inline-flex items-center gap-1.5"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Abrir en pestaña nueva
+              </a>
+              <button
+                type="button"
+                onClick={() => handleCopiarLinkGeneralClases('recuperar')}
+                className="btn-secondary min-h-[40px] text-sm"
+              >
+                Copiar link
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 px-4 pb-4">
+              <div className="h-[min(70vh,640px)] rounded-xl border border-gray-200 overflow-hidden bg-gray-100">
+                <iframe
+                  title="Vista previa link recuperar"
+                  src={linkPortalRecuperar}
+                  className="w-full h-full border-0 bg-white"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Tip: si querés sacar un horario del listado de recuperar (aunque haya lugar), andá al{' '}
+                <Link to="/calendario" className="text-primary-700 underline underline-offset-2">
+                  Calendario
+                </Link>
+                , editá ese turno y activá <strong>No disponible para recuperar</strong>.
+              </p>
+            </div>
           </div>
         </div>
       )}

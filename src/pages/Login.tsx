@@ -19,15 +19,14 @@ const Login = () => {
   const { login, isAuthenticated, isAdmin, sucursalId } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const esAppAlumno = isAlumnoPwa();
-  // En PWA standalone, portal=estudio en la URL suele ser start_url mal instalado (app alumno).
+  // Solo bloquear login dentro de la app instalada del alumno.
+  // En el navegador (Safari/Chrome) siempre se puede entrar como sucursal.
+  const bloquearPorAppAlumno = isPwaStandalone() && isAlumnoPwa();
   const portalEstudio =
-    searchParams.get('portal') === 'estudio' && !isAlumnoPwa()
-      ? true
-      : isPwaStandalone() && !isAlumnoPwa();
+    searchParams.get('portal') === 'estudio' || (isPwaStandalone() && !isAlumnoPwa());
 
   useEffect(() => {
-    if (esAppAlumno) return;
+    if (bloquearPorAppAlumno) return;
     setPwaRole('estudio');
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
@@ -41,10 +40,10 @@ const Login = () => {
     }
     if (appleTitle) appleTitle.content = 'Gestión';
     document.title = 'Iniciar sesión · Estudio';
-  }, [searchParams, sucursalId, esAppAlumno]);
+  }, [searchParams, sucursalId, bloquearPorAppAlumno]);
 
-  // App alumno: NUNCA mostrar login (aunque el start_url viejo diga portal=estudio).
-  if (esAppAlumno) {
+  // App instalada del alumno: no mostrar login de sucursal.
+  if (bloquearPorAppAlumno) {
     return <Navigate to={getPwaStartPath()} replace />;
   }
 

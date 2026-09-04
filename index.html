@@ -39,8 +39,14 @@
           var alumnoFlag =
             localStorage.getItem('fitgest_portal_alumno') === '1' || getCookie('fitgest_portal_alumno') === '1';
 
-          // App alumno que cayó en /login (start_url viejo): volver a recuperar YA
-          if (alumnoFlag && path.indexOf('/mi-clase') !== 0) {
+          var isStandalone =
+            (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+            (navigator.standalone === true);
+
+          // Solo en la app instalada del alumno: si abrió /login u otra ruta, volver a recuperar.
+          // En el navegador normal NO redirigir: así la sucursal puede entrar al login aunque
+          // en el mismo celular se haya usado antes el link de recuperar.
+          if (isStandalone && alumnoFlag && path.indexOf('/mi-clase') !== 0) {
             var modoB = localStorage.getItem('fitgest_portal_alumno_modo') || getCookie('fitgest_portal_alumno_modo') || 'recuperar';
             var sidB = localStorage.getItem('fitgest_portal_alumno_sucursal') || getCookie('fitgest_portal_alumno_sucursal') || '';
             var qb = new URLSearchParams({ modo: modoB, portal: 'alumno' });
@@ -73,8 +79,11 @@
             var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
             if (appleIcon) appleIcon.setAttribute('href', '/apple-touch-savia.png');
           } else if (path.indexOf('/login') === 0 || params.get('portal') === 'estudio') {
-            // NO borrar flag alumno acá (antes eso rompía la app del celu)
-            localStorage.setItem('fitgest_pwa_role', 'estudio');
+            // En navegador: permitir login de estudio aunque exista flag alumno.
+            // No borrar el flag acá (la app instalada del alumno sigue usándolo).
+            if (!isStandalone || !alumnoFlag) {
+              localStorage.setItem('fitgest_pwa_role', 'estudio');
+            }
             var qs = new URLSearchParams({ portal: 'estudio' });
             var sid2 = params.get('sucursalId') || '';
             if (sid2) qs.set('sucursalId', sid2);

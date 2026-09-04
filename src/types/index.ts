@@ -160,8 +160,10 @@ export interface Turno {
   profesorId: string; // ID del profesor que da la clase
   alumnoIds: string[]; // Array de IDs de alumnos asignados
   cupo?: number; // Máximo de alumnos por clase (default 6)
-  /** Si true, el casillero se muestra con fondo de color (horario importante) */
+  /** Si true, horario importante (fondo de color) */
   destacado?: boolean;
+  /** Si true, no se ofrece para anotarse/recuperar en el portal aunque haya cupo */
+  bloquearRecuperar?: boolean;
   createdAt: string;
 }
 

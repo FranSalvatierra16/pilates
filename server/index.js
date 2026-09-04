@@ -209,6 +209,14 @@ async function migrateAlumnosFechaNacimiento(db) {
   }
 }
 
+async function migrateTurnosBloquearRecuperar(db) {
+  try {
+    await db.query('ALTER TABLE turnos ADD COLUMN IF NOT EXISTS bloquear_recuperar BOOLEAN DEFAULT false');
+  } catch (e) {
+    console.warn('Migración bloquear_recuperar:', e.message);
+  }
+}
+
 async function seedAdminAndSucursal(db) {
   const adminUser = (process.env.ADMIN_USER || 'adminF').trim();
   const adminPassword = process.env.ADMIN_PASSWORD || '2401';
@@ -269,6 +277,7 @@ async function seedAdminAndSucursal(db) {
   await migrateAlumnosDniPorSucursal(db);
   await migrateNotificacionesTipoRestauro(db);
   await migrateAlumnosFechaNacimiento(db);
+  await migrateTurnosBloquearRecuperar(db);
 }
 
 async function initSchema() {
@@ -1440,6 +1449,7 @@ app.get('/api/turnos', async (req, res) => {
       alumnoIds: r.alumno_ids || [],
       cupo: r.cupo != null ? Number(r.cupo) : 6,
       destacado: !!r.destacado,
+      bloquearRecuperar: !!r.bloquear_recuperar,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {
@@ -1471,6 +1481,7 @@ app.post('/api/turnos', async (req, res) => {
     const horaNorm = normalizeHoraTurno(b.hora);
     const cupo = b.cupo != null ? Math.max(1, Number(b.cupo)) : 6;
     const destacado = !!b.destacado;
+    const bloquearRecuperar = !!b.bloquearRecuperar;
     const incomingIds = [...new Set((b.alumnoIds || []).map((x) => String(x)))];
 
     const existentes = await getTurnosEnSlot(db, sid, b.diaSemana, horaNorm);
@@ -1487,14 +1498,16 @@ app.post('/api/turnos', async (req, res) => {
         `UPDATE turnos SET alumno_ids = $1, cupo = LEAST(cupo, $2),
           titulo = COALESCE(NULLIF($3, ''), titulo),
           profesor_id = COALESCE(NULLIF($4, ''), profesor_id),
-          destacado = $5 OR destacado
-         WHERE id = $6 AND sucursal_id = $7`,
+          destacado = $5 OR destacado,
+          bloquear_recuperar = $6 OR COALESCE(bloquear_recuperar, false)
+         WHERE id = $7 AND sucursal_id = $8`,
         [
           [...mergedIds],
           cupo,
           b.titulo || '',
           b.profesorId || '',
           destacado,
+          bloquearRecuperar,
           canonical.id,
           sid,
         ]
@@ -1506,8 +1519,8 @@ app.post('/api/turnos', async (req, res) => {
     }
 
     await db.query(
-      'INSERT INTO turnos (id, sucursal_id, dia_semana, hora, titulo, profesor_id, alumno_ids, cupo, destacado, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      [b.id, sid, b.diaSemana, horaNorm, b.titulo || null, b.profesorId || null, incomingIds, cupo, destacado, b.createdAt || new Date().toISOString()]
+      'INSERT INTO turnos (id, sucursal_id, dia_semana, hora, titulo, profesor_id, alumno_ids, cupo, destacado, bloquear_recuperar, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+      [b.id, sid, b.diaSemana, horaNorm, b.titulo || null, b.profesorId || null, incomingIds, cupo, destacado, bloquearRecuperar, b.createdAt || new Date().toISOString()]
     );
     res.status(201).json({ ok: true, id: b.id });
   } catch (e) {
@@ -1531,6 +1544,7 @@ app.patch('/api/turnos/:id', async (req, res) => {
     if (b.alumnoIds !== undefined) { updates.push(`alumno_ids = $${i++}`); values.push(b.alumnoIds); }
     if (b.cupo !== undefined) { updates.push(`cupo = $${i++}`); values.push(Math.max(1, Number(b.cupo))); }
     if (b.destacado !== undefined) { updates.push(`destacado = $${i++}`); values.push(!!b.destacado); }
+    if (b.bloquearRecuperar !== undefined) { updates.push(`bloquear_recuperar = $${i++}`); values.push(!!b.bloquearRecuperar); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);
     await db.query(`UPDATE turnos SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
@@ -1567,6 +1581,7 @@ app.get('/api/turnos/by-dia/:diaSemana', async (req, res) => {
       alumnoIds: r.alumno_ids || [],
       cupo: r.cupo != null ? Number(r.cupo) : 6,
       destacado: !!r.destacado,
+      bloquearRecuperar: !!r.bloquear_recuperar,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {
@@ -1592,6 +1607,7 @@ app.get('/api/turnos/by-dia-hora', async (req, res) => {
       alumnoIds: r.alumno_ids || [],
       cupo: r.cupo != null ? Number(r.cupo) : 6,
       destacado: !!r.destacado,
+      bloquearRecuperar: !!r.bloquear_recuperar,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     });
   } catch (e) {
@@ -1614,6 +1630,7 @@ app.get('/api/turnos/by-alumno/:alumnoId', async (req, res) => {
       alumnoIds: r.alumno_ids || [],
       cupo: r.cupo != null ? Number(r.cupo) : 6,
       destacado: !!r.destacado,
+      bloquearRecuperar: !!r.bloquear_recuperar,
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {
@@ -3645,7 +3662,7 @@ app.get('/api/alumno-portal', async (req, res) => {
       return res.status(resolved.error).json({ error: resolved.message });
     }
     const { alumno, sucursalId: sid } = resolved;
-    const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora, titulo, alumno_ids, cupo FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora', [sid]);
+    const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora, titulo, alumno_ids, cupo, bloquear_recuperar FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora', [sid]);
     const { rows: insRows } = await db.query(
       'SELECT turno_id, alumno_id, semana_desde FROM inscripciones_turno WHERE turno_id = ANY($1)',
       [turnoRows.map((r) => r.id)]
@@ -3756,6 +3773,7 @@ app.get('/api/alumno-portal', async (req, res) => {
           yaInscripto: !!rec,
           esClaseFija,
           claseLiberada: !!liberacion,
+          bloquearRecuperar: !!r.bloquear_recuperar,
           ...(liberacion && { liberacionId: liberacion.id }),
           ...(rec && { recuperacionId: rec.id, usaCredito: !!rec.usa_credito }),
         };
@@ -3897,8 +3915,11 @@ app.post('/api/alumno-portal/inscribir-recuperacion', async (req, res) => {
       return res.status(e.status || 400).json({ error: e.message || 'Cuota vencida.' });
     }
     let semanaVista = (semana || '').toString().trim() || getSemanaActual();
-    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
+    const { rows: turnoRows } = await db.query('SELECT id, alumno_ids, cupo, dia_semana, hora, bloquear_recuperar FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
+    if (turnoRows[0].bloquear_recuperar) {
+      return res.status(400).json({ error: 'Este horario no está disponible para anotarse a recuperar.' });
+    }
     await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: turnoRows[0] });
     await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semanaVista, turnoRows[0]);
     const { rows: allTurnoRows } = await db.query(

@@ -172,6 +172,14 @@ export const isCuotaVenceHoy = (fechaVencimiento: string): boolean => {
   }
 };
 
+/** Compara mes/día de nacimiento con una fecha (YYYY-MM-DD). Ignora el año. */
+export function esCumpleanosEnFecha(fechaNacimiento: string | undefined | null, fechaDia: string): boolean {
+  const nac = (fechaNacimiento || '').trim();
+  const dia = (fechaDia || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nac) || !/^\d{4}-\d{2}-\d{2}$/.test(dia)) return false;
+  return nac.slice(5) === dia.slice(5);
+}
+
 export const calcularFechaVencimiento = (fechaPago: string): string => {
   try {
     const fecha = parseISO(fechaPago);

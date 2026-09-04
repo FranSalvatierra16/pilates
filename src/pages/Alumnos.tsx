@@ -182,6 +182,7 @@ const Alumnos = () => {
     telefono: '',
     email: '',
     fechaVencimientoCuota: '',
+    fechaNacimiento: '',
     actividadId: '',
     aPrueba: false,
     descripcion: '',
@@ -419,6 +420,7 @@ const Alumnos = () => {
       telefono: '',
       email: '',
       fechaVencimientoCuota: '',
+      fechaNacimiento: '',
       actividadId: '',
       aPrueba: false,
       descripcion: '',
@@ -441,6 +443,7 @@ const Alumnos = () => {
         telefono: alumno.telefono,
         email: alumno.email,
         fechaVencimientoCuota: alumno.fechaVencimientoCuota,
+        fechaNacimiento: alumno.fechaNacimiento || '',
         actividadId: alumno.actividadId || '',
         aPrueba: !!alumno.aPrueba,
         descripcion: alumno.descripcion ?? '',
@@ -475,6 +478,7 @@ const Alumnos = () => {
         telefono: '',
         email: '',
         fechaVencimientoCuota: '', // Sin fecha hasta que se pague
+        fechaNacimiento: '',
         actividadId: '',
         aPrueba: false,
         descripcion: '',
@@ -517,6 +521,7 @@ const Alumnos = () => {
           telefono: formData.telefono,
           email: formData.email,
           fechaVencimientoCuota: fechaVencimiento,
+          fechaNacimiento: formData.fechaNacimiento || '',
           actividadId: actividadIdFinal,
           aPrueba: aPruebaFinal,
           descripcion: formData.descripcion ?? '',
@@ -532,6 +537,7 @@ const Alumnos = () => {
           telefono: formData.telefono,
           email: formData.email,
           fechaVencimientoCuota: '', // Sin fecha hasta que se pague
+          fechaNacimiento: formData.fechaNacimiento || '',
           actividadId: actividadIdFinal,
           aPrueba: aPruebaFinal,
           clasesAsistidas: 0, // Iniciar contador en 0
@@ -1539,6 +1545,18 @@ const Alumnos = () => {
                     onKeyDown={(e) => focusNext(e, refActividad)}
                     className="input-field"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Fecha de nacimiento
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.fechaNacimiento}
+                    onChange={(e) => setFormData({ ...formData, fechaNacimiento: e.target.value })}
+                    className="input-field"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Opcional. Se usa para el aviso y el ícono de cumple en el calendario.</p>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">

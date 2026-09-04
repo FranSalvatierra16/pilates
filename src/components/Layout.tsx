@@ -313,10 +313,14 @@ const Layout = ({ children }: LayoutProps) => {
                                   <span className="text-green-600 font-medium">Se anotó:</span>
                                 ) : n.tipo === 'restauro' ? (
                                   <span className="text-blue-600 font-medium">Volvió a tomar:</span>
+                                ) : n.tipo === 'cumple' ? (
+                                  <span className="text-pink-600 font-medium">Cumpleaños:</span>
                                 ) : (
                                   <span className="text-amber-600 font-medium">Liberó cupo:</span>
                                 )}{' '}
-                                {n.alumnoNombre} — {n.turnoDia} {n.turnoHora} {n.turnoTitulo}
+                                {n.tipo === 'cumple'
+                                  ? `${n.alumnoNombre} — cumple años hoy`
+                                  : `${n.alumnoNombre} — ${n.turnoDia} ${n.turnoHora} ${n.turnoTitulo}`}
                               </p>
                               <p className="text-xs text-gray-500 mt-0.5">{formatNotifFecha(n.createdAt)}</p>
                             </div>

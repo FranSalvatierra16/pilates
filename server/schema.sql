@@ -72,6 +72,7 @@ ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT true;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS clases_para_recuperar INTEGER DEFAULT 0;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS a_prueba BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS fecha_nacimiento DATE;
 -- Arrastre de cupo del plan (clases_por_semana): lo no usado en semanas pasadas suma al tope de la semana vista (portal).
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS actividad_arrastre_saldo INTEGER DEFAULT 0;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS actividad_arrastre_procesado_hasta TEXT;
@@ -169,13 +170,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_alumnos_link_token ON alumnos(link_token) 
 CREATE TABLE IF NOT EXISTS notificaciones (
   id TEXT PRIMARY KEY,
   sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
-  tipo TEXT NOT NULL CHECK (tipo IN ('inscribio', 'liberar', 'restauro')),
+  tipo TEXT NOT NULL CHECK (tipo IN ('inscribio', 'liberar', 'restauro', 'cumple')),
   alumno_id TEXT NOT NULL REFERENCES alumnos(id) ON DELETE CASCADE,
-  turno_id TEXT NOT NULL REFERENCES turnos(id) ON DELETE CASCADE,
+  turno_id TEXT REFERENCES turnos(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_notificaciones_sucursal_created ON notificaciones(sucursal_id, created_at DESC);
 ALTER TABLE notificaciones ADD COLUMN IF NOT EXISTS leido BOOLEAN DEFAULT FALSE;
+ALTER TABLE notificaciones ALTER COLUMN turno_id DROP NOT NULL;
 
 -- Agenda / notas por sucursal
 CREATE TABLE IF NOT EXISTS agenda_notas (

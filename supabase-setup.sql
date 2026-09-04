@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS alumnos (
   telefono TEXT NOT NULL,
   email TEXT NOT NULL,
   fecha_vencimiento_cuota DATE,
+  fecha_nacimiento DATE,
   actividad_id TEXT REFERENCES actividades(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

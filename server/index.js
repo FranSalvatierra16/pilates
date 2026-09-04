@@ -193,10 +193,19 @@ async function migrateNotificacionesTipoRestauro(db) {
   try {
     await db.query('ALTER TABLE notificaciones DROP CONSTRAINT IF EXISTS notificaciones_tipo_check');
     await db.query(
-      `ALTER TABLE notificaciones ADD CONSTRAINT notificaciones_tipo_check CHECK (tipo IN ('inscribio', 'liberar', 'restauro'))`
+      `ALTER TABLE notificaciones ADD CONSTRAINT notificaciones_tipo_check CHECK (tipo IN ('inscribio', 'liberar', 'restauro', 'cumple'))`
     );
+    await db.query('ALTER TABLE notificaciones ALTER COLUMN turno_id DROP NOT NULL');
   } catch (e) {
-    console.warn('Migración notificaciones restauro:', e.message);
+    console.warn('Migración notificaciones tipos/turno:', e.message);
+  }
+}
+
+async function migrateAlumnosFechaNacimiento(db) {
+  try {
+    await db.query('ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS fecha_nacimiento DATE');
+  } catch (e) {
+    console.warn('Migración fecha_nacimiento:', e.message);
   }
 }
 
@@ -259,6 +268,7 @@ async function seedAdminAndSucursal(db) {
   }
   await migrateAlumnosDniPorSucursal(db);
   await migrateNotificacionesTipoRestauro(db);
+  await migrateAlumnosFechaNacimiento(db);
 }
 
 async function initSchema() {
@@ -588,6 +598,7 @@ app.get('/api/alumnos', async (req, res) => {
       telefono: r.telefono,
       email: r.email,
       fechaVencimientoCuota: r.fecha_vencimiento_cuota ? r.fecha_vencimiento_cuota.toISOString().slice(0, 10) : '',
+      fechaNacimiento: r.fecha_nacimiento ? r.fecha_nacimiento.toISOString().slice(0, 10) : '',
       actividadId: r.actividad_id,
       clasesAsistidas: r.clases_este_mes ?? 0,
       clasesParaRecuperar: Number(r.clases_para_recuperar ?? 0),
@@ -626,8 +637,8 @@ app.post('/api/alumnos', async (req, res) => {
       });
     }
     await db.query(
-      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, actividad_id, a_prueba, clases_asistidas, clases_para_recuperar, descripcion, activo, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      `INSERT INTO alumnos (id, sucursal_id, nombre, apellido, dni, telefono, email, fecha_vencimiento_cuota, fecha_nacimiento, actividad_id, a_prueba, clases_asistidas, clases_para_recuperar, descripcion, activo, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
       [
         b.id,
         sid,
@@ -637,6 +648,7 @@ app.post('/api/alumnos', async (req, res) => {
         b.telefono,
         b.email,
         b.fechaVencimientoCuota || null,
+        b.fechaNacimiento || null,
         b.actividadId || null,
         b.aPrueba === true,
         b.clasesAsistidas ?? 0,
@@ -699,6 +711,7 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.telefono !== undefined) { updates.push(`telefono = $${i++}`); values.push(b.telefono); }
     if (b.email !== undefined) { updates.push(`email = $${i++}`); values.push(b.email); }
     if (b.fechaVencimientoCuota !== undefined) { updates.push(`fecha_vencimiento_cuota = $${i++}`); values.push(b.fechaVencimientoCuota || null); }
+    if (b.fechaNacimiento !== undefined) { updates.push(`fecha_nacimiento = $${i++}`); values.push(b.fechaNacimiento || null); }
     if (b.actividadId !== undefined) { updates.push(`actividad_id = $${i++}`); values.push(b.actividadId || null); }
     if (b.aPrueba !== undefined) { updates.push(`a_prueba = $${i++}`); values.push(!!b.aPrueba); }
     if (b.clasesAsistidas !== undefined) { updates.push(`clases_asistidas = $${i++}`); values.push(b.clasesAsistidas); }
@@ -854,6 +867,7 @@ app.get('/api/alumnos/findByDni', async (req, res) => {
       telefono: r.telefono,
       email: r.email,
       fechaVencimientoCuota: r.fecha_vencimiento_cuota ? r.fecha_vencimiento_cuota.toISOString().slice(0, 10) : '',
+      fechaNacimiento: r.fecha_nacimiento ? r.fecha_nacimiento.toISOString().slice(0, 10) : '',
       actividadId: r.actividad_id,
       clasesAsistidas: r.clases_este_mes ?? 0,
       descripcion: r.descripcion ?? '',
@@ -4376,7 +4390,7 @@ app.get('/api/notificaciones', async (req, res) => {
         t.dia_semana, t.hora, t.titulo AS turno_titulo
        FROM notificaciones n
        JOIN alumnos a ON n.alumno_id = a.id
-       JOIN turnos t ON n.turno_id = t.id
+       LEFT JOIN turnos t ON n.turno_id = t.id
        WHERE n.sucursal_id = $1
        ORDER BY n.created_at DESC
        LIMIT 100`,
@@ -4387,9 +4401,9 @@ app.get('/api/notificaciones', async (req, res) => {
       tipo: r.tipo,
       leido: !!r.leido,
       alumnoNombre: [r.alumno_apellido, r.alumno_nombre].filter(Boolean).join(', '),
-      turnoDia: DIAS_SEMANA_ES[r.dia_semana] ?? `Día ${r.dia_semana}`,
-      turnoHora: r.hora,
-      turnoTitulo: r.turno_titulo || 'Clase',
+      turnoDia: r.dia_semana != null ? (DIAS_SEMANA_ES[r.dia_semana] ?? `Día ${r.dia_semana}`) : '',
+      turnoHora: r.hora || '',
+      turnoTitulo: r.turno_titulo || (r.tipo === 'cumple' ? 'Cumpleaños' : 'Clase'),
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {
@@ -4479,6 +4493,74 @@ function queuePushToSucursal(db, sucursalId, payload) {
 
 function queuePushToAlumnos(db, sucursalId, payload, options = {}) {
   queuePushToAudience(db, sucursalId, PUSH_AUDIENCE_ALUMNO, payload, options);
+}
+
+/**
+ * Aviso de cumpleaños ~8:00 hora Argentina.
+ * Idempotente: una notificación por alumno por día.
+ */
+async function enviarAvisosCumpleanos() {
+  const db = await getPool();
+  if (!db) return;
+
+  const { rows: clock } = await db.query(
+    `SELECT
+       (timezone('America/Argentina/Buenos_Aires', now()))::date AS hoy,
+       EXTRACT(HOUR FROM timezone('America/Argentina/Buenos_Aires', now()))::int AS hora,
+       EXTRACT(MINUTE FROM timezone('America/Argentina/Buenos_Aires', now()))::int AS minuto`
+  );
+  const hoy = clock[0]?.hoy;
+  const hora = Number(clock[0]?.hora);
+  const minuto = Number(clock[0]?.minuto);
+  // Ventana 8:00–8:20 para no perder el tick si el proceso dormitó un rato
+  if (!hoy || hora !== 8 || minuto > 20) return;
+
+  const hoyStr = hoy.toISOString ? hoy.toISOString().slice(0, 10) : String(hoy).slice(0, 10);
+  const { rows: cumpleaneros } = await db.query(
+    `SELECT a.id, a.sucursal_id, a.nombre, a.apellido
+       FROM alumnos a
+      WHERE a.activo IS DISTINCT FROM false
+        AND a.fecha_nacimiento IS NOT NULL
+        AND to_char(a.fecha_nacimiento, 'MM-DD') = to_char($1::date, 'MM-DD')
+        AND NOT EXISTS (
+          SELECT 1 FROM notificaciones n
+           WHERE n.alumno_id = a.id
+             AND n.tipo = 'cumple'
+             AND (timezone('America/Argentina/Buenos_Aires', n.created_at))::date = $1::date
+        )`,
+    [hoyStr]
+  );
+  if (!cumpleaneros.length) return;
+
+  for (const a of cumpleaneros) {
+    const nombre = [a.apellido, a.nombre].filter(Boolean).join(', ');
+    try {
+      await db.query(
+        'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, NULL)',
+        [crypto.randomUUID(), a.sucursal_id, 'cumple', a.id]
+      );
+      queuePushToSucursal(db, a.sucursal_id, {
+        title: '🎂 Cumpleaños hoy',
+        body: `${nombre} cumple años hoy. ¡Recordalo en la clase!`,
+        url: '/calendario',
+      });
+      console.log('[Cumple]', a.sucursal_id, nombre);
+    } catch (err) {
+      console.error('[Cumple] Error avisando', a.id, err.message);
+    }
+  }
+}
+
+let cumpleJobStarted = false;
+function startCumpleanosJob() {
+  if (cumpleJobStarted) return;
+  cumpleJobStarted = true;
+  const tick = () => {
+    enviarAvisosCumpleanos().catch((err) => console.error('[Cumple] job', err?.message || err));
+  };
+  // Primer chequeo al arrancar (por si reinicia dentro de la ventana de las 8)
+  setTimeout(tick, 15_000);
+  setInterval(tick, 60_000);
 }
 
 function getPushErrorMessage(err) {
@@ -5607,7 +5689,9 @@ function main() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor escuchando en 0.0.0.0:${PORT}`);
     console.log('Base de datos:', getDatabaseUrl() ? 'URL definida' : 'NO DEFINIDA (agregá DATABASE_URL en Railway)');
-    initSchema().catch((err) => console.error('Error al inicializar esquema:', err.message));
+    initSchema()
+      .then(() => startCumpleanosJob())
+      .catch((err) => console.error('Error al inicializar esquema:', err.message));
   });
   server.on('error', (err) => {
     console.error('Error al iniciar servidor:', err);

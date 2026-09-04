@@ -55,6 +55,8 @@ export interface Alumno {
   telefono: string;
   email: string;
   fechaVencimientoCuota: string; // YYYY-MM-DD
+  /** Fecha de nacimiento (YYYY-MM-DD); opcional, para cumpleaños en calendario/avisos */
+  fechaNacimiento?: string;
   /** Vacío si aún no tiene plan o está solo en período a prueba */
   actividadId: string;
   /** Período a prueba sin actividad asignada; en listas y calendario se muestra en violeta */

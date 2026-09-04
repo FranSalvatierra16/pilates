@@ -1,10 +1,10 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical, Cake } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
-import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia } from '../utils/date';
+import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia, esCumpleanosEnFecha, hoyISO } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -785,6 +785,20 @@ const Calendario = () => {
   );
   const cuposLibresSemana = resumenCuposSemana.libres;
   const cuposTotalesSemana = resumenCuposSemana.total;
+
+  const hoyIso = hoyISO();
+  const cumpleanosHoy = useMemo(
+    () =>
+      alumnos.filter(
+        (a) => a.activo !== false && esCumpleanosEnFecha(a.fechaNacimiento, hoyIso)
+      ),
+    [alumnos, hoyIso]
+  );
+
+  const diaTieneCumple = (diaSemana: number) => {
+    const fecha = getFechaFromSemanaYDia(semanaVista, diaSemana);
+    return alumnos.some((a) => a.activo !== false && esCumpleanosEnFecha(a.fechaNacimiento, fecha));
+  };
 
   const getActividadDelAlumno = (alumnoId: string) => {
     const alumno = alumnos.find((a) => a.id === alumnoId);
@@ -1901,6 +1915,8 @@ const Calendario = () => {
     if (!turno) return null;
     const { alumno, isRecuperacion, liberadaSemana, aPrueba } = item;
     const turnoRefId = item.sourceTurnoId ?? turno.id;
+    const fechaDia = getFechaFromSemanaYDia(semanaVista, diaSemana);
+    const esCumple = esCumpleanosEnFecha(alumno.fechaNacimiento, fechaDia);
 
     const estadoAsistencia = getEstadoAsistencia(turnoRefId, alumno.id);
     const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
@@ -1920,13 +1936,14 @@ const Calendario = () => {
         className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors cursor-pointer`}
         onClick={(e) => handleAbrirPopupAlumno(e, item, turno, diaSemana, hora)}
       >
+        {esCumple && <Cake className="w-3.5 h-3.5 flex-shrink-0 text-pink-600" aria-label="Cumpleaños" />}
         {isRecuperacion && <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 text-amber-700" aria-label="Recuperación" />}
         {!isRecuperacion && aPrueba && (
           <Sparkles className="w-3.5 h-3.5 flex-shrink-0 text-violet-700" aria-label="A prueba" />
         )}
         <span
           className="truncate flex-1"
-          title={`${alumno.nombre} ${alumno.apellido}${isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : aPrueba ? ' (a prueba)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}
+          title={`${alumno.nombre} ${alumno.apellido}${esCumple ? ' 🎂 Cumpleaños' : ''}${isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : aPrueba ? ' (a prueba)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}
         >
           {alumno.nombre} {alumno.apellido}
         </span>
@@ -2041,6 +2058,18 @@ const Calendario = () => {
               Por turnos fijos (liberados no ocupan · sin recuperaciones)
             </span>
           </p>
+          {cumpleanosHoy.length > 0 && (
+            <p className="text-sm font-semibold text-pink-800 bg-pink-50 border border-pink-200 rounded-lg px-3 py-2 w-fit flex items-start gap-2">
+              <Cake className="w-4 h-4 mt-0.5 flex-shrink-0 text-pink-600" aria-hidden />
+              <span>
+                Hoy cumplen:{' '}
+                {cumpleanosHoy.map((a) => `${a.nombre} ${a.apellido}`).join(', ')}
+                <span className="block text-xs font-normal text-pink-700/90 mt-0.5">
+                  Recordatorio · también aparecen con 🎂 en sus clases del día
+                </span>
+              </span>
+            </p>
+          )}
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <button
@@ -2153,8 +2182,15 @@ const Calendario = () => {
             return (
             <div key={diaIndex} className="card">
               <div className="relative border-b border-primary-200 pb-2 mb-4 pr-11">
-                <h2 className="text-lg font-bold text-primary-700">
-                  {DIAS_SEMANA[diaIndex]} <span className="text-sm font-normal text-gray-500">{formatDate(fechaDiaMovil)}</span>
+                <h2 className="text-lg font-bold text-primary-700 flex items-center gap-2 flex-wrap">
+                  {DIAS_SEMANA[diaIndex]}{' '}
+                  <span className="text-sm font-normal text-gray-500">{formatDate(fechaDiaMovil)}</span>
+                  {diaTieneCumple(diaIndex) && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-pink-700 bg-pink-100 px-2 py-0.5 rounded-full">
+                      <Cake className="w-3.5 h-3.5" aria-hidden />
+                      Cumple
+                    </span>
+                  )}
                 </h2>
                 {useApi() && (
                   <div className="absolute top-0 right-0 z-20" data-cierre-menu-root="1" data-cierre-fecha={fechaDiaMovil}>
@@ -2399,7 +2435,12 @@ const Calendario = () => {
                       className="p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700 min-w-[72px] relative"
                     >
                       <div className="px-1 pr-7 sm:pr-8">
-                        <div className="text-xs sm:text-sm uppercase">{DIAS_SEMANA[diaIndex]}</div>
+                        <div className="text-xs sm:text-sm uppercase flex items-center justify-center gap-1">
+                          {DIAS_SEMANA[diaIndex]}
+                          {diaTieneCumple(diaIndex) && (
+                            <Cake className="w-3.5 h-3.5 text-pink-600" aria-label="Hay cumpleaños" />
+                          )}
+                        </div>
                         <div className="text-[10px] text-gray-500 font-normal mt-0.5">{formatDate(fechaCol)}</div>
                       </div>
                       {useApi() && (
@@ -3734,6 +3775,15 @@ const Calendario = () => {
               {showPopupAlumno.liberadaSemana && !showPopupAlumno.isRecuperacion && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-200 text-slate-800">
                   Liberó esta semana
+                </span>
+              )}
+              {esCumpleanosEnFecha(
+                showPopupAlumno.alumno.fechaNacimiento,
+                getFechaFromSemanaYDia(semanaVista, showPopupAlumno.diaSemana)
+              ) && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+                  <Cake className="w-3 h-3" />
+                  Cumpleaños
                 </span>
               )}
             </div>

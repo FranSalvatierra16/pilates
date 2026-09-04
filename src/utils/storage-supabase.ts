@@ -17,6 +17,7 @@ const dbToAlumno = (row: any): Alumno => ({
   telefono: row.telefono,
   email: row.email,
   fechaVencimientoCuota: row.fecha_vencimiento_cuota || '',
+  fechaNacimiento: row.fecha_nacimiento || '',
   actividadId: row.actividad_id,
   clasesAsistidas: row.clases_asistidas || 0,
   clasesParaRecuperar: row.clases_para_recuperar || 0,
@@ -38,6 +39,7 @@ const alumnoToDb = (alumno: Alumno) => ({
   telefono: alumno.telefono,
   email: alumno.email,
   fecha_vencimiento_cuota: alumno.fechaVencimientoCuota || null,
+  fecha_nacimiento: alumno.fechaNacimiento || null,
   actividad_id: alumno.actividadId,
   clases_asistidas: alumno.clasesAsistidas || 0,
   clases_para_recuperar: alumno.clasesParaRecuperar || 0,
@@ -189,6 +191,7 @@ export const storageSupabase = {
       if (updates.telefono) dbUpdates.telefono = updates.telefono;
       if (updates.email) dbUpdates.email = updates.email;
       if (updates.fechaVencimientoCuota !== undefined) dbUpdates.fecha_vencimiento_cuota = updates.fechaVencimientoCuota || null;
+      if (updates.fechaNacimiento !== undefined) dbUpdates.fecha_nacimiento = updates.fechaNacimiento || null;
       if (updates.actividadId) dbUpdates.actividad_id = updates.actividadId;
       if (updates.clasesAsistidas !== undefined) dbUpdates.clases_asistidas = updates.clasesAsistidas;
       if (updates.clasesParaRecuperar !== undefined) dbUpdates.clases_para_recuperar = updates.clasesParaRecuperar;

@@ -231,6 +231,11 @@ async function main() {
         row.clases_asistidas ?? 0,
       ];
 
+      if (alumnosCols.has('fecha_nacimiento')) {
+        cols.splice(cols.indexOf('actividad_id'), 0, 'fecha_nacimiento');
+        vals.splice(vals.length - 2, 0, row.fecha_nacimiento ?? null);
+      }
+
       if (alumnosCols.has('descripcion')) {
         cols.push('descripcion');
         vals.push(row.descripcion ?? null);

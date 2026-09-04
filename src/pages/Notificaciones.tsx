@@ -24,7 +24,7 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 
 export interface NotificacionItem {
   id: string | number;
-  tipo: 'inscribio' | 'liberar' | 'restauro';
+  tipo: 'inscribio' | 'liberar' | 'restauro' | 'cumple';
   leido?: boolean;
   alumnoNombre: string;
   turnoDia: string;
@@ -107,6 +107,9 @@ export default function Notificaciones() {
   }, [pushStatus]);
 
   const texto = (n: NotificacionItem) => {
+    if (n.tipo === 'cumple') {
+      return `${n.alumnoNombre} cumple años hoy`;
+    }
     if (n.tipo === 'inscribio') {
       return `${n.alumnoNombre} se anotó en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`;
     }
@@ -355,6 +358,8 @@ export default function Notificaciones() {
                         <span className="text-green-600 font-medium">Se anotó:</span>
                       ) : n.tipo === 'restauro' ? (
                         <span className="text-blue-600 font-medium">Volvió a tomar:</span>
+                      ) : n.tipo === 'cumple' ? (
+                        <span className="text-pink-600 font-medium">Cumpleaños:</span>
                       ) : (
                         <span className="text-amber-600 font-medium">Liberó cupo:</span>
                       )}{' '}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download, ExternalLink, Share, X } from 'lucide-react';
 import { isAndroidDevice, isInAppBrowser, isIosDevice } from '../utils/browser';
-import { isPwaStandalone } from '../utils/pwa-role';
+import { applyManifestLink, isPwaStandalone } from '../utils/pwa-role';
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -12,6 +12,8 @@ type Props = {
   /** Texto corto según el público */
   variant: 'alumno' | 'estudio';
   className?: string;
+  /** Opcional: sucursal para armar el manifest correcto al instalar */
+  sucursalId?: string | null;
 };
 
 /**
@@ -19,7 +21,7 @@ type Props = {
  * En Chrome/Android usa beforeinstallprompt; en iOS muestra pasos de "Agregar a inicio".
  * Si está dentro de WhatsApp/Instagram, pide abrir en Safari/Chrome (ahí no se puede instalar).
  */
-export default function InstallAppHint({ variant, className = '' }: Props) {
+export default function InstallAppHint({ variant, className = '', sucursalId }: Props) {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -27,16 +29,35 @@ export default function InstallAppHint({ variant, className = '' }: Props) {
   const inApp = isInAppBrowser();
   const ios = isIosDevice();
   const android = isAndroidDevice();
+  const sid =
+    (sucursalId || '').trim() ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('savia_sucursalId') || '' : '');
 
   useEffect(() => {
     if (isPwaStandalone() || inApp) return;
+    // Asegurar manifest del variant en cuanto se muestra el hint (Chrome lee el link actual).
+    if (variant === 'estudio') {
+      applyManifestLink({
+        portal: 'estudio',
+        sucursalId: sid || null,
+        brand: sid ? undefined : 'fitgest',
+      });
+    } else {
+      const params = new URLSearchParams(window.location.search);
+      applyManifestLink({
+        portal: 'alumno',
+        sucursalId: params.get('sucursalId') || sid || null,
+        token: params.get('token'),
+        modo: params.get('modo') || 'recuperar',
+      });
+    }
     const onBip = (e: Event) => {
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);
     };
     window.addEventListener('beforeinstallprompt', onBip);
     return () => window.removeEventListener('beforeinstallprompt', onBip);
-  }, [inApp]);
+  }, [inApp, variant, sid]);
 
   if (isPwaStandalone() || dismissed) return null;
 
@@ -53,10 +74,29 @@ export default function InstallAppHint({ variant, className = '' }: Props) {
     }
   };
 
+  const ensureManifest = () => {
+    if (variant === 'estudio') {
+      applyManifestLink({
+        portal: 'estudio',
+        sucursalId: sid || null,
+        brand: sid ? undefined : 'fitgest',
+      });
+    } else {
+      const params = new URLSearchParams(window.location.search);
+      applyManifestLink({
+        portal: 'alumno',
+        sucursalId: params.get('sucursalId') || sid || null,
+        token: params.get('token'),
+        modo: params.get('modo') || 'recuperar',
+      });
+    }
+  };
+
   const onInstall = async () => {
     if (!deferred) return;
     setInstalling(true);
     try {
+      ensureManifest();
       await deferred.prompt();
       await deferred.userChoice;
       setDeferred(null);

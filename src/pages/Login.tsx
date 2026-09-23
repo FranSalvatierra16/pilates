@@ -5,11 +5,11 @@ import { LogIn, AlertCircle, ArrowLeft } from 'lucide-react';
 import InstallAppHint from '../components/InstallAppHint';
 import {
   adoptEstudioPwa,
-  buildManifestHref,
+  applyManifestLink,
   getPwaStartPath,
   isAlumnoPwa,
+  isEstudioAppPath,
   isPwaStandalone,
-  setPwaRole,
 } from '../utils/pwa-role';
 
 const Login = () => {
@@ -19,25 +19,22 @@ const Login = () => {
   const { login, isAuthenticated, isAdmin, sucursalId } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  // Solo bloquear login dentro de la app instalada del alumno.
-  // En el navegador (Safari/Chrome) siempre se puede entrar como sucursal.
-  const bloquearPorAppAlumno = isPwaStandalone() && isAlumnoPwa();
+  // Solo bloquear login en la app instalada del alumno (no en launch de estudio).
+  const bloquearPorAppAlumno =
+    isPwaStandalone() && isAlumnoPwa() && !isEstudioAppPath() && searchParams.get('portal') !== 'estudio';
   const portalEstudio =
-    searchParams.get('portal') === 'estudio' || (isPwaStandalone() && !isAlumnoPwa());
+    searchParams.get('portal') === 'estudio' || (isPwaStandalone() && !bloquearPorAppAlumno);
 
   useEffect(() => {
     if (bloquearPorAppAlumno) return;
-    setPwaRole('estudio');
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+    adoptEstudioPwa();
     const sid = sucursalId || searchParams.get('sucursalId') || '';
-    if (link) {
-      link.href = buildManifestHref({
-        portal: 'estudio',
-        sucursalId: sid || null,
-        brand: sid ? undefined : 'fitgest',
-      });
-    }
+    applyManifestLink({
+      portal: 'estudio',
+      sucursalId: sid || null,
+      brand: sid ? undefined : 'fitgest',
+    });
+    const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
     if (appleTitle) appleTitle.content = 'Gestión';
     document.title = 'Iniciar sesión · Estudio';
   }, [searchParams, sucursalId, bloquearPorAppAlumno]);

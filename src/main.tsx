@@ -3,14 +3,17 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import {
-  buildManifestHref,
+  adoptEstudioPwa,
+  applyManifestLink,
   getPwaRole,
   getPwaStartPath,
   hasEstudioSession,
+  isAlumnoAppPath,
   isAlumnoPwa,
+  isEstudioAppPath,
   isPwaStandalone,
   setAlumnoPortalContext,
-  setPwaRole,
+  shouldForceAlumnoStandaloneRedirect,
 } from './utils/pwa-role'
 
 /** Sincroniza rol PWA desde la URL (por si el script del HTML no alcanzó). */
@@ -18,47 +21,39 @@ function syncPwaRoleFromUrl() {
   if (typeof window === 'undefined') return
   const path = window.location.pathname || ''
   const params = new URLSearchParams(window.location.search)
-  const isAlumno =
-    path.startsWith('/mi-clase') ||
-    params.get('portal') === 'alumno' ||
-    params.get('modo') === 'recuperar'
 
-  if (isAlumno) {
+  if (isAlumnoAppPath(path, window.location.search)) {
     setAlumnoPortalContext({
       modo: params.get('modo') || 'recuperar',
       sucursalId: params.get('sucursalId') || '',
     })
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
-    if (link) {
-      link.href = buildManifestHref({
-        portal: 'alumno',
-        sucursalId: params.get('sucursalId'),
-        token: params.get('token'),
-        modo: params.get('modo') || 'recuperar',
-      })
-    }
+    applyManifestLink({
+      portal: 'alumno',
+      sucursalId: params.get('sucursalId'),
+      token: params.get('token'),
+      modo: params.get('modo') || 'recuperar',
+    })
     return
   }
 
-  // No convertir a estudio si este dispositivo es la app instalada de alumno.
-  if (isAlumnoPwa() && isPwaStandalone()) return
-
-  if (path.startsWith('/login') || params.get('portal') === 'estudio') {
-    setPwaRole('estudio')
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
-    if (link) {
-      link.href = buildManifestHref({
-        portal: 'estudio',
-        sucursalId: params.get('sucursalId'),
-        brand: params.get('sucursalId') ? undefined : 'fitgest',
-      })
+  // Launch de estudio (login/gestión) o sesión de sucursal: manifest de estudio.
+  if (isEstudioAppPath(path, window.location.search) || hasEstudioSession()) {
+    // En navegador o en launch claro de estudio: adoptar rol estudio para instalar bien.
+    if (!isPwaStandalone() || isEstudioAppPath(path, window.location.search) || hasEstudioSession()) {
+      adoptEstudioPwa()
     }
+    const sid = params.get('sucursalId') || localStorage.getItem('savia_sucursalId') || ''
+    applyManifestLink({
+      portal: 'estudio',
+      sucursalId: sid || null,
+      brand: sid ? undefined : 'fitgest',
+    })
   }
 }
 
 /**
- * PWA instalada: iOS a veces abre / o un start_url viejo (/login, /entrada).
- * Si es app alumno → siempre /mi-clase.
+ * PWA instalada: iOS a veces abre / o un start_url viejo.
+ * Solo forzar /mi-clase si el launch NO es de la app estudio.
  */
 function bootPwaSkipMarketingLanding() {
   const mode = String(import.meta.env.VITE_PUBLIC_SITE_MODE || '')
@@ -74,40 +69,31 @@ function bootPwaSkipMarketingLanding() {
   const { pathname, search, hash } = window.location
   const start = getPwaStartPath()
 
-  // App alumno: sacar de login / entrada / home y mandar a recuperar
-  // (aunque la URL sea /login?portal=estudio por un start_url mal instalado)
-  if (isAlumnoPwa()) {
-    if (!pathname.startsWith('/mi-clase')) {
-      window.history.replaceState(null, '', `${getPwaStartPath()}${hash || ''}`)
-      // Forzar navegación real en iOS standalone (replaceState a veces no alcanza)
-      if (pathname.startsWith('/login') || pathname === '/entrada' || pathname === '/' || pathname === '') {
-        window.location.replace(`${getPwaStartPath()}${hash || ''}`)
-      }
+  if (shouldForceAlumnoStandaloneRedirect()) {
+    window.history.replaceState(null, '', `${getPwaStartPath()}${hash || ''}`)
+    if (pathname.startsWith('/login') || pathname === '/entrada' || pathname === '/' || pathname === '') {
+      window.location.replace(`${getPwaStartPath()}${hash || ''}`)
     }
     return
   }
 
-  const role = getPwaRole()
+  // App alumno abierta en /mi-clase: ok
+  if (isAlumnoAppPath(pathname, search)) return
 
-  if (
-    role === 'estudio' &&
-    (pathname.startsWith('/login') ||
-      pathname.startsWith('/dashboard') ||
-      pathname.startsWith('/admin') ||
-      pathname.startsWith('/calendario') ||
-      pathname.startsWith('/alumnos'))
-  ) {
+  // App estudio
+  if (isEstudioAppPath(pathname, search) || getPwaRole() === 'estudio' || hasEstudioSession()) {
+    if (pathname === '/' || pathname === '' || pathname === '/entrada') {
+      window.history.replaceState(null, '', `${start}${hash || ''}`)
+    }
     return
   }
 
-  if (pathname === '/' || pathname === '' || pathname === '/entrada' || pathname === '/login') {
-    if (role === 'estudio' || hasEstudioSession()) {
-      window.history.replaceState(null, '', `${start}${hash || ''}`)
+  if (pathname === '/' || pathname === '' || pathname === '/entrada') {
+    if (isAlumnoPwa()) {
+      window.location.replace(`${getPwaStartPath()}${hash || ''}`)
       return
     }
-    if (pathname === '/' || pathname === '') {
-      window.history.replaceState(null, '', `/entrada${search}${hash}`)
-    }
+    window.history.replaceState(null, '', `/entrada${search}${hash}`)
   }
 }
 
@@ -124,21 +110,25 @@ const storedSucursalId = localStorage.getItem(SUCURSAL_ID_KEY)
 const storedSucursalNombre = localStorage.getItem(SUCURSAL_NOMBRE_KEY)
 const storedFotoPerfil = localStorage.getItem(FOTO_PERFIL_KEY)
 
-// Token de estudio en el mismo celular NO debe pisar la app del alumno
-if (storedToken && storedSucursalNombre && !isAlumnoPwa()) {
-  setPwaRole('estudio')
+// Sesión de sucursal (en navegador o app estudio): forzar manifest de gestión.
+if (
+  storedToken &&
+  storedSucursalNombre &&
+  !isAlumnoAppPath() &&
+  (!isPwaStandalone() || isEstudioAppPath() || !isAlumnoPwa())
+) {
+  adoptEstudioPwa()
   const title = `${storedSucursalNombre} - Sistema de Gestión`
-  const manifestHref = storedSucursalId
-    ? `/api/manifest.webmanifest?portal=estudio&sucursalId=${encodeURIComponent(storedSucursalId)}`
-    : '/api/manifest.webmanifest?portal=estudio&brand=fitgest'
+  document.title = title
+  applyManifestLink({
+    portal: 'estudio',
+    sucursalId: storedSucursalId,
+    brand: storedSucursalId ? undefined : 'fitgest',
+  })
+
   const iconHref = storedFotoPerfil || (storedSucursalId
     ? `/api/public/sucursal-logo/${encodeURIComponent(storedSucursalId)}`
     : '/fitgest.png')
-
-  document.title = title
-
-  const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')
-  if (manifestLink) manifestLink.href = manifestHref
 
   const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]')
   if (appleTouch) appleTouch.href = iconHref

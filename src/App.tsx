@@ -6,14 +6,14 @@ import { ToastProvider } from './components/ToastProvider';
 import { ArrowRight, Building2, UserRound } from 'lucide-react';
 import {
   adoptEstudioPwa,
-  buildManifestHref,
+  applyManifestLink,
   getAlumnoPortalContext,
   getPwaRole,
   getPwaStartPath,
   isAlumnoPwa,
+  isEstudioAppPath,
   isPwaStandalone,
   setAlumnoPortalContext,
-  setPwaRole,
 } from './utils/pwa-role';
 
 const APP_NAME_FALLBACK = import.meta.env.VITE_APP_NAME || 'FITGEST';
@@ -31,15 +31,14 @@ function DocumentTitle() {
       return;
     }
 
-    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
     const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
 
-    // En rutas de estudio (logueado) forzar manifest de gestión.
-    if (isAuthenticated) {
-      setPwaRole('estudio');
-      const manifestHref = buildManifestHref({
+    // Logueado como sucursal o en rutas de gestión: manifest de estudio (para instalar bien).
+    if (isAuthenticated || isEstudioAppPath(location.pathname, location.search)) {
+      adoptEstudioPwa();
+      applyManifestLink({
         portal: 'estudio',
         sucursalId,
         brand: sucursalId ? undefined : 'fitgest',
@@ -48,7 +47,6 @@ function DocumentTitle() {
         ? `/api/public/sucursal-logo/${encodeURIComponent(sucursalId)}`
         : '/fitgest.png';
 
-      if (link) link.href = manifestHref;
       if (appleTouch) appleTouch.href = iconHref;
       if (favicon) favicon.href = iconHref;
 
@@ -70,7 +68,7 @@ function DocumentTitle() {
         ? APP_NAME_FALLBACK
         : `${APP_NAME_FALLBACK} - Sistema de Gestión`;
     if (appleTitle) appleTitle.content = APP_NAME_FALLBACK;
-  }, [isAuthenticated, sucursalId, sucursalNombre, location.pathname]);
+  }, [isAuthenticated, sucursalId, sucursalNombre, location.pathname, location.search]);
   return null;
 }
 
@@ -175,7 +173,7 @@ function EntrySelector() {
   }
 
   // App ya instalada como alumno: nunca mostrar chooser ni login.
-  if (isPwaStandalone() && isAlumnoPwa()) {
+  if (isPwaStandalone() && isAlumnoPwa() && !isEstudioAppPath(location.pathname, location.search)) {
     return <Navigate to={getPwaStartPath()} replace />;
   }
 

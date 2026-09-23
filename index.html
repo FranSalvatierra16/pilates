@@ -38,15 +38,30 @@
 
           var alumnoFlag =
             localStorage.getItem('fitgest_portal_alumno') === '1' || getCookie('fitgest_portal_alumno') === '1';
+          var hasEstudioToken = !!localStorage.getItem('savia_token');
 
           var isStandalone =
             (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
             (navigator.standalone === true);
 
-          // Solo en la app instalada del alumno: si abrió /login u otra ruta, volver a recuperar.
-          // En el navegador normal NO redirigir: así la sucursal puede entrar al login aunque
-          // en el mismo celular se haya usado antes el link de recuperar.
-          if (isStandalone && alumnoFlag && path.indexOf('/mi-clase') !== 0) {
+          var isEstudioUrl =
+            path.indexOf('/login') === 0 ||
+            params.get('portal') === 'estudio' ||
+            path.indexOf('/dashboard') === 0 ||
+            path.indexOf('/calendario') === 0 ||
+            path.indexOf('/alumnos') === 0 ||
+            path.indexOf('/pagos') === 0 ||
+            path.indexOf('/caja') === 0 ||
+            path.indexOf('/agenda') === 0 ||
+            path.indexOf('/notificaciones') === 0 ||
+            path.indexOf('/planificacion') === 0 ||
+            path.indexOf('/admin') === 0 ||
+            path.indexOf('/profesores') === 0 ||
+            path.indexOf('/actividades') === 0;
+
+          // Solo secuestrar a /mi-clase si es app alumno y NO es un launch de estudio
+          // (antes /login?portal=estudio con flag alumno te mandaba a recuperar).
+          if (isStandalone && alumnoFlag && !isAlumnoUrl && !isEstudioUrl) {
             var modoB = localStorage.getItem('fitgest_portal_alumno_modo') || getCookie('fitgest_portal_alumno_modo') || 'recuperar';
             var sidB = localStorage.getItem('fitgest_portal_alumno_sucursal') || getCookie('fitgest_portal_alumno_sucursal') || '';
             var qb = new URLSearchParams({ modo: modoB, portal: 'alumno' });
@@ -78,14 +93,19 @@
             document.title = 'Savia';
             var appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
             if (appleIcon) appleIcon.setAttribute('href', '/apple-touch-savia.png');
-          } else if (path.indexOf('/login') === 0 || params.get('portal') === 'estudio') {
-            // En navegador: permitir login de estudio aunque exista flag alumno.
-            // No borrar el flag acá (la app instalada del alumno sigue usándolo).
-            if (!isStandalone || !alumnoFlag) {
-              localStorage.setItem('fitgest_pwa_role', 'estudio');
+          } else if (isEstudioUrl || hasEstudioToken) {
+            // Login / gestión / sesión de sucursal → manifest de estudio (para instalar la app correcta).
+            localStorage.setItem('fitgest_pwa_role', 'estudio');
+            if (!isStandalone) {
+              localStorage.removeItem('fitgest_portal_alumno');
+              localStorage.removeItem('fitgest_portal_alumno_modo');
+              localStorage.removeItem('fitgest_portal_alumno_sucursal');
+              document.cookie = 'fitgest_portal_alumno=; path=/; max-age=0; SameSite=Lax';
+              document.cookie = 'fitgest_portal_alumno_modo=; path=/; max-age=0; SameSite=Lax';
+              document.cookie = 'fitgest_portal_alumno_sucursal=; path=/; max-age=0; SameSite=Lax';
             }
             var qs = new URLSearchParams({ portal: 'estudio' });
-            var sid2 = params.get('sucursalId') || '';
+            var sid2 = params.get('sucursalId') || localStorage.getItem('savia_sucursalId') || '';
             if (sid2) qs.set('sucursalId', sid2);
             else qs.set('brand', 'fitgest');
             manifestHref = '/api/manifest.webmanifest?' + qs.toString();

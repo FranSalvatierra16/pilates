@@ -5,7 +5,7 @@ import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 import InstallAppHint from '../components/InstallAppHint';
-import { buildManifestHref, isPwaStandalone, setAlumnoPortalContext } from '../utils/pwa-role';
+import { applyManifestLink, isPwaStandalone, setAlumnoPortalContext } from '../utils/pwa-role';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -371,23 +371,21 @@ const MiClase = () => {
       sucursalId: sid,
     });
 
-    const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
-    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
-    const manifestHref = buildManifestHref({
+    applyManifestLink({
       portal: 'alumno',
       sucursalId: sid,
       token: tokenFromUrl,
       modo: modoFromUrl,
     });
+    const appleTouch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    const appleTitle = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
     const iconHref = sid.trim()
       ? `/api/public/sucursal-logo/${encodeURIComponent(sid.trim())}`
       : isSavia
         ? '/apple-touch-savia.png'
         : '/fitgest.png';
 
-    if (manifestLink) manifestLink.href = manifestHref;
     if (appleTouch) appleTouch.href = isSavia ? '/apple-touch-savia.png' : iconHref;
     if (favicon) favicon.href = isSavia ? '/savia.png' : iconHref;
     // iOS "Agregar a Inicio" usa este meta (nombre corto, sin FITGEST).

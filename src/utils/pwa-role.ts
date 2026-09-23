@@ -56,6 +56,41 @@ export function isAlumnoPwa(): boolean {
   return false;
 }
 
+/** Rutas del sistema de gestión (app estudio). */
+export function isEstudioAppPath(pathname?: string, search?: string): boolean {
+  if (typeof window === 'undefined' && pathname == null) return false;
+  const path = pathname ?? window.location.pathname ?? '';
+  const params = new URLSearchParams(search ?? (typeof window !== 'undefined' ? window.location.search : ''));
+  if (params.get('portal') === 'estudio') return true;
+  return (
+    path.startsWith('/login') ||
+    path.startsWith('/dashboard') ||
+    path.startsWith('/calendario') ||
+    path.startsWith('/alumnos') ||
+    path.startsWith('/pagos') ||
+    path.startsWith('/caja') ||
+    path.startsWith('/agenda') ||
+    path.startsWith('/notificaciones') ||
+    path.startsWith('/planificacion') ||
+    path.startsWith('/admin') ||
+    path.startsWith('/profesores') ||
+    path.startsWith('/actividades') ||
+    path.startsWith('/acceso')
+  );
+}
+
+/** Rutas / query del portal alumno. */
+export function isAlumnoAppPath(pathname?: string, search?: string): boolean {
+  if (typeof window === 'undefined' && pathname == null) return false;
+  const path = pathname ?? window.location.pathname ?? '';
+  const params = new URLSearchParams(search ?? (typeof window !== 'undefined' ? window.location.search : ''));
+  return (
+    path.startsWith('/mi-clase') ||
+    params.get('portal') === 'alumno' ||
+    params.get('modo') === 'recuperar'
+  );
+}
+
 export function setPwaRole(role: PwaRole) {
   try {
     localStorage.setItem(ROLE_KEY, role);
@@ -68,7 +103,7 @@ export function setPwaRole(role: PwaRole) {
   }
 }
 
-/** Pasar a app de estudio de forma explícita (entrada Estudio o login ok). */
+/** Pasar a app de estudio de forma explícita (entrada Estudio, login ok, o sesión de sucursal). */
 export function adoptEstudioPwa() {
   try {
     localStorage.setItem(ROLE_KEY, 'estudio');
@@ -131,17 +166,39 @@ export function isPwaStandalone(): boolean {
   return window.matchMedia('(display-mode: standalone)').matches || nav.standalone === true;
 }
 
-/** Ruta de inicio según el tipo de app. Alumno gana siempre sobre sesión de estudio en el mismo celular. */
+/**
+ * En app instalada: la URL de apertura manda.
+ * - /mi-clase → alumno
+ * - /login?portal=estudio o rutas de gestión → estudio (aunque quede flag viejo de alumno)
+ */
+export function shouldForceAlumnoStandaloneRedirect(): boolean {
+  if (!isPwaStandalone()) return false;
+  if (isAlumnoAppPath()) return false;
+  if (isEstudioAppPath()) return false;
+  return isAlumnoPwa();
+}
+
+function alumnoStartPathFromContext(): string {
+  const { modo, sucursalId } = getAlumnoPortalContext();
+  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const q = new URLSearchParams({
+    modo: params?.get('modo') || modo || 'recuperar',
+    portal: 'alumno',
+  });
+  const sid = params?.get('sucursalId') || sucursalId;
+  if (sid) q.set('sucursalId', sid);
+  const token = params?.get('token');
+  if (token) q.set('token', token);
+  return `/mi-clase?${q.toString()}`;
+}
+
+/** Ruta de inicio según el tipo de app / URL actual. */
 export function getPwaStartPath(): string {
-  if (isAlumnoPwa()) {
-    const { modo, sucursalId } = getAlumnoPortalContext();
-    const q = new URLSearchParams({ modo: modo || 'recuperar', portal: 'alumno' });
-    if (sucursalId) q.set('sucursalId', sucursalId);
-    return `/mi-clase?${q.toString()}`;
-  }
-  if (getPwaRole() === 'estudio' || hasEstudioSession()) {
+  if (isAlumnoAppPath()) return alumnoStartPathFromContext();
+  if (isEstudioAppPath() || hasEstudioSession() || getPwaRole() === 'estudio') {
     return hasEstudioSession() ? '/dashboard' : '/login?portal=estudio';
   }
+  if (isAlumnoPwa()) return alumnoStartPathFromContext();
   return '/entrada';
 }
 
@@ -158,4 +215,26 @@ export function buildManifestHref(opts: {
   if (opts.modo) params.set('modo', opts.modo);
   if (opts.brand) params.set('brand', opts.brand);
   return `/api/manifest.webmanifest?${params.toString()}`;
+}
+
+/** Asegura el <link rel="manifest"> correcto antes de instalar. */
+export function applyManifestLink(opts: {
+  portal: PwaRole;
+  sucursalId?: string | null;
+  token?: string | null;
+  modo?: string;
+  brand?: string;
+}) {
+  if (typeof document === 'undefined') return;
+  const href = buildManifestHref(opts);
+  let link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.id = 'app-manifest';
+    link.rel = 'manifest';
+    document.head.appendChild(link);
+  }
+  if (link.href !== new URL(href, window.location.origin).href) {
+    link.href = href;
+  }
 }

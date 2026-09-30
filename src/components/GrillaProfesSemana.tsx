@@ -24,10 +24,14 @@ interface Props {
   profesores: ProfeOpcion[];
   /** Lunes (YYYY-MM-DD) de la semana a editar. Sin valor = horario base que se repite todas las semanas. */
   lunes?: string;
+  /** Mes visible (YYYY-MM): los días de otros meses se muestran apagados y no suman horas. */
+  mes?: string;
+  /** Horas totales del mes por profe (ya calculadas). */
+  horasMes?: Record<string, number>;
   onCambio?: () => void;
 }
 
-const GrillaProfesSemana = ({ profesores, lunes, onCambio }: Props) => {
+const GrillaProfesSemana = ({ profesores, lunes, mes, horasMes, onCambio }: Props) => {
   const toast = useToast();
   const [data, setData] = useState<HorarioFijoProfes | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,20 +72,26 @@ const GrillaProfesSemana = ({ profesores, lunes, onCambio }: Props) => {
     const noDisp = (data?.horariosNoDisponiblesPorDia[dia] ?? []).includes(hora);
     const base = baseSlot.get(`${dia}|${hora}`)?.profesorId ?? '';
     if (!modoSemana || !data?.dias) {
-      return { noDisp, cerrado: false, fecha: '', base, valor: base, cambio: undefined as ReemplazoProfeFecha | undefined };
+      return { noDisp, cerrado: false, otroMes: false, fecha: '', base, valor: base, cambio: undefined as ReemplazoProfeFecha | undefined };
     }
     const d = data.dias[dia];
+    const otroMes = !!mes && !!d && !d.fecha.startsWith(mes);
     const cerrado = !!d && (d.cerrarTodo || d.horasCerradas.includes(hora));
     const cambio = d ? cambiosPorClave.get(`${d.fecha}|${hora}`) : undefined;
     const valor = cambio ? (cambio.sinClase ? SIN_CLASE : cambio.profesorId ?? '') : base;
-    return { noDisp, cerrado, fecha: d?.fecha ?? '', base, valor, cambio };
+    return { noDisp, cerrado, otroMes, fecha: d?.fecha ?? '', base, valor, cambio };
+  };
+
+  const diaFueraDeMes = (dia: number) => {
+    const fecha = data?.dias?.[dia]?.fecha;
+    return modoSemana && !!mes && !!fecha && !fecha.startsWith(mes);
   };
 
   const horasPorProfe = new Map<string, number>();
   for (let dia = 0; dia < 6; dia++) {
     for (const hora of horas) {
       const c = infoCelda(dia, hora);
-      if (c.noDisp || c.cerrado || !c.valor || c.valor === SIN_CLASE) continue;
+      if (c.otroMes || c.noDisp || c.cerrado || !c.valor || c.valor === SIN_CLASE) continue;
       horasPorProfe.set(c.valor, (horasPorProfe.get(c.valor) || 0) + 1);
     }
   }
@@ -153,7 +163,7 @@ const GrillaProfesSemana = ({ profesores, lunes, onCambio }: Props) => {
     if (!ok) return;
     setAccionando(true);
     try {
-      await storageApi.horasProfes.accionSemana(lunes, accion);
+      await storageApi.horasProfes.accionSemana(lunes, accion, mes);
       await cargar();
       onCambio?.();
     } catch (e) {
@@ -175,6 +185,13 @@ const GrillaProfesSemana = ({ profesores, lunes, onCambio }: Props) => {
   const renderCelda = (dia: number, hora: string) => {
     const c = infoCelda(dia, hora);
     const key = `${dia}|${hora}`;
+    if (c.otroMes) {
+      return (
+        <td key={dia} className="px-1 py-1 bg-gray-50/80">
+          <div className="rounded-md px-2 py-1.5 text-center text-[11px] text-gray-300">—</div>
+        </td>
+      );
+    }
     if (c.noDisp || c.cerrado) {
       return (
         <td key={dia} className="px-1 py-1">
@@ -259,7 +276,8 @@ const GrillaProfesSemana = ({ profesores, lunes, onCambio }: Props) => {
             >
               {p.nombre} {p.apellido}
               {p.tipo === 'suplente' && <span className="opacity-70">(suplente)</span>}
-              <span className="opacity-80">· {horasPorProfe.get(p.id) || 0} h{modoSemana ? '' : '/sem'}</span>
+              <span className="opacity-80">· {horasPorProfe.get(p.id) || 0} h{modoSemana ? ' sem.' : '/sem'}</span>
+              {horasMes && <span className="font-semibold">· {horasMes[p.id] || 0} h mes</span>}
             </span>
           ))}
         </div>
@@ -294,10 +312,15 @@ const GrillaProfesSemana = ({ profesores, lunes, onCambio }: Props) => {
               {DIAS.map((d, i) => {
                 const fecha = data.dias?.[i]?.fecha;
                 const f = fecha ? parseFechaLocal(fecha) : null;
+                const fuera = diaFueraDeMes(i);
                 return (
-                  <th key={d} className="px-1 py-2 text-center text-xs font-semibold text-gray-600">
+                  <th
+                    key={d}
+                    className={`px-1 py-2 text-center text-xs font-semibold ${fuera ? 'bg-gray-50/80 text-gray-300' : 'text-gray-600'}`}
+                    title={fuera ? 'Día de otro mes' : undefined}
+                  >
                     {d}
-                    {f && <span className="block font-normal text-gray-400">{f.getDate()}/{f.getMonth() + 1}</span>}
+                    {f && <span className={`block font-normal ${fuera ? 'text-gray-300' : 'text-gray-400'}`}>{f.getDate()}/{f.getMonth() + 1}</span>}
                   </th>
                 );
               })}

@@ -38,12 +38,16 @@ function semanasDeMes(mes: string): Array<{ lunes: string; label: string; esActu
   while (lunes <= ultimo) {
     const sabado = new Date(lunes);
     sabado.setDate(sabado.getDate() + 5);
+    const desde = lunes < primero ? primero : lunes;
+    const hasta = sabado > ultimo ? ultimo : sabado;
     const l = isoLocal(lunes);
-    const s = isoLocal(sabado);
     out.push({
       lunes: l,
-      label: `${lunes.getDate()}/${lunes.getMonth() + 1} – ${sabado.getDate()}/${sabado.getMonth() + 1}`,
-      esActual: hoy >= l && hoy <= s,
+      label:
+        desde.getDate() === hasta.getDate()
+          ? `${desde.getDate()}/${m}`
+          : `${desde.getDate()}/${m} – ${hasta.getDate()}/${m}`,
+      esActual: hoy >= isoLocal(desde) && hoy <= isoLocal(hasta),
     });
     lunes.setDate(lunes.getDate() + 7);
   }
@@ -70,7 +74,11 @@ const HorasProfes = () => {
   const semanasDelMes = useMemo(() => semanasDeMes(mes), [mes]);
 
   useEffect(() => {
-    setSemanaGrilla((prev) => (prev && !semanasDelMes.some((s) => s.lunes === prev) ? '' : prev));
+    setSemanaGrilla((prev) =>
+      prev && !semanasDelMes.some((s) => s.lunes === prev)
+        ? (semanasDelMes.find((s) => s.esActual) ?? semanasDelMes[0])?.lunes ?? ''
+        : prev
+    );
   }, [semanasDelMes]);
   const [data, setData] = useState<HorasProfesMes | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,6 +103,13 @@ const HorasProfes = () => {
   useEffect(() => {
     void cargar(mes);
   }, [mes, cargar]);
+
+  const horasMesPorProfe = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const r of data?.reparto ?? []) out[r.profesorId] = r.horas;
+    for (const s of data?.suplentes ?? []) out[s.profesorId] = s.horas;
+    return out;
+  }, [data]);
 
   const profById = useMemo(() => new Map((data?.profesores ?? []).map((p) => [p.id, p])), [data]);
   const nombreProfe = (id: string | null) => {
@@ -267,9 +282,11 @@ const HorasProfes = () => {
             ))}
           </div>
           <GrillaProfesSemana
-            key={semanaGrilla || 'base'}
+            key={`${mes}|${semanaGrilla || 'base'}`}
             profesores={data.profesores}
             lunes={semanaGrilla || undefined}
+            mes={mes}
+            horasMes={horasMesPorProfe}
             onCambio={() => void cargar(mes, true)}
           />
         </div>

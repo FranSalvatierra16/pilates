@@ -1879,20 +1879,30 @@ app.post('/api/horas-profes/semana', async (req, res) => {
   if (!fechaValida(lunes) || !['copiar_anterior', 'restablecer'].includes(accion)) {
     return res.status(400).json({ error: 'Datos inválidos' });
   }
-  const sabado = sumarDiasIso(lunes, 5);
+  let desde = lunes;
+  let hasta = sumarDiasIso(lunes, 5);
+  const mes = req.body?.mes;
+  if (mesValido(mes)) {
+    const [y, m] = mes.split('-').map(Number);
+    const inicioMes = `${mes}-01`;
+    const finMes = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+    if (desde < inicioMes) desde = inicioMes;
+    if (hasta > finMes) hasta = finMes;
+    if (desde > hasta) return res.json({ ok: true, copiadas: 0 });
+  }
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     await client.query(
       'DELETE FROM profesor_clase_fecha WHERE sucursal_id = $1 AND planificado = true AND fecha >= $2::date AND fecha <= $3::date',
-      [sid, lunes, sabado]
+      [sid, desde, hasta]
     );
     let copiadas = 0;
     if (accion === 'copiar_anterior') {
       const { rows } = await client.query(
         `SELECT fecha::text AS fecha, hora, profesor_id, sin_clase FROM profesor_clase_fecha
           WHERE sucursal_id = $1 AND planificado = true AND fecha >= $2::date AND fecha <= $3::date`,
-        [sid, sumarDiasIso(lunes, -7), sumarDiasIso(lunes, -2)]
+        [sid, sumarDiasIso(desde, -7), sumarDiasIso(hasta, -7)]
       );
       for (const r of rows) {
         const { rowCount } = await client.query(

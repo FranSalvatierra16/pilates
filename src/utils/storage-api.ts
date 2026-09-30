@@ -191,8 +191,12 @@ export const storageApi = {
       ),
     getHorarioFijo: (lunes?: string): Promise<HorarioFijoProfes> =>
       request<HorarioFijoProfes>(`/api/horas-profes/horario-fijo${lunes ? `?lunes=${encodeURIComponent(lunes)}` : ''}`),
-    accionSemana: (lunes: string, accion: 'copiar_anterior' | 'restablecer'): Promise<{ ok: boolean; copiadas: number }> =>
-      request('/api/horas-profes/semana', { method: 'POST', body: JSON.stringify({ lunes, accion }) }),
+    accionSemana: (
+      lunes: string,
+      accion: 'copiar_anterior' | 'restablecer',
+      mes?: string
+    ): Promise<{ ok: boolean; copiadas: number }> =>
+      request('/api/horas-profes/semana', { method: 'POST', body: JSON.stringify({ lunes, accion, mes }) }),
     setHorarioFijo: (body: { diaSemana: number; hora: string; profesorId: string | null }): Promise<void> =>
       request('/api/horas-profes/horario-fijo', { method: 'PUT', body: JSON.stringify(body) }),
     setPagoDia: (body: { profesorId: string; fecha: string; pagado: boolean }): Promise<void> =>

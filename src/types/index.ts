@@ -145,11 +145,52 @@ export interface CierreCaja {
   createdAt: string;
 }
 
+export type TipoProfesor = 'duena' | 'suplente';
+
 export interface Profesor {
   id: string;
   nombre: string;
   apellido: string;
+  /** Dueña: reparte el total del mes según horas. Suplente: cobra por hora. */
+  tipo?: TipoProfesor;
+  precioHora?: number;
   createdAt: string;
+}
+
+export interface HorasProfesClase {
+  hora: string;
+  titulo: string;
+  profesorFijoId: string | null;
+  profesorId: string | null;
+  cambiado: boolean;
+  sinClase: boolean;
+  extra: boolean;
+}
+
+export interface HorasProfesDia {
+  fecha: string;
+  diaSemana: number;
+  cerrado: boolean;
+  clases: HorasProfesClase[];
+}
+
+export interface HorasProfesMes {
+  mes: string;
+  profesores: Array<{ id: string; nombre: string; apellido: string; tipo: TipoProfesor; precioHora: number }>;
+  dias: HorasProfesDia[];
+  horasSinProfe: number;
+  totalDuenas: number;
+  horasDuenasTotal: number;
+  reparto: Array<{ profesorId: string; horas: number; porcentaje: number; monto: number }>;
+  suplentes: Array<{
+    profesorId: string;
+    precioHora: number;
+    horas: number;
+    total: number;
+    pagado: number;
+    pendiente: number;
+    dias: Array<{ fecha: string; horas: number; monto: number; pagado: boolean }>;
+  }>;
 }
 
 export interface Turno {

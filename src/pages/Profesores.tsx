@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, X, Save, History } from 'lucide-react';
-import { Profesor, Gasto } from '../types';
+import { Link } from 'react-router-dom';
+import { Plus, Edit, Trash2, X, Save, History, Clock } from 'lucide-react';
+import { Profesor, Gasto, TipoProfesor } from '../types';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, formatHora24 } from '../utils/date';
 import { formatCurrency } from '../utils/format';
@@ -15,6 +16,8 @@ const Profesores = () => {
   const [formData, setFormData] = useState({
     nombre: '',
     apellido: '',
+    tipo: 'duena' as TipoProfesor,
+    precioHora: '',
   });
   const [profesorHistorial, setProfesorHistorial] = useState<Profesor | null>(null);
   const [gastosSueldos, setGastosSueldos] = useState<Gasto[]>([]);
@@ -39,6 +42,8 @@ const Profesores = () => {
     setFormData({
       nombre: '',
       apellido: '',
+      tipo: 'duena',
+      precioHora: '',
     });
     setEditingProfesor(null);
   };
@@ -49,6 +54,8 @@ const Profesores = () => {
       setFormData({
         nombre: profesor.nombre,
         apellido: profesor.apellido,
+        tipo: profesor.tipo === 'suplente' ? 'suplente' : 'duena',
+        precioHora: profesor.precioHora ? String(profesor.precioHora) : '',
       });
     } else {
       resetForm();
@@ -64,17 +71,22 @@ const Profesores = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const precioHora = formData.tipo === 'suplente' ? Math.max(0, Number(formData.precioHora) || 0) : 0;
     try {
       if (editingProfesor) {
         await storageHybrid.profesores.update(editingProfesor.id, {
           nombre: formData.nombre,
           apellido: formData.apellido,
+          tipo: formData.tipo,
+          precioHora,
         });
       } else {
         const nuevoProfesor: Profesor = {
           id: Date.now().toString(),
           nombre: formData.nombre,
           apellido: formData.apellido,
+          tipo: formData.tipo,
+          precioHora,
           createdAt: new Date().toISOString(),
         };
         await storageHybrid.profesores.add(nuevoProfesor);
@@ -136,13 +148,19 @@ const Profesores = () => {
           <span className="page-title-accent" aria-hidden />
           <h1 className="page-title">Profesores</h1>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Nuevo Profesor
-        </button>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Link to="/horas-profes" className="btn-secondary flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            Horas del mes
+          </Link>
+          <button
+            onClick={() => handleOpenModal()}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-5 h-5" />
+            Nuevo Profesor
+          </button>
+        </div>
       </div>
 
       {profesores.length === 0 ? (
@@ -161,6 +179,17 @@ const Profesores = () => {
                   <h3 className="text-xl font-bold text-gray-900">
                     {profesor.nombre} {profesor.apellido}
                   </h3>
+                  <p className="mt-1 text-sm">
+                    {profesor.tipo === 'suplente' ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-amber-800">
+                        Suplente · {formatCurrency(profesor.precioHora || 0)}/h
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 border border-violet-200 px-2 py-0.5 text-violet-800">
+                        Dueña
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-200">
@@ -282,6 +311,44 @@ const Profesores = () => {
                   placeholder="Apellido del profesor"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'duena', label: 'Dueña', hint: 'Reparte el total según horas' },
+                    { value: 'suplente', label: 'Suplente', hint: 'Cobra por hora' },
+                  ] as const).map((op) => (
+                    <button
+                      key={op.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, tipo: op.value })}
+                      className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                        formData.tipo === op.value
+                          ? 'border-primary-500 bg-primary-50 text-primary-900'
+                          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="block font-medium">{op.label}</span>
+                      <span className="block text-xs text-gray-500">{op.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {formData.tipo === 'suplente' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Precio por hora</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    inputMode="decimal"
+                    value={formData.precioHora}
+                    onChange={(e) => setFormData({ ...formData, precioHora: e.target.value })}
+                    className="input-field"
+                    placeholder="Ej: 8000"
+                  />
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"

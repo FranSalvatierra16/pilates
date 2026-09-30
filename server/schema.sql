@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS profesores (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE profesores ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursales(id) ON DELETE CASCADE;
+ALTER TABLE profesores ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'duena';
+ALTER TABLE profesores ADD COLUMN IF NOT EXISTS precio_hora NUMERIC(12,2) DEFAULT 0;
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS profesor_id TEXT REFERENCES profesores(id);
 ALTER TABLE gastos ADD COLUMN IF NOT EXISTS contabilizar_en_fecha DATE;
 
@@ -125,6 +127,38 @@ ALTER TABLE turnos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursal
 ALTER TABLE turnos ADD COLUMN IF NOT EXISTS cupo INTEGER DEFAULT 6;
 ALTER TABLE turnos ADD COLUMN IF NOT EXISTS destacado BOOLEAN DEFAULT false;
 ALTER TABLE turnos ADD COLUMN IF NOT EXISTS bloquear_recuperar BOOLEAN DEFAULT false;
+
+-- Horas de profes: cambio de profe (o sin clase) en una fecha+hora puntual
+CREATE TABLE IF NOT EXISTS profesor_clase_fecha (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  fecha DATE NOT NULL,
+  hora TEXT NOT NULL,
+  profesor_id TEXT REFERENCES profesores(id) ON DELETE CASCADE,
+  sin_clase BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (sucursal_id, fecha, hora)
+);
+
+-- Días pagados a profes suplentes
+CREATE TABLE IF NOT EXISTS profesor_pago_dia (
+  id TEXT PRIMARY KEY,
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  profesor_id TEXT NOT NULL REFERENCES profesores(id) ON DELETE CASCADE,
+  fecha DATE NOT NULL,
+  pagado BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (sucursal_id, profesor_id, fecha)
+);
+
+-- Total mensual a repartir entre profes dueñas (proporcional a horas)
+CREATE TABLE IF NOT EXISTS reparto_duenas_mes (
+  sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+  mes TEXT NOT NULL,
+  total NUMERIC(14,2) DEFAULT 0,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  PRIMARY KEY (sucursal_id, mes)
+);
 
 -- Asistencias
 CREATE TABLE IF NOT EXISTS asistencias (

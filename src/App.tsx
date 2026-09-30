@@ -94,6 +94,7 @@ import Dashboard from './pages/Dashboard';
 import Calendario from './pages/Calendario';
 import Alumnos from './pages/Alumnos';
 import Profesores from './pages/Profesores';
+import HorasProfes from './pages/HorasProfes';
 import Actividades from './pages/Actividades';
 import Acceso from './pages/Acceso';
 import Pagos from './pages/Pagos';
@@ -323,6 +324,16 @@ function App() {
               <ProtectedSucursalRoute>
                 <Layout>
                   <Profesores />
+                </Layout>
+              </ProtectedSucursalRoute>
+            }
+          />
+          <Route
+            path="/horas-profes"
+            element={
+              <ProtectedSucursalRoute>
+                <Layout>
+                  <HorasProfes />
                 </Layout>
               </ProtectedSucursalRoute>
             }

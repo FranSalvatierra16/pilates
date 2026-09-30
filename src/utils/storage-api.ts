@@ -7,6 +7,7 @@ import {
   Asistencia,
   AsistenciaHistorialItem,
   Profesor,
+  HorasProfesMes,
   RegistroLink,
   Sucursal,
   HorariosSucursal,
@@ -167,6 +168,16 @@ export const storageApi = {
     update: (id: string, updates: Partial<Profesor>): Promise<void> =>
       request(`/api/profesores/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
     delete: (id: string): Promise<void> => request(`/api/profesores/${id}`, { method: 'DELETE' }),
+  },
+  horasProfes: {
+    getMes: (mes: string): Promise<HorasProfesMes> =>
+      request<HorasProfesMes>(`/api/horas-profes?mes=${encodeURIComponent(mes)}`),
+    setClase: (body: { fecha: string; hora: string; profesorId?: string | null; sinClase?: boolean; restablecer?: boolean }): Promise<void> =>
+      request('/api/horas-profes/clase', { method: 'PUT', body: JSON.stringify(body) }),
+    setPagoDia: (body: { profesorId: string; fecha: string; pagado: boolean }): Promise<void> =>
+      request('/api/horas-profes/pago-dia', { method: 'PUT', body: JSON.stringify(body) }),
+    setTotalDuenas: (mes: string, total: number): Promise<void> =>
+      request('/api/horas-profes/reparto', { method: 'PUT', body: JSON.stringify({ mes, total }) }),
   },
   turnos: {
     getAll: (): Promise<Turno[]> => request<Turno[]>('/api/turnos'),

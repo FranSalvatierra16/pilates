@@ -217,6 +217,47 @@ async function migrateTurnosBloquearRecuperar(db) {
   }
 }
 
+async function migrateHorasProfes(db) {
+  try {
+    await db.query("ALTER TABLE profesores ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'duena'");
+    await db.query('ALTER TABLE profesores ADD COLUMN IF NOT EXISTS precio_hora NUMERIC(12,2) DEFAULT 0');
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS profesor_clase_fecha (
+        id TEXT PRIMARY KEY,
+        sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+        fecha DATE NOT NULL,
+        hora TEXT NOT NULL,
+        profesor_id TEXT REFERENCES profesores(id) ON DELETE CASCADE,
+        sin_clase BOOLEAN DEFAULT false,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE (sucursal_id, fecha, hora)
+      )
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS profesor_pago_dia (
+        id TEXT PRIMARY KEY,
+        sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+        profesor_id TEXT NOT NULL REFERENCES profesores(id) ON DELETE CASCADE,
+        fecha DATE NOT NULL,
+        pagado BOOLEAN DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        UNIQUE (sucursal_id, profesor_id, fecha)
+      )
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS reparto_duenas_mes (
+        sucursal_id TEXT NOT NULL REFERENCES sucursales(id) ON DELETE CASCADE,
+        mes TEXT NOT NULL,
+        total NUMERIC(14,2) DEFAULT 0,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        PRIMARY KEY (sucursal_id, mes)
+      )
+    `);
+  } catch (e) {
+    console.warn('Migración horas profes:', e.message);
+  }
+}
+
 async function seedAdminAndSucursal(db) {
   const adminUser = (process.env.ADMIN_USER || 'adminF').trim();
   const adminPassword = process.env.ADMIN_PASSWORD || '2401';
@@ -278,6 +319,7 @@ async function seedAdminAndSucursal(db) {
   await migrateNotificacionesTipoRestauro(db);
   await migrateAlumnosFechaNacimiento(db);
   await migrateTurnosBloquearRecuperar(db);
+  await migrateHorasProfes(db);
 }
 
 async function initSchema() {
@@ -1378,7 +1420,14 @@ app.get('/api/profesores', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const { rows } = await db.query('SELECT * FROM profesores WHERE sucursal_id = $1 ORDER BY created_at DESC', [req.user.sucursalId]);
-    res.json(rows.map((r) => ({ id: r.id, nombre: r.nombre, apellido: r.apellido, createdAt: r.created_at?.toISOString?.() ?? r.created_at })));
+    res.json(rows.map((r) => ({
+      id: r.id,
+      nombre: r.nombre,
+      apellido: r.apellido,
+      tipo: r.tipo === 'suplente' ? 'suplente' : 'duena',
+      precioHora: Number(r.precio_hora) || 0,
+      createdAt: r.created_at?.toISOString?.() ?? r.created_at,
+    })));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -1391,8 +1440,16 @@ app.post('/api/profesores', async (req, res) => {
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     const b = req.body;
     await db.query(
-      'INSERT INTO profesores (id, sucursal_id, nombre, apellido, created_at) VALUES ($1, $2, $3, $4, $5)',
-      [b.id, req.user.sucursalId, b.nombre, b.apellido, b.createdAt || new Date().toISOString()]
+      'INSERT INTO profesores (id, sucursal_id, nombre, apellido, tipo, precio_hora, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [
+        b.id,
+        req.user.sucursalId,
+        b.nombre,
+        b.apellido,
+        b.tipo === 'suplente' ? 'suplente' : 'duena',
+        Math.max(0, Number(b.precioHora) || 0),
+        b.createdAt || new Date().toISOString(),
+      ]
     );
     res.status(201).json({ ok: true });
   } catch (e) {
@@ -1411,6 +1468,8 @@ app.patch('/api/profesores/:id', async (req, res) => {
     let i = 1;
     if (b.nombre !== undefined) { updates.push(`nombre = $${i++}`); values.push(b.nombre); }
     if (b.apellido !== undefined) { updates.push(`apellido = $${i++}`); values.push(b.apellido); }
+    if (b.tipo !== undefined) { updates.push(`tipo = $${i++}`); values.push(b.tipo === 'suplente' ? 'suplente' : 'duena'); }
+    if (b.precioHora !== undefined) { updates.push(`precio_hora = $${i++}`); values.push(Math.max(0, Number(b.precioHora) || 0)); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
     values.push(req.params.id, req.user.sucursalId);
     await db.query(`UPDATE profesores SET ${updates.join(', ')} WHERE id = $${i} AND sucursal_id = $${i + 1}`, values);
@@ -1426,6 +1485,260 @@ app.delete('/api/profesores/:id', async (req, res) => {
     const db = await getPool();
     if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
     await db.query('DELETE FROM profesores WHERE id = $1 AND sucursal_id = $2', [req.params.id, req.user.sucursalId]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Horas de profes por mes ---
+function redondear2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+async function calcularHorasProfesMes(db, sid, mes) {
+  const [y, m] = mes.split('-').map(Number);
+  const ultimoDia = new Date(y, m, 0).getDate();
+  const desde = `${mes}-01`;
+  const hasta = `${mes}-${String(ultimoDia).padStart(2, '0')}`;
+
+  const [{ rows: profRows }, { rows: turnoRows }, { rows: horRows }, { rows: cierreRows }, { rows: ovRows }, { rows: pagoRows }, { rows: repRows }] =
+    await Promise.all([
+      db.query('SELECT id, nombre, apellido, tipo, precio_hora FROM profesores WHERE sucursal_id = $1 ORDER BY nombre, apellido', [sid]),
+      db.query('SELECT id, dia_semana, hora, titulo, profesor_id, alumno_ids, created_at FROM turnos WHERE sucursal_id = $1 ORDER BY dia_semana, hora, created_at', [sid]),
+      db.query('SELECT horarios_no_disponibles_por_dia FROM sucursales WHERE id = $1', [sid]),
+      db.query(
+        `SELECT fecha::text AS fecha, cerrar_todo, horas_cerradas FROM cierre_dia_calendario
+          WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
+        [sid, desde, hasta]
+      ),
+      db.query(
+        `SELECT fecha::text AS fecha, hora, profesor_id, sin_clase FROM profesor_clase_fecha
+          WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
+        [sid, desde, hasta]
+      ),
+      db.query(
+        `SELECT profesor_id, fecha::text AS fecha, pagado FROM profesor_pago_dia
+          WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
+        [sid, desde, hasta]
+      ),
+      db.query('SELECT total FROM reparto_duenas_mes WHERE sucursal_id = $1 AND mes = $2', [sid, mes]),
+    ]);
+
+  const profesores = profRows.map((r) => ({
+    id: r.id,
+    nombre: r.nombre,
+    apellido: r.apellido,
+    tipo: r.tipo === 'suplente' ? 'suplente' : 'duena',
+    precioHora: Number(r.precio_hora) || 0,
+  }));
+  const profById = new Map(profesores.map((p) => [p.id, p]));
+
+  const slots = new Map();
+  for (const t of turnoRows) {
+    const hora = String(t.hora || '').slice(0, 5);
+    const key = `${Number(t.dia_semana)}|${hora}`;
+    const tieneAlumnos = Array.isArray(t.alumno_ids) && t.alumno_ids.length > 0;
+    const prev = slots.get(key);
+    if (!prev) {
+      slots.set(key, { diaSemana: Number(t.dia_semana), hora, titulo: t.titulo || '', profesorId: t.profesor_id || null, tieneAlumnos });
+      continue;
+    }
+    if (!prev.profesorId && t.profesor_id) prev.profesorId = t.profesor_id;
+    if (!prev.titulo && t.titulo) prev.titulo = t.titulo;
+    prev.tieneAlumnos = prev.tieneAlumnos || tieneAlumnos;
+  }
+  const slotsPorDia = new Map();
+  for (const s of slots.values()) {
+    if (!s.profesorId && !s.tieneAlumnos) continue;
+    if (!slotsPorDia.has(s.diaSemana)) slotsPorDia.set(s.diaSemana, []);
+    slotsPorDia.get(s.diaSemana).push(s);
+  }
+  for (const list of slotsPorDia.values()) list.sort((a, b) => a.hora.localeCompare(b.hora));
+
+  const noDisp = normalizarHorariosNoDisponiblesPorDia(horRows[0]?.horarios_no_disponibles_por_dia);
+  const cierres = new Map(cierreRows.map((c) => [String(c.fecha).slice(0, 10), { cerrarTodo: c.cerrar_todo === true, horas: new Set(parseHorasCerradasRow(c)) }]));
+  const overrides = new Map(ovRows.map((o) => [`${String(o.fecha).slice(0, 10)}|${String(o.hora).slice(0, 5)}`, o]));
+  const pagos = new Map(pagoRows.map((p) => [`${p.profesor_id}|${String(p.fecha).slice(0, 10)}`, p.pagado === true]));
+
+  const dias = [];
+  const horasPorProfe = new Map();
+  const diasSuplente = new Map();
+  let horasSinProfe = 0;
+
+  for (let d = 1; d <= ultimoDia; d++) {
+    const fecha = `${mes}-${String(d).padStart(2, '0')}`;
+    const ds = diaSemanaDesdeFechaIsoLocal(fecha);
+    const cierre = cierres.get(fecha);
+    const noDispDia = new Set(noDisp[ds] || []);
+    const clasesFijas = slotsPorDia.get(ds) || [];
+    const clasesKeys = new Set(clasesFijas.map((c) => c.hora));
+    const extras = [];
+    for (const [k, o] of overrides) {
+      const [f, h] = k.split('|');
+      if (f === fecha && !clasesKeys.has(h) && o.profesor_id && !o.sin_clase) {
+        extras.push({ diaSemana: ds, hora: h, titulo: '', profesorId: null, tieneAlumnos: false, extra: true });
+      }
+    }
+    const clases = [];
+    for (const c of [...clasesFijas, ...extras].sort((a, b) => a.hora.localeCompare(b.hora))) {
+      const cerrada = !!cierre && (cierre.cerrarTodo || cierre.horas.has(c.hora));
+      if (cerrada || noDispDia.has(c.hora)) continue;
+      const ov = overrides.get(`${fecha}|${c.hora}`);
+      const sinClase = !!ov?.sin_clase;
+      const profesorId = sinClase ? null : (ov?.profesor_id && profById.has(ov.profesor_id) ? ov.profesor_id : (c.profesorId && profById.has(c.profesorId) ? c.profesorId : null));
+      clases.push({
+        hora: c.hora,
+        titulo: c.titulo,
+        profesorFijoId: c.profesorId || null,
+        profesorId,
+        cambiado: !!ov,
+        sinClase,
+        extra: !!c.extra,
+      });
+      if (sinClase) continue;
+      if (!profesorId) {
+        horasSinProfe++;
+        continue;
+      }
+      horasPorProfe.set(profesorId, (horasPorProfe.get(profesorId) || 0) + 1);
+      if (profById.get(profesorId).tipo === 'suplente') {
+        const k = `${profesorId}|${fecha}`;
+        diasSuplente.set(k, (diasSuplente.get(k) || 0) + 1);
+      }
+    }
+    if (clases.length > 0 || clasesFijas.length > 0) {
+      dias.push({ fecha, diaSemana: ds, cerrado: !!cierre?.cerrarTodo, clases });
+    }
+  }
+
+  const totalDuenas = Number(repRows[0]?.total) || 0;
+  const duenas = profesores.filter((p) => p.tipo === 'duena');
+  const horasDuenasTotal = duenas.reduce((acc, p) => acc + (horasPorProfe.get(p.id) || 0), 0);
+  const reparto = duenas.map((p) => {
+    const horas = horasPorProfe.get(p.id) || 0;
+    const porcentaje = horasDuenasTotal > 0 ? (horas / horasDuenasTotal) * 100 : 0;
+    return {
+      profesorId: p.id,
+      horas,
+      porcentaje: redondear2(porcentaje),
+      monto: horasDuenasTotal > 0 ? redondear2((totalDuenas * horas) / horasDuenasTotal) : 0,
+    };
+  });
+
+  const suplentes = profesores
+    .filter((p) => p.tipo === 'suplente')
+    .map((p) => {
+      const diasList = [];
+      for (const [k, horas] of diasSuplente) {
+        const [pid, fecha] = k.split('|');
+        if (pid !== p.id) continue;
+        diasList.push({ fecha, horas, monto: redondear2(horas * p.precioHora), pagado: pagos.get(k) === true });
+      }
+      diasList.sort((a, b) => a.fecha.localeCompare(b.fecha));
+      const horas = diasList.reduce((acc, x) => acc + x.horas, 0);
+      const total = redondear2(horas * p.precioHora);
+      const pagado = redondear2(diasList.filter((x) => x.pagado).reduce((acc, x) => acc + x.monto, 0));
+      return { profesorId: p.id, precioHora: p.precioHora, horas, total, pagado, pendiente: redondear2(total - pagado), dias: diasList };
+    });
+
+  return { mes, profesores, dias, horasSinProfe, totalDuenas, horasDuenasTotal, reparto, suplentes };
+}
+
+function mesValido(mes) {
+  return typeof mes === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(mes);
+}
+
+function fechaValida(fecha) {
+  return typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha);
+}
+
+app.get('/api/horas-profes', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const mes = String(req.query.mes || '');
+    if (!mesValido(mes)) return res.status(400).json({ error: 'Mes inválido (YYYY-MM)' });
+    res.json(await calcularHorasProfesMes(db, req.user.sucursalId, mes));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Cambia la profe de una clase puntual. body: { fecha, hora, profesorId?, sinClase?, restablecer? } */
+app.put('/api/horas-profes/clase', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { fecha, restablecer, sinClase } = req.body || {};
+    const hora = String(req.body?.hora || '').slice(0, 5);
+    if (!fechaValida(fecha) || !/^\d{2}:\d{2}$/.test(hora)) return res.status(400).json({ error: 'Fecha u hora inválida' });
+    if (restablecer) {
+      await db.query('DELETE FROM profesor_clase_fecha WHERE sucursal_id = $1 AND fecha = $2::date AND hora = $3', [sid, fecha, hora]);
+      return res.json({ ok: true });
+    }
+    const profesorId = sinClase ? null : (req.body?.profesorId || null);
+    if (!sinClase && !profesorId) return res.status(400).json({ error: 'Elegí una profe' });
+    if (profesorId) {
+      const { rows } = await db.query('SELECT 1 FROM profesores WHERE id = $1 AND sucursal_id = $2', [profesorId, sid]);
+      if (rows.length === 0) return res.status(404).json({ error: 'Profe no encontrada' });
+    }
+    await db.query(
+      `INSERT INTO profesor_clase_fecha (id, sucursal_id, fecha, hora, profesor_id, sin_clase)
+       VALUES ($1, $2, $3::date, $4, $5, $6)
+       ON CONFLICT (sucursal_id, fecha, hora) DO UPDATE SET profesor_id = EXCLUDED.profesor_id, sin_clase = EXCLUDED.sin_clase`,
+      [crypto.randomUUID(), sid, fecha, hora, profesorId, !!sinClase]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Marca un día de una profe suplente como pagado o no. body: { profesorId, fecha, pagado } */
+app.put('/api/horas-profes/pago-dia', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const sid = req.user.sucursalId;
+    const { profesorId, fecha, pagado } = req.body || {};
+    if (!profesorId || !fechaValida(fecha)) return res.status(400).json({ error: 'Datos inválidos' });
+    const { rows } = await db.query('SELECT 1 FROM profesores WHERE id = $1 AND sucursal_id = $2', [profesorId, sid]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Profe no encontrada' });
+    if (pagado) {
+      await db.query(
+        `INSERT INTO profesor_pago_dia (id, sucursal_id, profesor_id, fecha, pagado)
+         VALUES ($1, $2, $3, $4::date, true)
+         ON CONFLICT (sucursal_id, profesor_id, fecha) DO UPDATE SET pagado = true`,
+        [crypto.randomUUID(), sid, profesorId, fecha]
+      );
+    } else {
+      await db.query('DELETE FROM profesor_pago_dia WHERE sucursal_id = $1 AND profesor_id = $2 AND fecha = $3::date', [sid, profesorId, fecha]);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** Total del mes a repartir entre dueñas. body: { mes, total } */
+app.put('/api/horas-profes/reparto', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { mes } = req.body || {};
+    if (!mesValido(mes)) return res.status(400).json({ error: 'Mes inválido (YYYY-MM)' });
+    const total = Math.max(0, Number(req.body?.total) || 0);
+    await db.query(
+      `INSERT INTO reparto_duenas_mes (sucursal_id, mes, total, updated_at) VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (sucursal_id, mes) DO UPDATE SET total = EXCLUDED.total, updated_at = NOW()`,
+      [req.user.sucursalId, mes, total]
+    );
     res.json({ ok: true });
   } catch (e) {
     console.error(e);

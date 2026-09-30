@@ -8,6 +8,8 @@ import {
   AsistenciaHistorialItem,
   Profesor,
   HorasProfesMes,
+  ReemplazoProfeFecha,
+  HorarioFijoProfes,
   RegistroLink,
   Sucursal,
   HorariosSucursal,
@@ -172,8 +174,23 @@ export const storageApi = {
   horasProfes: {
     getMes: (mes: string): Promise<HorasProfesMes> =>
       request<HorasProfesMes>(`/api/horas-profes?mes=${encodeURIComponent(mes)}`),
-    setClase: (body: { fecha: string; hora: string; profesorId?: string | null; sinClase?: boolean; restablecer?: boolean }): Promise<void> =>
+    setClase: (body: {
+      fecha: string;
+      hora: string;
+      profesorId?: string | null;
+      sinClase?: boolean;
+      restablecer?: boolean;
+      reemplazaProfesorId?: string | null;
+      motivo?: string;
+    }): Promise<void> =>
       request('/api/horas-profes/clase', { method: 'PUT', body: JSON.stringify(body) }),
+    getReemplazos: (desde: string, hasta: string): Promise<ReemplazoProfeFecha[]> =>
+      request<ReemplazoProfeFecha[]>(
+        `/api/horas-profes/reemplazos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`
+      ),
+    getHorarioFijo: (): Promise<HorarioFijoProfes> => request<HorarioFijoProfes>('/api/horas-profes/horario-fijo'),
+    setHorarioFijo: (body: { diaSemana: number; hora: string; profesorId: string | null }): Promise<void> =>
+      request('/api/horas-profes/horario-fijo', { method: 'PUT', body: JSON.stringify(body) }),
     setPagoDia: (body: { profesorId: string; fecha: string; pagado: boolean }): Promise<void> =>
       request('/api/horas-profes/pago-dia', { method: 'PUT', body: JSON.stringify(body) }),
     setTotalDuenas: (mes: string, total: number): Promise<void> =>

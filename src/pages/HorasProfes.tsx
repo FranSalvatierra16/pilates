@@ -6,6 +6,7 @@ import { storageApi } from '../utils/storage-api';
 import { formatCurrency } from '../utils/format';
 import { hoyISO, parseFechaLocal } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
+import GrillaProfesSemana from '../components/GrillaProfesSemana';
 
 const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const SIN_CLASE = '__sin_clase__';
@@ -34,6 +35,7 @@ function etiquetaFecha(fecha: string): string {
 
 const HorasProfes = () => {
   const toast = useToast();
+  const [vista, setVista] = useState<'semana' | 'mes'>('semana');
   const [mes, setMes] = useState(mesActual);
   const [data, setData] = useState<HorasProfesMes | null>(null);
   const [loading, setLoading] = useState(true);
@@ -162,15 +164,35 @@ const HorasProfes = () => {
             <h1 className="page-title">Horas de profes</h1>
           </div>
         </div>
-        <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1">
-          <button type="button" onClick={() => setMes(moverMes(mes, -1))} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Mes anterior">
-            <ChevronLeft className="w-5 h-5" />
+        {vista === 'mes' && (
+          <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1">
+            <button type="button" onClick={() => setMes(moverMes(mes, -1))} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Mes anterior">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <span className="min-w-[10rem] text-center font-semibold text-gray-800">{nombreMes(mes)}</span>
+            <button type="button" onClick={() => setMes(moverMes(mes, 1))} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Mes siguiente">
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
+        {([
+          { id: 'semana', label: 'Horario semanal' },
+          { id: 'mes', label: 'Horas y pagos del mes' },
+        ] as const).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setVista(t.id)}
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              vista === t.id ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            {t.label}
           </button>
-          <span className="min-w-[10rem] text-center font-semibold text-gray-800">{nombreMes(mes)}</span>
-          <button type="button" onClick={() => setMes(moverMes(mes, 1))} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Mes siguiente">
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
+        ))}
       </div>
 
       {loading || !data ? (
@@ -179,13 +201,15 @@ const HorasProfes = () => {
         </div>
       ) : data.profesores.length === 0 ? (
         <div className="card text-center py-12 text-gray-500">
-          Primero cargá las profes en <Link to="/profesores" className="text-primary-700 underline">Profesores</Link> y asignalas a las clases del calendario.
+          Primero cargá las profes en <Link to="/profesores" className="text-primary-700 underline">Profesores</Link>.
         </div>
+      ) : vista === 'semana' ? (
+        <GrillaProfesSemana profesores={data.profesores} onCambio={() => void cargar(mes, true)} />
       ) : (
         <>
           <p className="text-sm text-gray-500">
-            Las horas salen de las clases del calendario (cada clase = 1 hora) con la profe asignada. Los días cerrados no cuentan.
-            Si un día dio otra profe o no hubo clase, cambialo abajo en <strong>Clases del mes</strong>.
+            Las horas salen del horario semanal (cada clase = 1 hora) más los reemplazos que cargues en el calendario. Los días cerrados no cuentan.
+            También podés corregir un día abajo en <strong>Clases del mes</strong>.
           </p>
 
           {data.horasSinProfe > 0 && (
@@ -291,6 +315,12 @@ const HorasProfes = () => {
                             <p className="text-xs text-gray-500">
                               {d.horas} h · {formatCurrency(d.monto)}
                             </p>
+                            {d.reemplazos.map((r) => (
+                              <p key={r.hora} className="text-xs text-blue-700">
+                                {r.hora} reemplazó a {nombreProfe(r.profesorId)}
+                                {r.motivo && <span className="text-gray-500"> · {r.motivo}</span>}
+                              </p>
+                            ))}
                           </div>
                           <button
                             type="button"
@@ -388,6 +418,12 @@ const HorasProfes = () => {
                             <span className="w-14 font-mono text-sm text-gray-700">{c.hora}</span>
                             <span className="flex-1 min-w-[6rem] text-sm text-gray-500 truncate">
                               {c.extra ? 'Clase extra' : c.titulo || 'Clase'}
+                              {c.reemplazaProfesorId && (
+                                <span className="block text-xs text-blue-700 truncate">
+                                  Reemplaza a {nombreProfe(c.reemplazaProfesorId)}
+                                  {c.motivo && <span className="text-gray-500"> · {c.motivo}</span>}
+                                </span>
+                              )}
                             </span>
                             <select
                               value={c.sinClase ? SIN_CLASE : c.profesorId ?? ''}

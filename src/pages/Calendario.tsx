@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical, Cake, Ban } from 'lucide-react';
-import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno } from '../types';
+import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno, ReemplazoProfeFecha } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
@@ -205,6 +205,10 @@ const Calendario = () => {
     bloquearRecuperar: false,
   });
   const [cupoTurnoInput, setCupoTurnoInput] = useState(String(CUPO_DEFAULT));
+  const [reemplazosProfe, setReemplazosProfe] = useState<Record<string, ReemplazoProfeFecha>>({});
+  const [fechaEditarTurno, setFechaEditarTurno] = useState('');
+  const REEMPLAZO_VACIO = { activo: false, sinClase: false, profesorId: '', reemplazaProfesorId: '', motivo: '' };
+  const [reemplazoForm, setReemplazoForm] = useState(REEMPLAZO_VACIO);
   const [showModalAumentarCupo, setShowModalAumentarCupo] = useState(false);
   const [guardandoCupoGlobal, setGuardandoCupoGlobal] = useState(false);
   const [showModalCompartirDisponibles, setShowModalCompartirDisponibles] = useState(false);
@@ -306,6 +310,7 @@ const Calendario = () => {
       await loadLiberacionesSemana();
       await loadInscripciones();
       await loadCierresCalendario();
+      await loadReemplazosProfe();
     })();
   }, [semanaVista]);
 
@@ -447,6 +452,50 @@ const Calendario = () => {
     } catch {
       setInscripciones([]);
     }
+  };
+
+  const loadReemplazosProfe = async () => {
+    if (!useApi()) {
+      setReemplazosProfe({});
+      return;
+    }
+    try {
+      const rows = await storageApi.horasProfes.getReemplazos(
+        getFechaFromSemanaYDia(semanaVista, 0),
+        getFechaFromSemanaYDia(semanaVista, 5)
+      );
+      const map: Record<string, ReemplazoProfeFecha> = {};
+      for (const r of rows) map[`${r.fecha}|${r.hora}`] = r;
+      setReemplazosProfe(map);
+    } catch {
+      setReemplazosProfe({});
+    }
+  };
+
+  const nombreProfesor = (id: string | null | undefined) => {
+    const p = id ? profesores.find((x) => x.id === id) : null;
+    return p ? `${p.nombre} ${p.apellido}`.trim() : '';
+  };
+
+  const renderProfeCelda = (turno: Turno | undefined, fecha: string, hora: string, compacto: boolean) => {
+    const r = reemplazosProfe[`${fecha}|${hora}`];
+    const base = compacto ? 'text-xs truncate' : '';
+    if (r?.sinClase) {
+      return <div className={`${base} text-gray-500 line-through`}>Sin clase este día{r.motivo ? ` · ${r.motivo}` : ''}</div>;
+    }
+    if (r?.profesorId) {
+      const reemplazado = nombreProfesor(r.reemplazaProfesorId || turno?.profesorId);
+      return (
+        <div className={`${base} text-blue-700`} title={r.motivo || undefined}>
+          <span className="font-medium">Prof: {nombreProfesor(r.profesorId)}</span>
+          {reemplazado && r.profesorId !== (r.reemplazaProfesorId || turno?.profesorId) && (
+            <span className="text-blue-600/80"> (x {reemplazado})</span>
+          )}
+        </div>
+      );
+    }
+    const fija = nombreProfesor(turno?.profesorId);
+    return fija ? <div className={`${base} text-gray-600`}>Prof: {fija}</div> : null;
   };
 
   const loadCierresCalendario = async () => {
@@ -966,6 +1015,20 @@ const Calendario = () => {
 
   const handleEditarTurno = (diaSemana: number, hora: string) => {
     const turno = getTurnoRepresentativoDelSlot(diaSemana, hora);
+    const fecha = getFechaFromSemanaYDia(semanaVista, diaSemana);
+    const r = reemplazosProfe[`${fecha}|${hora}`];
+    setFechaEditarTurno(fecha);
+    setReemplazoForm(
+      r
+        ? {
+            activo: true,
+            sinClase: r.sinClase,
+            profesorId: r.profesorId || '',
+            reemplazaProfesorId: r.reemplazaProfesorId || turno?.profesorId || '',
+            motivo: r.motivo || '',
+          }
+        : { ...REEMPLAZO_VACIO, reemplazaProfesorId: turno?.profesorId || '' }
+    );
     if (turno) {
       setTurnoParaEditar(turno);
       setFormDataTurno({
@@ -1177,6 +1240,10 @@ const Calendario = () => {
 
   const handleGuardarEdicionTurno = async () => {
     if (!turnoParaEditar) return;
+    if (reemplazoForm.activo && !reemplazoForm.sinClase && !reemplazoForm.profesorId) {
+      toast.warning('Elegí qué profe da la clase ese día, o desactivá el reemplazo.');
+      return;
+    }
 
     try {
       const cupo = parseCupo(cupoTurnoInput, formDataTurno.cupo);
@@ -1200,7 +1267,26 @@ const Calendario = () => {
           bloquearRecuperar: formDataTurno.bloquearRecuperar,
         });
       }
-      
+
+      if (useApi() && fechaEditarTurno) {
+        const hora = turnoParaEditar.hora;
+        const teniaReemplazo = !!reemplazosProfe[`${fechaEditarTurno}|${hora}`];
+        if (reemplazoForm.activo && reemplazoForm.sinClase) {
+          await storageApi.horasProfes.setClase({ fecha: fechaEditarTurno, hora, sinClase: true, motivo: reemplazoForm.motivo });
+        } else if (reemplazoForm.activo && reemplazoForm.profesorId) {
+          await storageApi.horasProfes.setClase({
+            fecha: fechaEditarTurno,
+            hora,
+            profesorId: reemplazoForm.profesorId,
+            reemplazaProfesorId: reemplazoForm.reemplazaProfesorId || formDataTurno.profesorId || null,
+            motivo: reemplazoForm.motivo,
+          });
+        } else if (teniaReemplazo) {
+          await storageApi.horasProfes.setClase({ fecha: fechaEditarTurno, hora, restablecer: true });
+        }
+        await loadReemplazosProfe();
+      }
+
       await loadTurnos();
       setShowModalEditarTurno(false);
       setTurnoParaEditar(null);
@@ -2247,7 +2333,6 @@ const Calendario = () => {
                     {horariosManana.map((hora) => {
                       const turno = getTurnoRepresentativoDelSlot(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
-                      const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = cupoDelSlot(diaIndex, hora);
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
@@ -2314,7 +2399,7 @@ const Calendario = () => {
                           {turno && (
                             <div className="mb-2 text-sm">
                               {turno.titulo && <p className="font-medium text-gray-800">{turno.titulo}</p>}
-                              {profesor && <p className="text-gray-600">Prof: {profesor.nombre} {profesor.apellido}</p>}
+                              {renderProfeCelda(turno, fechaDiaMovil, hora, false)}
                               <p className={`flex items-center gap-1 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-4 h-4" />
                                 {ocupacionTurno}/{cupo} alumnos
@@ -2347,7 +2432,6 @@ const Calendario = () => {
                     {horariosTarde.map((hora) => {
                       const turno = getTurnoRepresentativoDelSlot(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
-                      const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = cupoDelSlot(diaIndex, hora);
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
@@ -2414,7 +2498,7 @@ const Calendario = () => {
                           {turno && (
                             <div className="mb-2 text-sm">
                               {turno.titulo && <p className="font-medium text-gray-800">{turno.titulo}</p>}
-                              {profesor && <p className="text-gray-600">Prof: {profesor.nombre} {profesor.apellido}</p>}
+                              {renderProfeCelda(turno, fechaDiaMovil, hora, false)}
                               <p className={`flex items-center gap-1 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-4 h-4" />
                                 {ocupacionTurno}/{cupo} alumnos
@@ -2549,7 +2633,6 @@ const Calendario = () => {
                       const fechaCol = getFechaFromSemanaYDia(semanaVista, diaIndex);
                       const turno = getTurnoRepresentativoDelSlot(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
-                      const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = cupoDelSlot(diaIndex, hora);
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
@@ -2595,7 +2678,7 @@ const Calendario = () => {
                           {turno && (
                             <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
                               {turno.titulo && <div className="text-xs font-semibold text-gray-700 mb-0.5 truncate">{turno.titulo}</div>}
-                              {profesor && <div className="text-xs text-gray-600 truncate">Prof: {profesor.nombre} {profesor.apellido}</div>}
+                              {renderProfeCelda(turno, fechaCol, hora, true)}
                               <div className={`text-xs flex items-center gap-1 mt-0.5 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-3.5 h-3.5 flex-shrink-0" />
                                 {ocupacionTurno}/{cupo}
@@ -2638,7 +2721,6 @@ const Calendario = () => {
                       const fechaCol = getFechaFromSemanaYDia(semanaVista, diaIndex);
                       const turno = getTurnoRepresentativoDelSlot(diaIndex, hora);
                       const alumnosTurno = getAlumnosDelSlot(diaIndex, hora);
-                      const profesor = turno?.profesorId ? profesores.find(p => p.id === turno.profesorId) : null;
                       const cupo = cupoDelSlot(diaIndex, hora);
                       const ocupacionTurno = contarOcupacionTurno(alumnosTurno);
                       const lleno = ocupacionTurno >= cupo;
@@ -2684,7 +2766,7 @@ const Calendario = () => {
                           {turno && (
                             <div className="mb-1 sm:mb-2 pb-1 sm:pb-2 border-b border-gray-200">
                               {turno.titulo && <div className="text-xs font-semibold text-gray-700 mb-0.5 truncate">{turno.titulo}</div>}
-                              {profesor && <div className="text-xs text-gray-600 truncate">Prof: {profesor.nombre} {profesor.apellido}</div>}
+                              {renderProfeCelda(turno, fechaCol, hora, true)}
                               <div className={`text-xs flex items-center gap-1 mt-0.5 ${lleno ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                                 <Users className="w-3.5 h-3.5 flex-shrink-0" />
                                 {ocupacionTurno}/{cupo}
@@ -3482,7 +3564,97 @@ const Calendario = () => {
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-xs text-gray-500">Profe fija: se repite todas las semanas.</p>
               </div>
+              {useApi() && fechaEditarTurno && (
+                <div
+                  className={`rounded-lg border-2 p-3 space-y-3 transition-colors ${
+                    reemplazoForm.activo ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={reemplazoForm.activo}
+                      onChange={(e) =>
+                        setReemplazoForm({
+                          ...reemplazoForm,
+                          activo: e.target.checked,
+                          reemplazaProfesorId: reemplazoForm.reemplazaProfesorId || formDataTurno.profesorId,
+                        })
+                      }
+                      className="mt-1 h-4 w-4"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-gray-800">
+                        Reemplazar profe solo el {formatDate(fechaEditarTurno)}
+                      </span>
+                      <span className="block text-xs text-gray-500">No cambia el horario fijo; cuenta para las horas del mes.</span>
+                    </span>
+                  </label>
+                  {reemplazoForm.activo && (
+                    <>
+                      <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={reemplazoForm.sinClase}
+                          onChange={(e) => setReemplazoForm({ ...reemplazoForm, sinClase: e.target.checked })}
+                          className="h-4 w-4"
+                        />
+                        Ese día no hubo clase
+                      </label>
+                      {!reemplazoForm.sinClase && (
+                        <>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Da la clase</label>
+                            <select
+                              value={reemplazoForm.profesorId}
+                              onChange={(e) => setReemplazoForm({ ...reemplazoForm, profesorId: e.target.value })}
+                              className="input-field"
+                            >
+                              <option value="">Elegir profe…</option>
+                              {[...profesores]
+                                .sort((a, b) => Number(b.tipo === 'suplente') - Number(a.tipo === 'suplente'))
+                                .map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.nombre} {p.apellido}
+                                    {p.tipo === 'suplente' ? ' (suplente)' : ''}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Reemplaza a</label>
+                            <select
+                              value={reemplazoForm.reemplazaProfesorId}
+                              onChange={(e) => setReemplazoForm({ ...reemplazoForm, reemplazaProfesorId: e.target.value })}
+                              className="input-field"
+                            >
+                              <option value="">—</option>
+                              {profesores.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.nombre} {p.apellido}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      )}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Motivo (opcional)</label>
+                        <input
+                          type="text"
+                          value={reemplazoForm.motivo}
+                          onChange={(e) => setReemplazoForm({ ...reemplazoForm, motivo: e.target.value })}
+                          className="input-field"
+                          placeholder="Ej: enferma, viaje, feriado…"
+                          maxLength={300}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setFormDataTurno({ ...formDataTurno, destacado: !formDataTurno.destacado })}

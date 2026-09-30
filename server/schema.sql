@@ -139,6 +139,8 @@ CREATE TABLE IF NOT EXISTS profesor_clase_fecha (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE (sucursal_id, fecha, hora)
 );
+ALTER TABLE profesor_clase_fecha ADD COLUMN IF NOT EXISTS reemplaza_profesor_id TEXT REFERENCES profesores(id) ON DELETE SET NULL;
+ALTER TABLE profesor_clase_fecha ADD COLUMN IF NOT EXISTS motivo TEXT;
 
 -- Días pagados a profes suplentes
 CREATE TABLE IF NOT EXISTS profesor_pago_dia (

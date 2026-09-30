@@ -165,6 +165,24 @@ export interface HorasProfesClase {
   cambiado: boolean;
   sinClase: boolean;
   extra: boolean;
+  reemplazaProfesorId: string | null;
+  motivo: string;
+}
+
+export interface ReemplazoProfeFecha {
+  fecha: string;
+  hora: string;
+  profesorId: string | null;
+  sinClase: boolean;
+  reemplazaProfesorId: string | null;
+  motivo: string;
+}
+
+export interface HorarioFijoProfes {
+  manana: string[];
+  tarde: string[];
+  horariosNoDisponiblesPorDia: Record<number, string[]>;
+  clases: Array<{ diaSemana: number; hora: string; titulo: string; profesorId: string | null; alumnos: number }>;
 }
 
 export interface HorasProfesDia {
@@ -189,7 +207,13 @@ export interface HorasProfesMes {
     total: number;
     pagado: number;
     pendiente: number;
-    dias: Array<{ fecha: string; horas: number; monto: number; pagado: boolean }>;
+    dias: Array<{
+      fecha: string;
+      horas: number;
+      monto: number;
+      pagado: boolean;
+      reemplazos: Array<{ hora: string; profesorId: string; motivo: string }>;
+    }>;
   }>;
 }
 

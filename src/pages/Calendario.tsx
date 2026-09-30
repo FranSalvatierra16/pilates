@@ -483,6 +483,9 @@ const Calendario = () => {
     if (r?.sinClase) {
       return <div className={`${base} text-gray-500 line-through`}>Sin clase este día{r.motivo ? ` · ${r.motivo}` : ''}</div>;
     }
+    if (r?.profesorId && r.planificado) {
+      return <div className={`${base} text-gray-600`}>Prof: {nombreProfesor(r.profesorId)}</div>;
+    }
     if (r?.profesorId) {
       const reemplazado = nombreProfesor(r.reemplazaProfesorId || turno?.profesorId);
       return (
@@ -1018,8 +1021,9 @@ const Calendario = () => {
     const fecha = getFechaFromSemanaYDia(semanaVista, diaSemana);
     const r = reemplazosProfe[`${fecha}|${hora}`];
     setFechaEditarTurno(fecha);
+    const profeSemana = r?.planificado && !r.sinClase ? r.profesorId : null;
     setReemplazoForm(
-      r
+      r && !r.planificado
         ? {
             activo: true,
             sinClase: r.sinClase,
@@ -1027,7 +1031,7 @@ const Calendario = () => {
             reemplazaProfesorId: r.reemplazaProfesorId || turno?.profesorId || '',
             motivo: r.motivo || '',
           }
-        : { ...REEMPLAZO_VACIO, reemplazaProfesorId: turno?.profesorId || '' }
+        : { ...REEMPLAZO_VACIO, reemplazaProfesorId: profeSemana || turno?.profesorId || '' }
     );
     if (turno) {
       setTurnoParaEditar(turno);
@@ -1270,7 +1274,8 @@ const Calendario = () => {
 
       if (useApi() && fechaEditarTurno) {
         const hora = turnoParaEditar.hora;
-        const teniaReemplazo = !!reemplazosProfe[`${fechaEditarTurno}|${hora}`];
+        const previo = reemplazosProfe[`${fechaEditarTurno}|${hora}`];
+        const teniaReemplazo = !!previo && !previo.planificado;
         if (reemplazoForm.activo && reemplazoForm.sinClase) {
           await storageApi.horasProfes.setClase({ fecha: fechaEditarTurno, hora, sinClase: true, motivo: reemplazoForm.motivo });
         } else if (reemplazoForm.activo && reemplazoForm.profesorId) {
@@ -3565,6 +3570,15 @@ const Calendario = () => {
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-gray-500">Profe fija: se repite todas las semanas.</p>
+                {(() => {
+                  const r = fechaEditarTurno ? reemplazosProfe[`${fechaEditarTurno}|${turnoParaEditar.hora}`] : undefined;
+                  if (!r?.planificado) return null;
+                  return (
+                    <p className="mt-1 text-xs font-medium text-gray-700">
+                      Esta semana (grilla de profes): {r.sinClase ? 'no hay clase' : nombreProfesor(r.profesorId)}
+                    </p>
+                  );
+                })()}
               </div>
               {useApi() && fechaEditarTurno && (
                 <div

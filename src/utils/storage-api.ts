@@ -182,13 +182,17 @@ export const storageApi = {
       restablecer?: boolean;
       reemplazaProfesorId?: string | null;
       motivo?: string;
+      planificado?: boolean;
     }): Promise<void> =>
       request('/api/horas-profes/clase', { method: 'PUT', body: JSON.stringify(body) }),
     getReemplazos: (desde: string, hasta: string): Promise<ReemplazoProfeFecha[]> =>
       request<ReemplazoProfeFecha[]>(
         `/api/horas-profes/reemplazos?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`
       ),
-    getHorarioFijo: (): Promise<HorarioFijoProfes> => request<HorarioFijoProfes>('/api/horas-profes/horario-fijo'),
+    getHorarioFijo: (lunes?: string): Promise<HorarioFijoProfes> =>
+      request<HorarioFijoProfes>(`/api/horas-profes/horario-fijo${lunes ? `?lunes=${encodeURIComponent(lunes)}` : ''}`),
+    accionSemana: (lunes: string, accion: 'copiar_anterior' | 'restablecer'): Promise<{ ok: boolean; copiadas: number }> =>
+      request('/api/horas-profes/semana', { method: 'POST', body: JSON.stringify({ lunes, accion }) }),
     setHorarioFijo: (body: { diaSemana: number; hora: string; profesorId: string | null }): Promise<void> =>
       request('/api/horas-profes/horario-fijo', { method: 'PUT', body: JSON.stringify(body) }),
     setPagoDia: (body: { profesorId: string; fecha: string; pagado: boolean }): Promise<void> =>

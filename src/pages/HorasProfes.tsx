@@ -21,6 +21,35 @@ function moverMes(mes: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function isoLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Semanas (lunes a sábado) que tocan el mes. */
+function semanasDeMes(mes: string): Array<{ lunes: string; label: string; esActual: boolean }> {
+  const [y, m] = mes.split('-').map(Number);
+  const primero = new Date(y, m - 1, 1);
+  const ultimo = new Date(y, m, 0);
+  const offset = primero.getDay() === 0 ? 6 : primero.getDay() - 1;
+  const lunes = new Date(y, m - 1, 1 - offset);
+  if (offset === 6) lunes.setDate(lunes.getDate() + 7);
+  const hoy = hoyISO();
+  const out: Array<{ lunes: string; label: string; esActual: boolean }> = [];
+  while (lunes <= ultimo) {
+    const sabado = new Date(lunes);
+    sabado.setDate(sabado.getDate() + 5);
+    const l = isoLocal(lunes);
+    const s = isoLocal(sabado);
+    out.push({
+      lunes: l,
+      label: `${lunes.getDate()}/${lunes.getMonth() + 1} – ${sabado.getDate()}/${sabado.getMonth() + 1}`,
+      esActual: hoy >= l && hoy <= s,
+    });
+    lunes.setDate(lunes.getDate() + 7);
+  }
+  return out;
+}
+
 function nombreMes(mes: string): string {
   const [y, m] = mes.split('-').map(Number);
   const txt = new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
@@ -37,6 +66,12 @@ const HorasProfes = () => {
   const toast = useToast();
   const [vista, setVista] = useState<'semana' | 'mes'>('semana');
   const [mes, setMes] = useState(mesActual);
+  const [semanaGrilla, setSemanaGrilla] = useState(() => semanasDeMes(mesActual()).find((s) => s.esActual)?.lunes ?? '');
+  const semanasDelMes = useMemo(() => semanasDeMes(mes), [mes]);
+
+  useEffect(() => {
+    setSemanaGrilla((prev) => (prev && !semanasDelMes.some((s) => s.lunes === prev) ? '' : prev));
+  }, [semanasDelMes]);
   const [data, setData] = useState<HorasProfesMes | null>(null);
   const [loading, setLoading] = useState(true);
   const [totalDuenasInput, setTotalDuenasInput] = useState('');
@@ -164,17 +199,15 @@ const HorasProfes = () => {
             <h1 className="page-title">Horas de profes</h1>
           </div>
         </div>
-        {vista === 'mes' && (
-          <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1">
-            <button type="button" onClick={() => setMes(moverMes(mes, -1))} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Mes anterior">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <span className="min-w-[10rem] text-center font-semibold text-gray-800">{nombreMes(mes)}</span>
-            <button type="button" onClick={() => setMes(moverMes(mes, 1))} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Mes siguiente">
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1">
+          <button type="button" onClick={() => setMes(moverMes(mes, -1))} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Mes anterior">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <span className="min-w-[10rem] text-center font-semibold text-gray-800">{nombreMes(mes)}</span>
+          <button type="button" onClick={() => setMes(moverMes(mes, 1))} className="p-2 rounded-lg hover:bg-gray-100" aria-label="Mes siguiente">
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1">
@@ -204,7 +237,42 @@ const HorasProfes = () => {
           Primero cargá las profes en <Link to="/profesores" className="text-primary-700 underline">Profesores</Link>.
         </div>
       ) : vista === 'semana' ? (
-        <GrillaProfesSemana profesores={data.profesores} onCambio={() => void cargar(mes, true)} />
+        <div className="space-y-4">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setSemanaGrilla('')}
+              className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-medium ${
+                semanaGrilla === '' ? 'border-primary-500 bg-primary-50 text-primary-900' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Horario base
+              <span className="block text-[11px] font-normal text-gray-500">todas las semanas</span>
+            </button>
+            {semanasDelMes.map((s, i) => (
+              <button
+                key={s.lunes}
+                type="button"
+                onClick={() => setSemanaGrilla(s.lunes)}
+                className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-medium ${
+                  semanaGrilla === s.lunes
+                    ? 'border-primary-500 bg-primary-50 text-primary-900'
+                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Semana {i + 1}
+                {s.esActual && <span className="ml-1 text-[10px] text-primary-600">(esta)</span>}
+                <span className="block text-[11px] font-normal text-gray-500">{s.label}</span>
+              </button>
+            ))}
+          </div>
+          <GrillaProfesSemana
+            key={semanaGrilla || 'base'}
+            profesores={data.profesores}
+            lunes={semanaGrilla || undefined}
+            onCambio={() => void cargar(mes, true)}
+          />
+        </div>
       ) : (
         <>
           <p className="text-sm text-gray-500">

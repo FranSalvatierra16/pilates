@@ -167,6 +167,7 @@ export interface HorasProfesClase {
   extra: boolean;
   reemplazaProfesorId: string | null;
   motivo: string;
+  planificado: boolean;
 }
 
 export interface ReemplazoProfeFecha {
@@ -176,6 +177,8 @@ export interface ReemplazoProfeFecha {
   sinClase: boolean;
   reemplazaProfesorId: string | null;
   motivo: string;
+  /** true = asignado desde la grilla semanal; false = reemplazo cargado desde el calendario */
+  planificado: boolean;
 }
 
 export interface HorarioFijoProfes {
@@ -183,6 +186,9 @@ export interface HorarioFijoProfes {
   tarde: string[];
   horariosNoDisponiblesPorDia: Record<number, string[]>;
   clases: Array<{ diaSemana: number; hora: string; titulo: string; profesorId: string | null; alumnos: number }>;
+  /** Solo si se pidió una semana puntual (?lunes=) */
+  dias?: Array<{ fecha: string; diaSemana: number; cerrarTodo: boolean; horasCerradas: string[] }>;
+  cambios?: ReemplazoProfeFecha[];
 }
 
 export interface HorasProfesDia {

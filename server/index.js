@@ -235,6 +235,7 @@ async function migrateHorasProfes(db) {
     `);
     await db.query('ALTER TABLE profesor_clase_fecha ADD COLUMN IF NOT EXISTS reemplaza_profesor_id TEXT REFERENCES profesores(id) ON DELETE SET NULL');
     await db.query('ALTER TABLE profesor_clase_fecha ADD COLUMN IF NOT EXISTS motivo TEXT');
+    await db.query('ALTER TABLE profesor_clase_fecha ADD COLUMN IF NOT EXISTS planificado BOOLEAN DEFAULT false');
     await db.query(`
       CREATE TABLE IF NOT EXISTS profesor_pago_dia (
         id TEXT PRIMARY KEY,
@@ -1516,7 +1517,7 @@ async function calcularHorasProfesMes(db, sid, mes) {
         [sid, desde, hasta]
       ),
       db.query(
-        `SELECT fecha::text AS fecha, hora, profesor_id, sin_clase, reemplaza_profesor_id, motivo FROM profesor_clase_fecha
+        `SELECT fecha::text AS fecha, hora, profesor_id, sin_clase, reemplaza_profesor_id, motivo, planificado FROM profesor_clase_fecha
           WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
         [sid, desde, hasta]
       ),
@@ -1590,7 +1591,7 @@ async function calcularHorasProfesMes(db, sid, mes) {
       const ov = overrides.get(`${fecha}|${c.hora}`);
       const sinClase = !!ov?.sin_clase;
       const profesorId = sinClase ? null : (ov?.profesor_id && profById.has(ov.profesor_id) ? ov.profesor_id : (c.profesorId && profById.has(c.profesorId) ? c.profesorId : null));
-      const reemplazaProfesorId = ov && !sinClase ? (ov.reemplaza_profesor_id || c.profesorId || null) : null;
+      const reemplazaProfesorId = ov && !sinClase && !ov.planificado ? (ov.reemplaza_profesor_id || c.profesorId || null) : null;
       clases.push({
         hora: c.hora,
         titulo: c.titulo,
@@ -1601,6 +1602,7 @@ async function calcularHorasProfesMes(db, sid, mes) {
         extra: !!c.extra,
         reemplazaProfesorId: reemplazaProfesorId && reemplazaProfesorId !== profesorId ? reemplazaProfesorId : null,
         motivo: ov?.motivo || '',
+        planificado: ov?.planificado === true,
       });
       if (sinClase) continue;
       if (!profesorId) {
@@ -1696,9 +1698,10 @@ app.put('/api/horas-profes/clase', async (req, res) => {
       await db.query('DELETE FROM profesor_clase_fecha WHERE sucursal_id = $1 AND fecha = $2::date AND hora = $3', [sid, fecha, hora]);
       return res.json({ ok: true });
     }
+    const planificado = req.body?.planificado === true;
     const profesorId = sinClase ? null : (req.body?.profesorId || null);
-    const reemplazaProfesorId = sinClase ? null : (req.body?.reemplazaProfesorId || null);
-    const motivo = String(req.body?.motivo || '').trim().slice(0, 300) || null;
+    const reemplazaProfesorId = sinClase || planificado ? null : (req.body?.reemplazaProfesorId || null);
+    const motivo = planificado ? null : String(req.body?.motivo || '').trim().slice(0, 300) || null;
     if (!sinClase && !profesorId) return res.status(400).json({ error: 'Elegí una profe' });
     for (const pid of [profesorId, reemplazaProfesorId]) {
       if (!pid) continue;
@@ -1706,14 +1709,15 @@ app.put('/api/horas-profes/clase', async (req, res) => {
       if (rows.length === 0) return res.status(404).json({ error: 'Profe no encontrada' });
     }
     await db.query(
-      `INSERT INTO profesor_clase_fecha (id, sucursal_id, fecha, hora, profesor_id, sin_clase, reemplaza_profesor_id, motivo)
-       VALUES ($1, $2, $3::date, $4, $5, $6, $7, $8)
+      `INSERT INTO profesor_clase_fecha (id, sucursal_id, fecha, hora, profesor_id, sin_clase, reemplaza_profesor_id, motivo, planificado)
+       VALUES ($1, $2, $3::date, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (sucursal_id, fecha, hora) DO UPDATE SET
          profesor_id = EXCLUDED.profesor_id,
          sin_clase = EXCLUDED.sin_clase,
          reemplaza_profesor_id = EXCLUDED.reemplaza_profesor_id,
-         motivo = EXCLUDED.motivo`,
-      [crypto.randomUUID(), sid, fecha, hora, profesorId, !!sinClase, reemplazaProfesorId, motivo]
+         motivo = EXCLUDED.motivo,
+         planificado = EXCLUDED.planificado`,
+      [crypto.randomUUID(), sid, fecha, hora, profesorId, !!sinClase, reemplazaProfesorId, motivo, planificado]
     );
     res.json({ ok: true });
   } catch (e) {
@@ -1721,6 +1725,31 @@ app.put('/api/horas-profes/clase', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+async function listarCambiosProfe(db, sid, desde, hasta) {
+  const { rows } = await db.query(
+    `SELECT fecha::text AS fecha, hora, profesor_id, sin_clase, reemplaza_profesor_id, motivo, planificado
+       FROM profesor_clase_fecha
+      WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date
+      ORDER BY fecha, hora`,
+    [sid, desde, hasta]
+  );
+  return rows.map((r) => ({
+    fecha: String(r.fecha).slice(0, 10),
+    hora: String(r.hora).slice(0, 5),
+    profesorId: r.profesor_id || null,
+    sinClase: r.sin_clase === true,
+    reemplazaProfesorId: r.reemplaza_profesor_id || null,
+    motivo: r.motivo || '',
+    planificado: r.planificado === true,
+  }));
+}
+
+function sumarDiasIso(fecha, n) {
+  const [y, m, d] = fecha.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
 
 /** Reemplazos / cambios de profe por fecha (para mostrar en el calendario). */
 app.get('/api/horas-profes/reemplazos', async (req, res) => {
@@ -1730,21 +1759,7 @@ app.get('/api/horas-profes/reemplazos', async (req, res) => {
     const desde = String(req.query.desde || '');
     const hasta = String(req.query.hasta || '');
     if (!fechaValida(desde) || !fechaValida(hasta)) return res.status(400).json({ error: 'Rango inválido' });
-    const { rows } = await db.query(
-      `SELECT fecha::text AS fecha, hora, profesor_id, sin_clase, reemplaza_profesor_id, motivo
-         FROM profesor_clase_fecha
-        WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date
-        ORDER BY fecha, hora`,
-      [req.user.sucursalId, desde, hasta]
-    );
-    res.json(rows.map((r) => ({
-      fecha: String(r.fecha).slice(0, 10),
-      hora: String(r.hora).slice(0, 5),
-      profesorId: r.profesor_id || null,
-      sinClase: r.sin_clase === true,
-      reemplazaProfesorId: r.reemplaza_profesor_id || null,
-      motivo: r.motivo || '',
-    })));
+    res.json(await listarCambiosProfe(db, req.user.sucursalId, desde, hasta));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -1782,12 +1797,32 @@ app.get('/api/horas-profes/horario-fijo', async (req, res) => {
         prev.alumnos += alumnos;
       }
     }
-    res.json({
+    const payload = {
       manana,
       tarde,
       horariosNoDisponiblesPorDia: normalizarHorariosNoDisponiblesPorDia(hor.horarios_no_disponibles_por_dia, [...manana, ...tarde]),
       clases: [...slots.values()],
-    });
+    };
+    const lunes = String(req.query.lunes || '');
+    if (fechaValida(lunes)) {
+      const sabado = sumarDiasIso(lunes, 5);
+      const [{ rows: cierreRows }, cambios] = await Promise.all([
+        db.query(
+          `SELECT fecha::text AS fecha, cerrar_todo, horas_cerradas FROM cierre_dia_calendario
+            WHERE sucursal_id = $1 AND fecha >= $2::date AND fecha <= $3::date`,
+          [sid, lunes, sabado]
+        ),
+        listarCambiosProfe(db, sid, lunes, sabado),
+      ]);
+      const cierres = new Map(cierreRows.map((c) => [String(c.fecha).slice(0, 10), c]));
+      payload.dias = [0, 1, 2, 3, 4, 5].map((i) => {
+        const fecha = sumarDiasIso(lunes, i);
+        const c = cierres.get(fecha);
+        return { fecha, diaSemana: i, cerrarTodo: c?.cerrar_todo === true, horasCerradas: c ? parseHorasCerradasRow(c) : [] };
+      });
+      payload.cambios = cambios;
+    }
+    res.json(payload);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -1829,6 +1864,54 @@ app.put('/api/horas-profes/horario-fijo', async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * Semana de la grilla. body: { lunes, accion: 'copiar_anterior' | 'restablecer' }
+ * Solo toca asignaciones planificadas; los reemplazos cargados desde el calendario se respetan.
+ */
+app.post('/api/horas-profes/semana', async (req, res) => {
+  const db = await getPool();
+  if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+  const sid = req.user.sucursalId;
+  const { lunes, accion } = req.body || {};
+  if (!fechaValida(lunes) || !['copiar_anterior', 'restablecer'].includes(accion)) {
+    return res.status(400).json({ error: 'Datos inválidos' });
+  }
+  const sabado = sumarDiasIso(lunes, 5);
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'DELETE FROM profesor_clase_fecha WHERE sucursal_id = $1 AND planificado = true AND fecha >= $2::date AND fecha <= $3::date',
+      [sid, lunes, sabado]
+    );
+    let copiadas = 0;
+    if (accion === 'copiar_anterior') {
+      const { rows } = await client.query(
+        `SELECT fecha::text AS fecha, hora, profesor_id, sin_clase FROM profesor_clase_fecha
+          WHERE sucursal_id = $1 AND planificado = true AND fecha >= $2::date AND fecha <= $3::date`,
+        [sid, sumarDiasIso(lunes, -7), sumarDiasIso(lunes, -2)]
+      );
+      for (const r of rows) {
+        const { rowCount } = await client.query(
+          `INSERT INTO profesor_clase_fecha (id, sucursal_id, fecha, hora, profesor_id, sin_clase, planificado)
+           VALUES ($1, $2, $3::date, $4, $5, $6, true)
+           ON CONFLICT (sucursal_id, fecha, hora) DO NOTHING`,
+          [crypto.randomUUID(), sid, sumarDiasIso(String(r.fecha).slice(0, 10), 7), r.hora, r.profesor_id, r.sin_clase === true]
+        );
+        copiadas += rowCount;
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, copiadas });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
   }
 });
 

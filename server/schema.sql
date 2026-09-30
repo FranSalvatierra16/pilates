@@ -141,6 +141,8 @@ CREATE TABLE IF NOT EXISTS profesor_clase_fecha (
 );
 ALTER TABLE profesor_clase_fecha ADD COLUMN IF NOT EXISTS reemplaza_profesor_id TEXT REFERENCES profesores(id) ON DELETE SET NULL;
 ALTER TABLE profesor_clase_fecha ADD COLUMN IF NOT EXISTS motivo TEXT;
+-- planificado = asignado desde la grilla semanal (no es un reemplazo)
+ALTER TABLE profesor_clase_fecha ADD COLUMN IF NOT EXISTS planificado BOOLEAN DEFAULT false;
 
 -- Días pagados a profes suplentes
 CREATE TABLE IF NOT EXISTS profesor_pago_dia (

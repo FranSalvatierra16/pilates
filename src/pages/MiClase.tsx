@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw, CheckCircle2, User } from 'lucide-react';
+import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw, CheckCircle2, User, Lock } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -822,7 +822,7 @@ const MiClase = () => {
   const semanaParaCierre = data.semanaVista || getSemanaActual();
   const cierresPorFecha = data.cierresPorFecha || {};
 
-  const turnoCerradoPorCalendario = (t: TurnoPortal) => {
+  const turnoCerradoPorCalendario = (t: { diaSemana: number; hora: string }) => {
     const fecha = getFechaFromSemanaYDia(semanaParaCierre, t.diaSemana);
     const c = cierresPorFecha[fecha];
     if (!c) return false;
@@ -906,7 +906,7 @@ const MiClase = () => {
     esRecuperar &&
     clasesFijasOrdenadas.some((c) => {
       const t = turnosById.get(c.id);
-      return !!(t?.esClaseFija && !t.claseLiberada);
+      return !!(t?.esClaseFija && !t.claseLiberada && !turnoCerradoPorCalendario(t));
     });
   /** 1 = liberar fija · 2 = elegir horario · 3 = ya recuperó */
   const pasoRecuperar: 1 | 2 | 3 = !esRecuperar
@@ -1481,6 +1481,7 @@ const MiClase = () => {
                     {clasesFijasOrdenadas.map((turno) => {
                       const turnoActual = turnosById.get(turno.id);
                       const liberada = !!turnoActual?.claseLiberada;
+                      const cerradaDia = turnoCerradoPorCalendario(turno);
                       const fechaIso = getFechaFromSemanaYDia(semanaVistaIso, turno.diaSemana);
                       const fechaLabel = formatDate(fechaIso);
                       return (
@@ -1509,7 +1510,7 @@ const MiClase = () => {
                                       : 'text-amber-700'
                                 }`}
                               >
-                                {liberada ? 'Ya liberaste' : 'Vas esta semana'}
+                                {cerradaDia ? 'Día cerrado' : liberada ? 'Ya liberaste' : 'Vas esta semana'}
                               </p>
                               <p
                                 className={`mt-1.5 text-2xl font-semibold leading-none ${
@@ -1527,7 +1528,17 @@ const MiClase = () => {
                               </p>
                             </div>
                           </div>
-                          {turnoActual?.esClaseFija && (
+                          {turnoActual?.esClaseFija && cerradaDia && (
+                            <p
+                              className={`mt-4 flex items-center gap-2 rounded-2xl px-3 py-3 text-sm font-medium ${
+                                isSavia ? 'bg-savia-creamDeep/70 text-savia-muted' : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              <Lock className="w-4 h-4 shrink-0" />
+                              El estudio cierra ese día: no hace falta liberar la clase.
+                            </p>
+                          )}
+                          {turnoActual?.esClaseFija && !cerradaDia && (
                             <button
                               type="button"
                               onClick={() =>
@@ -1598,6 +1609,16 @@ const MiClase = () => {
                             {fechaRecuperacion}
                             {turno.titulo ? ` · ${turno.titulo}` : ''}
                           </p>
+                          {turnoCerradoPorCalendario(turno) ? (
+                            <p
+                              className={`mt-4 flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium ${
+                                isSavia ? 'bg-white/50 text-savia-muted' : 'bg-white/70 text-slate-600'
+                              }`}
+                            >
+                              <Lock className="w-4 h-4 shrink-0" />
+                              El estudio cierra ese día: no se puede liberar.
+                            </p>
+                          ) : (
                           <button
                             type="button"
                             onClick={() => liberar(turno.id, turno.recuperacionId)}
@@ -1615,6 +1636,7 @@ const MiClase = () => {
                             )}
                             Liberar recuperación
                           </button>
+                          )}
                         </div>
                       );
                     })}

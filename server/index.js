@@ -2351,7 +2351,7 @@ function turnoIdsCerradosPorCierre(turnoRows, fechaStr, cerrarTodo, horasNorm) {
   return set;
 }
 
-async function assertTurnoNoCerradoExcepcional(db, sucursalId, semana, turno) {
+async function assertTurnoNoCerradoExcepcional(db, sucursalId, semana, turno, accion = 'anotarse') {
   const fecha = getFechaFromSemanaYDiaServer(semana, turno?.dia_semana);
   if (!fecha) return;
   const { rows } = await db.query(
@@ -2363,17 +2363,17 @@ async function assertTurnoNoCerradoExcepcional(db, sucursalId, semana, turno) {
   const horas = parseHorasCerradasRow(r);
   const ds = diaSemanaDesdeFechaIsoLocal(fecha);
   if (Number(turno.dia_semana) !== ds) return;
-  if (r.cerrar_todo === true) {
-    const err = new Error('Ese día está cerrado en el calendario de la sede.');
-    err.status = 400;
-    throw err;
-  }
   const hh = String(turno.hora || '').slice(0, 5);
-  if (horas.includes(hh)) {
-    const err = new Error('Ese horario está cerrado en el calendario de la sede.');
-    err.status = 400;
-    throw err;
-  }
+  const cerrado = r.cerrar_todo === true || horas.includes(hh);
+  if (!cerrado) return;
+  const que = r.cerrar_todo === true ? 'Ese día' : 'Ese horario';
+  const err = new Error(
+    accion === 'liberar'
+      ? `${que} está cerrado: no se puede liberar la clase.`
+      : `${que} está cerrado en el calendario de la sede.`
+  );
+  err.status = 400;
+  throw err;
 }
 
 app.get('/api/sucursal/horarios', async (req, res) => {
@@ -4566,6 +4566,7 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
         const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoIdParaPush, alumno.sucursal_id]);
         if (turnoRows.length > 0) {
           await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'liberar', semana: semanaObjetivo, turno: turnoRows[0] });
+          await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semanaObjetivo, turnoRows[0], 'liberar');
         }
       }
       const { rowCount } = await db.query(
@@ -4578,6 +4579,7 @@ app.post('/api/alumno-portal/liberar-recuperacion', async (req, res) => {
       const { rows: turnoRows } = await db.query('SELECT id, dia_semana, hora FROM turnos WHERE id = $1 AND sucursal_id = $2', [turnoId, alumno.sucursal_id]);
       if (turnoRows.length > 0) {
         await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'liberar', semana, turno: turnoRows[0] });
+        await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semana, turnoRows[0], 'liberar');
       }
       const { rows: recRows } = await db.query(
         'SELECT id, usa_credito FROM recuperaciones WHERE alumno_id = $1 AND turno_id = $2 AND semana = $3',
@@ -4653,6 +4655,7 @@ app.post('/api/alumno-portal/liberar-clase-semana', async (req, res) => {
     if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
     const t = turnoRows[0];
     await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'liberar', semana: semanaVista, turno: t });
+    await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semanaVista, t, 'liberar');
     const ids = t.alumno_ids || [];
     if (!ids.includes(alumno.id)) return res.status(400).json({ error: 'Esta no es una clase fija tuya.' });
     const { rows: insRows } = await db.query(
@@ -4759,6 +4762,7 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
       if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
       const t = turnoRows[0];
       await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: t });
+      await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semanaVista, t);
       const oCup = await ocupacionEfectivaTurnoSemana(db, turnoIdRestaurado, semanaVista, alumno.sucursal_id, [liberacionIdTrim]);
       if (!oCup) return res.status(404).json({ error: 'Turno no encontrado' });
       if (oCup.ocupacion > oCup.cupo) {
@@ -4780,6 +4784,7 @@ app.post('/api/alumno-portal/restaurar-clase-semana', async (req, res) => {
       if (turnoRows.length === 0) return res.status(404).json({ error: 'Turno no encontrado' });
       const t = turnoRows[0];
       await validarTiempoPortal(db, alumno.sucursal_id, { accion: 'anotarse', semana: semanaVista, turno: t });
+      await assertTurnoNoCerradoExcepcional(db, alumno.sucursal_id, semanaVista, t);
       const { rows: libIdsRows } = await db.query(
         'SELECT id FROM liberaciones_semana WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3',
         [turnoIdTarget, alumno.id, semanaVista]

@@ -279,7 +279,9 @@ export const storageApi = {
       semana: string;
       cerrarTodo: boolean;
       horasCerradas: string[];
-    }): Promise<{ ok: boolean; creditosOtorgados?: number; turnosNuevosCerrados?: number }> =>
+      darCreditos?: boolean;
+      soloContar?: boolean;
+    }): Promise<{ ok: boolean; creditosOtorgados?: number; alumnosAfectados?: number; turnosNuevosCerrados?: number }> =>
       request('/api/sucursal/cierres-calendario', { method: 'PUT', body: JSON.stringify(body) }),
     deleteCierreCalendario: (fecha: string): Promise<{ ok: boolean }> =>
       request(`/api/sucursal/cierres-calendario/${encodeURIComponent(fecha)}`, { method: 'DELETE' }),

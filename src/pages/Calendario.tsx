@@ -262,6 +262,8 @@ const Calendario = () => {
   const [modalCierreHorasFecha, setModalCierreHorasFecha] = useState<string | null>(null);
   const [horasSeleccionadasCierre, setHorasSeleccionadasCierre] = useState<Record<string, boolean>>({});
   const [guardandoCierreCal, setGuardandoCierreCal] = useState(false);
+  type CierrePendiente = { fecha: string; cerrarTodo: boolean; horas: string[]; alumnosAfectados: number };
+  const [cierrePendiente, setCierrePendiente] = useState<CierrePendiente | null>(null);
 
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
   const [selectedDiaMobile, setSelectedDiaMobile] = useState<number | null>(null);
@@ -617,45 +619,62 @@ const Calendario = () => {
       toast.warning('Marcá al menos un horario a cerrar.');
       return;
     }
+    await prepararCierre(modalCierreHorasFecha, false, horas.sort((a, b) => a.localeCompare(b)));
+  };
+
+  const confirmarCerrarDiaCompleto = async (fechaIso: string) => {
+    setCierreMenuFecha(null);
+    await prepararCierre(fechaIso, true, []);
+  };
+
+  const prepararCierre = async (fecha: string, cerrarTodo: boolean, horas: string[]) => {
     setGuardandoCierreCal(true);
     try {
-      await storageApi.sucursal.putCierreCalendario({
-        fecha: modalCierreHorasFecha,
+      const r = await storageApi.sucursal.putCierreCalendario({
+        fecha,
         semana: semanaVista,
-        cerrarTodo: false,
-        horasCerradas: horas.sort((a, b) => a.localeCompare(b)),
+        cerrarTodo,
+        horasCerradas: horas,
+        soloContar: true,
       });
-      await loadCierresCalendario();
-      await loadAlumnos();
-      setModalCierreHorasFecha(null);
-      toast.success('Horarios actualizados. Se otorgaron créditos donde correspondía.');
+      const pendiente = { fecha, cerrarTodo, horas, alumnosAfectados: r.alumnosAfectados ?? 0 };
+      if (!cerrarTodo && pendiente.alumnosAfectados === 0) {
+        await ejecutarCierre(pendiente, false);
+        return;
+      }
+      setCierrePendiente(pendiente);
     } catch {
-      toast.error('No se pudo guardar el cierre.');
+      toast.error('No se pudo preparar el cierre.');
     } finally {
       setGuardandoCierreCal(false);
     }
   };
 
-  const confirmarCerrarDiaCompleto = async (fechaIso: string) => {
-    setCierreMenuFecha(null);
-    const ok = await toast.confirm(
-      `¿Cerrar todo el día ${formatDate(fechaIso)}? Quienes tengan clase fija o recuperación en turnos de ese día que pasen a estar cerrados recibirán un crédito por cada turno nuevo cerrado (no se quitan créditos si después reabrís el día).`,
-      { title: 'Cerrar día', confirmText: 'Cerrar día' }
-    );
-    if (!ok) return;
+  const ejecutarCierre = async (pendiente: CierrePendiente, darCreditos: boolean) => {
     setGuardandoCierreCal(true);
     try {
-      await storageApi.sucursal.putCierreCalendario({
-        fecha: fechaIso,
+      const r = await storageApi.sucursal.putCierreCalendario({
+        fecha: pendiente.fecha,
         semana: semanaVista,
-        cerrarTodo: true,
-        horasCerradas: [],
+        cerrarTodo: pendiente.cerrarTodo,
+        horasCerradas: pendiente.horas,
+        darCreditos,
       });
       await loadCierresCalendario();
       await loadAlumnos();
-      toast.success('Día cerrado. Créditos actualizados donde correspondía.');
+      setCierrePendiente(null);
+      setModalCierreHorasFecha(null);
+      const que = pendiente.cerrarTodo ? 'Día cerrado' : 'Horarios cerrados';
+      const otorgados = r.creditosOtorgados ?? 0;
+      if (darCreditos && otorgados > 0) {
+        toast.success(`${que}. Se dio crédito a ${otorgados} ${otorgados === 1 ? 'alumno' : 'alumnos'}.`);
+      } else if (pendiente.alumnosAfectados > 0) {
+        toast.success(`${que} sin dar créditos.`);
+      } else {
+        toast.success(`${que}.`);
+      }
     } catch {
-      toast.error('No se pudo cerrar el día.');
+      toast.error('No se pudo guardar el cierre.');
     } finally {
       setGuardandoCierreCal(false);
     }
@@ -3081,7 +3100,7 @@ const Calendario = () => {
               </button>
             </div>
             <p className="text-sm text-gray-600 px-4 pt-3">
-              Marcá los horarios que no se dictan ese día. Los alumnos con clase fija o recuperación en un turno que pase a estar cerrado reciben un crédito (solo por turnos recién cerrados).
+              Marcá los horarios que no se dictan ese día. Si hay alumnos anotados en esos turnos, al guardar te preguntamos si querés darles un crédito para recuperar.
             </p>
             <div className="px-4 py-3 space-y-2">
               {todasLasHoras.map((h) => (
@@ -3114,6 +3133,86 @@ const Calendario = () => {
               >
                 {guardandoCierreCal ? 'Guardando…' : 'Guardar'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cierrePendiente && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          data-calendario-dialog
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-creditos-cierre-titulo"
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border border-gray-200">
+            <div className="flex justify-between items-center border-b border-gray-200 px-4 py-3">
+              <h3 id="modal-creditos-cierre-titulo" className="font-semibold text-gray-900 pr-2">
+                {cierrePendiente.cerrarTodo ? 'Cerrar día' : 'Cerrar horarios'} · {formatDate(cierrePendiente.fecha)}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCierrePendiente(null)}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 touch-manipulation shrink-0"
+                aria-label="Cancelar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-4 py-4 space-y-2 text-sm text-gray-700">
+              {cierrePendiente.alumnosAfectados > 0 ? (
+                <>
+                  <p>
+                    Hay <strong>{cierrePendiente.alumnosAfectados}</strong>{' '}
+                    {cierrePendiente.alumnosAfectados === 1 ? 'alumno anotado' : 'alumnos anotados'} en{' '}
+                    {cierrePendiente.cerrarTodo ? 'ese día' : 'esos horarios'} (clase fija o recuperación).
+                  </p>
+                  <p className="font-medium text-gray-900">¿Querés darles un crédito para que recuperen la clase?</p>
+                  <p className="text-xs text-gray-500">Si después reabrís el día, los créditos ya dados no se descuentan.</p>
+                </>
+              ) : (
+                <p>No hay alumnos anotados en los turnos que se cierran, así que no hace falta dar créditos.</p>
+              )}
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end border-t border-gray-200 px-4 py-3">
+              <button
+                type="button"
+                className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg touch-manipulation"
+                disabled={guardandoCierreCal}
+                onClick={() => setCierrePendiente(null)}
+              >
+                Cancelar
+              </button>
+              {cierrePendiente.alumnosAfectados > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    className="px-3 py-2 text-sm font-medium border border-gray-300 text-gray-800 rounded-lg hover:bg-gray-50 disabled:opacity-50 touch-manipulation"
+                    disabled={guardandoCierreCal}
+                    onClick={() => void ejecutarCierre(cierrePendiente, false)}
+                  >
+                    No, cerrar sin créditos
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 touch-manipulation"
+                    disabled={guardandoCierreCal}
+                    onClick={() => void ejecutarCierre(cierrePendiente, true)}
+                  >
+                    {guardandoCierreCal ? 'Guardando…' : 'Sí, dar créditos'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="px-3 py-2 text-sm font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 touch-manipulation"
+                  disabled={guardandoCierreCal}
+                  onClick={() => void ejecutarCierre(cierrePendiente, false)}
+                >
+                  {guardandoCierreCal ? 'Guardando…' : cierrePendiente.cerrarTodo ? 'Cerrar día' : 'Cerrar horarios'}
+                </button>
+              )}
             </div>
           </div>
         </div>

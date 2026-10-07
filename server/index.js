@@ -2543,6 +2543,39 @@ app.put('/api/sucursal/cierres-calendario', async (req, res) => {
       if (!oldSet.has(id)) delta.push(id);
     }
     const creditMap = new Map();
+    for (const tid of delta) {
+      const t = turnoRows.find((r) => r.id === tid);
+      if (!t) continue;
+      const afectados = new Set();
+      const ids = t.alumno_ids || [];
+      for (const aid of ids) {
+        const { rows: ins } = await db.query(
+          'SELECT semana_desde FROM inscripciones_turno WHERE turno_id = $1 AND alumno_id = $2 LIMIT 1',
+          [tid, aid]
+        );
+        if (ins.length > 0 && ins[0].semana_desde > semana) continue;
+        const { rows: lib } = await db.query(
+          'SELECT 1 FROM liberaciones_semana WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3 LIMIT 1',
+          [tid, aid, semana]
+        );
+        if (lib.length > 0) continue;
+        afectados.add(String(aid));
+      }
+      const { rows: recs } = await db.query(
+        'SELECT alumno_id FROM recuperaciones WHERE turno_id = $1 AND semana = $2',
+        [tid, semana]
+      );
+      for (const r of recs) {
+        if (r.alumno_id) afectados.add(String(r.alumno_id));
+      }
+      for (const aid of afectados) {
+        creditMap.set(aid, (creditMap.get(aid) || 0) + 1);
+      }
+    }
+    if (b.soloContar === true) {
+      return res.json({ ok: true, alumnosAfectados: creditMap.size, turnosNuevosCerrados: delta.length });
+    }
+    const darCreditos = b.darCreditos !== false;
     const client = await db.connect();
     try {
       await client.query('BEGIN');
@@ -2556,41 +2589,14 @@ app.put('/api/sucursal/cierres-calendario', async (req, res) => {
            updated_at = NOW()`,
         [idRow, sid, fecha, cerrarTodo, JSON.stringify(horasNorm)]
       );
-      for (const tid of delta) {
-        const t = turnoRows.find((r) => r.id === tid);
-        if (!t) continue;
-        const afectados = new Set();
-        const ids = t.alumno_ids || [];
-        for (const aid of ids) {
-          const { rows: ins } = await client.query(
-            'SELECT semana_desde FROM inscripciones_turno WHERE turno_id = $1 AND alumno_id = $2 LIMIT 1',
-            [tid, aid]
+      if (darCreditos) {
+        for (const [aid, n] of creditMap) {
+          if (n <= 0) continue;
+          await client.query(
+            'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + $1 WHERE id = $2 AND sucursal_id = $3',
+            [n, aid, sid]
           );
-          if (ins.length > 0 && ins[0].semana_desde > semana) continue;
-          const { rows: lib } = await client.query(
-            'SELECT 1 FROM liberaciones_semana WHERE turno_id = $1 AND alumno_id = $2 AND semana = $3 LIMIT 1',
-            [tid, aid, semana]
-          );
-          if (lib.length > 0) continue;
-          afectados.add(String(aid));
         }
-        const { rows: recs } = await client.query(
-          'SELECT alumno_id FROM recuperaciones WHERE turno_id = $1 AND semana = $2',
-          [tid, semana]
-        );
-        for (const r of recs) {
-          if (r.alumno_id) afectados.add(String(r.alumno_id));
-        }
-        for (const aid of afectados) {
-          creditMap.set(aid, (creditMap.get(aid) || 0) + 1);
-        }
-      }
-      for (const [aid, n] of creditMap) {
-        if (n <= 0) continue;
-        await client.query(
-          'UPDATE alumnos SET clases_para_recuperar = COALESCE(clases_para_recuperar, 0) + $1 WHERE id = $2 AND sucursal_id = $3',
-          [n, aid, sid]
-        );
       }
       await client.query('COMMIT');
     } catch (err) {
@@ -2599,7 +2605,12 @@ app.put('/api/sucursal/cierres-calendario', async (req, res) => {
     } finally {
       client.release();
     }
-    res.json({ ok: true, creditosOtorgados: creditMap.size, turnosNuevosCerrados: delta.length });
+    res.json({
+      ok: true,
+      creditosOtorgados: darCreditos ? creditMap.size : 0,
+      alumnosAfectados: creditMap.size,
+      turnosNuevosCerrados: delta.length,
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

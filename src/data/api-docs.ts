@@ -604,7 +604,7 @@ export const API_ENDPOINTS: ApiEndpointDoc[] = [
     method: 'PUT',
     path: '/api/sucursal/cierres-calendario',
     auth: 'jwt',
-    body: '{ "fecha": "2026-07-15", "semana": "2026-28", "cerrarTodo": false, "horasCerradas": ["09:00"] }',
+    body: '{ "fecha": "2026-07-15", "semana": "2026-28", "cerrarTodo": false, "horasCerradas": ["09:00"], "darCreditos": true, "soloContar": false }',
   },
 
   // —— Agenda ——

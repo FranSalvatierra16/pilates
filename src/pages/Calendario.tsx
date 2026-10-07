@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical, Cake, Ban } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical, Cake, Ban, Lock } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno, ReemplazoProfeFecha } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
@@ -600,6 +600,27 @@ const Calendario = () => {
     if (ex.cerrarTodo) return false;
     return !(ex.horasCerradas || []).includes(hora);
   };
+
+  const esHoraCerradaPorCierre = (fechaIso: string, hora: string) => {
+    const ex = cierresPorFecha[fechaIso];
+    if (!ex) return false;
+    return ex.cerrarTodo || (ex.horasCerradas || []).includes(hora);
+  };
+
+  const renderVeloCerrado = (redondeado: boolean) => (
+    <div
+      className={`absolute inset-0 z-[25] pointer-events-none flex items-center justify-center ${redondeado ? 'rounded-xl' : ''}`}
+      style={{
+        backgroundColor: 'rgba(203, 213, 225, 0.7)',
+        backgroundImage: 'repeating-linear-gradient(135deg, rgba(100, 116, 139, 0.18) 0 6px, transparent 6px 12px)',
+      }}
+    >
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-700/90 text-white px-2 py-0.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wide shadow">
+        <Lock className="w-3 h-3" />
+        Cerrado
+      </span>
+    </div>
+  );
 
   const abrirModalReducirHorarios = (fechaIso: string) => {
     setCierreMenuFecha(null);
@@ -2294,12 +2315,23 @@ const Calendario = () => {
           <div className="space-y-6">
           {(selectedDiaMobile !== null ? [selectedDiaMobile] : diasSemana).map((diaIndex) => {
             const fechaDiaMovil = getFechaFromSemanaYDia(semanaVista, diaIndex);
+            const cierreDiaMovil = cierresPorFecha[fechaDiaMovil];
             return (
-            <div key={diaIndex} className="card">
+            <div key={diaIndex} className={`card ${cierreDiaMovil?.cerrarTodo ? '!bg-slate-200 border-slate-300' : ''}`}>
               <div className="relative border-b border-primary-200 pb-2 mb-4 pr-11">
-                <h2 className="text-lg font-bold text-primary-700 flex items-center gap-2 flex-wrap">
-                  {DIAS_SEMANA[diaIndex]}{' '}
+                <h2 className={`text-lg font-bold flex items-center gap-2 flex-wrap ${cierreDiaMovil?.cerrarTodo ? 'text-slate-500' : 'text-primary-700'}`}>
+                  <span className={cierreDiaMovil?.cerrarTodo ? 'line-through' : ''}>{DIAS_SEMANA[diaIndex]}</span>{' '}
                   <span className="text-sm font-normal text-gray-500">{formatDate(fechaDiaMovil)}</span>
+                  {cierreDiaMovil && (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase ${
+                        cierreDiaMovil.cerrarTodo ? 'bg-slate-700 text-white' : 'bg-amber-200 text-amber-900'
+                      }`}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      {cierreDiaMovil.cerrarTodo ? 'Día cerrado' : 'Horarios reducidos'}
+                    </span>
+                  )}
                   {diaTieneCumple(diaIndex) && (
                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-pink-700 bg-pink-100 px-2 py-0.5 rounded-full">
                       <Cake className="w-3.5 h-3.5" aria-hidden />
@@ -2363,10 +2395,11 @@ const Calendario = () => {
                       const destacado = turno?.destacado ?? false;
                       const bloquearRecuperar = !!turno?.bloquearRecuperar;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaDiaMovil);
+                      const cerradaPorCierre = esHoraCerradaPorCierre(fechaDiaMovil, hora);
                       return (
                         <div
                           key={hora}
-                          className={`border rounded-xl p-3 ${
+                          className={`relative isolate border rounded-xl p-3 ${
                             !horarioDisponible
                               ? 'border-slate-300 bg-slate-100'
                               : destacado
@@ -2417,7 +2450,8 @@ const Calendario = () => {
                               </button>
                             </div>
                           </div>
-                          {!horarioDisponible && (
+                          {cerradaPorCierre && renderVeloCerrado(true)}
+                          {!horarioDisponible && !cerradaPorCierre && (
                             <p className="text-xs font-medium text-slate-600 mb-2">Horario no disponible</p>
                           )}
                           {turno && (
@@ -2462,10 +2496,11 @@ const Calendario = () => {
                       const destacado = turno?.destacado ?? false;
                       const bloquearRecuperar = !!turno?.bloquearRecuperar;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaDiaMovil);
+                      const cerradaPorCierre = esHoraCerradaPorCierre(fechaDiaMovil, hora);
                       return (
                         <div
                           key={hora}
-                          className={`border rounded-xl p-3 ${
+                          className={`relative isolate border rounded-xl p-3 ${
                             !horarioDisponible
                               ? 'border-slate-300 bg-slate-100'
                               : destacado
@@ -2516,7 +2551,8 @@ const Calendario = () => {
                               </button>
                             </div>
                           </div>
-                          {!horarioDisponible && (
+                          {cerradaPorCierre && renderVeloCerrado(true)}
+                          {!horarioDisponible && !cerradaPorCierre && (
                             <p className="text-xs font-medium text-slate-600 mb-2">Horario no disponible</p>
                           )}
                           {turno && (
@@ -2566,19 +2602,32 @@ const Calendario = () => {
                 {diasSemana.map((diaIndex) => {
                   const fechaCol = getFechaFromSemanaYDia(semanaVista, diaIndex);
                   const tieneNota = !!notasPlanifPorFecha[fechaCol]?.trim();
+                  const cierreCol = cierresPorFecha[fechaCol];
                   return (
                     <div
                       key={diaIndex}
-                      className="p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 text-gray-700 min-w-[72px] relative"
+                      className={`p-2 sm:p-3 text-center font-semibold border-r border-gray-200 last:border-r-0 min-w-[72px] relative ${
+                        cierreCol?.cerrarTodo ? 'bg-slate-300 text-slate-500' : 'text-gray-700'
+                      }`}
                     >
                       <div className="px-1 pr-7 sm:pr-8">
-                        <div className="text-xs sm:text-sm uppercase flex items-center justify-center gap-1">
+                        <div className={`text-xs sm:text-sm uppercase flex items-center justify-center gap-1 ${cierreCol?.cerrarTodo ? 'line-through' : ''}`}>
                           {DIAS_SEMANA[diaIndex]}
                           {diaTieneCumple(diaIndex) && (
                             <Cake className="w-3.5 h-3.5 text-pink-600" aria-label="Hay cumpleaños" />
                           )}
                         </div>
                         <div className="text-[10px] text-gray-500 font-normal mt-0.5">{formatDate(fechaCol)}</div>
+                        {cierreCol && (
+                          <div
+                            className={`mt-1 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                              cierreCol.cerrarTodo ? 'bg-slate-700 text-white' : 'bg-amber-200 text-amber-900'
+                            }`}
+                          >
+                            <Lock className="w-3 h-3" />
+                            {cierreCol.cerrarTodo ? 'Cerrado' : 'Reducido'}
+                          </div>
+                        )}
                       </div>
                       {useApi() && (
                         <div
@@ -2663,10 +2712,11 @@ const Calendario = () => {
                       const destacado = turno?.destacado ?? false;
                       const bloquearRecuperar = !!turno?.bloquearRecuperar;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaCol);
+                      const cerradaPorCierre = esHoraCerradaPorCierre(fechaCol, hora);
                       return (
                         <div
                           key={`${diaIndex}-${hora}`}
-                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${
+                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${cerradaPorCierre ? 'isolate' : ''} ${
                             !horarioDisponible ? 'bg-slate-100' : destacado ? 'bg-amber-100' : 'hover:bg-gray-50'
                           }`}
                         >
@@ -2694,7 +2744,8 @@ const Calendario = () => {
                           >
                             <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
                           </button>
-                          {!horarioDisponible && !turno && (
+                          {cerradaPorCierre && renderVeloCerrado(false)}
+                          {!horarioDisponible && !cerradaPorCierre && !turno && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                               <span className="text-[11px] font-medium text-slate-500">No disponible</span>
                             </div>
@@ -2751,10 +2802,11 @@ const Calendario = () => {
                       const destacado = turno?.destacado ?? false;
                       const bloquearRecuperar = !!turno?.bloquearRecuperar;
                       const horarioDisponible = isCeldaOperativaPorFecha(diaIndex, hora, fechaCol);
+                      const cerradaPorCierre = esHoraCerradaPorCierre(fechaCol, hora);
                       return (
                         <div
                           key={`${diaIndex}-${hora}`}
-                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${
+                          className={`p-2 min-h-[72px] sm:min-h-[80px] min-w-[72px] border-r border-gray-200 last:border-r-0 relative group ${cerradaPorCierre ? 'isolate' : ''} ${
                             !horarioDisponible ? 'bg-slate-100' : destacado ? 'bg-amber-100' : 'hover:bg-gray-50'
                           }`}
                         >
@@ -2782,7 +2834,8 @@ const Calendario = () => {
                           >
                             <Star className={`w-4 h-4 ${destacado ? 'fill-current' : ''}`} />
                           </button>
-                          {!horarioDisponible && !turno && (
+                          {cerradaPorCierre && renderVeloCerrado(false)}
+                          {!horarioDisponible && !cerradaPorCierre && !turno && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                               <span className="text-[11px] font-medium text-slate-500">No disponible</span>
                             </div>

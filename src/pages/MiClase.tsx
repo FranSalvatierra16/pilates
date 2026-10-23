@@ -672,6 +672,8 @@ const MiClase = () => {
       const guardada = normalizarFichaSalud(json.fichaSalud);
       setFicha(guardada);
       setData((prev) => (prev ? { ...prev, alumno: { ...prev.alumno, fichaSalud: guardada } } : prev));
+      setFichaAbierta(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       toast.success('Ficha de salud guardada.');
     } finally {
       setGuardandoFicha(false);

@@ -84,7 +84,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
               type="date"
               value={fechaFicha}
               onChange={(e) => set({ fecha: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+              className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
             />
           )}
         </label>
@@ -116,7 +116,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
               value={ficha.contactoNombre}
               onChange={(e) => set({ contactoNombre: e.target.value })}
               placeholder="Nombre"
-              className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+              className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
             />
           )}
         </label>
@@ -130,7 +130,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
               value={ficha.contactoTelefono}
               onChange={(e) => set({ contactoTelefono: e.target.value })}
               placeholder="Teléfono"
-              className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+              className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
             />
           )}
         </label>
@@ -167,7 +167,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
               value={ficha.antecedentesDetalle}
               onChange={(e) => set({ antecedentesDetalle: e.target.value })}
               rows={3}
-              className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm resize-y"
+              className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm resize-y ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
             />
           )}
         </label>
@@ -187,7 +187,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
                 value={ficha.dolorDetalle}
                 onChange={(e) => set({ dolorDetalle: e.target.value })}
                 rows={3}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm resize-y"
+                className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm resize-y ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
               />
             )}
           </label>
@@ -204,7 +204,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
                 value={ficha.indicacionDetalle}
                 onChange={(e) => set({ indicacionDetalle: e.target.value })}
                 rows={2}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm resize-y"
+                className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm resize-y ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
               />
             )}
           </label>
@@ -225,7 +225,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
                 type="text"
                 value={ficha.medicacionDetalle}
                 onChange={(e) => set({ medicacionDetalle: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+                className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
               />
             )}
           </label>
@@ -242,7 +242,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
                 type="text"
                 value={ficha.otraActividadDetalle}
                 onChange={(e) => set({ otraActividadDetalle: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+                className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
               />
             )}
           </label>
@@ -295,7 +295,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
               value={ficha.otraInformacion}
               onChange={(e) => set({ otraInformacion: e.target.value })}
               rows={3}
-              className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm resize-y"
+              className={`mt-1 w-full rounded-xl border px-3 py-2.5 text-sm resize-y ${savia ? 'border-savia-sandSoft bg-white text-savia-ink' : 'border-gray-300'}`}
             />
           )}
         </label>

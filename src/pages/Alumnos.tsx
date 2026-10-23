@@ -860,7 +860,7 @@ const Alumnos = () => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-savia-olive mx-auto mb-4"></div>
           <p className="text-gray-600">Cargando...</p>
         </div>
       </div>
@@ -895,14 +895,14 @@ const Alumnos = () => {
       </div>
 
       {linkPortalRecuperar ? (
-        <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Link para recuperar</p>
+        <div className="mb-4 rounded-2xl border border-savia-sandSoft bg-savia-oliveSoft/70 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-savia-oliveDeep">Link para recuperar</p>
           <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
             <a
               href={linkPortalRecuperar}
               target="_blank"
               rel="noopener noreferrer"
-              className="min-w-0 flex-1 break-all text-sm font-medium text-violet-900 underline underline-offset-2 hover:text-violet-700"
+              className="min-w-0 flex-1 break-all text-sm font-medium text-savia-ink underline underline-offset-2 hover:text-savia-oliveDeep"
             >
               {linkPortalRecuperar}
             </a>
@@ -924,7 +924,7 @@ const Alumnos = () => {
               </button>
             </div>
           </div>
-          <p className="mt-2 text-xs text-violet-800/80">
+          <p className="mt-2 text-xs text-savia-muted">
             Compartilo con los alumnos. Entran con su DNI y solo ven la semana actual para recuperar.
             Para ocultar un horario del link (aunque haya cupo): en el calendario → editar turno → “No disponible para recuperar”.
           </p>
@@ -932,7 +932,7 @@ const Alumnos = () => {
       ) : null}
 
       <div className="mb-6">
-        <div className="card border border-primary-100">
+        <div className="card">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Configuración de links del portal</h2>
@@ -977,10 +977,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroVencimiento('todos')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroVencimiento === 'todos'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-olive text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
             >
               Todos
@@ -988,10 +988,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroVencimiento('mes-vencido')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroVencimiento === 'mes-vencido'
-                  ? 'bg-red-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-terraDeep text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
             >
               Mes vencido
@@ -999,10 +999,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroVencimiento('vence-hoy')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroVencimiento === 'vence-hoy'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-sand text-savia-ink'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
             >
               Se vencen hoy
@@ -1025,10 +1025,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroPrueba('todos')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroPrueba === 'todos'
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-terra text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
             >
               Todos
@@ -1036,10 +1036,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroPrueba('aprueba')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroPrueba === 'aprueba'
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-terra text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
             >
               A prueba
@@ -1047,10 +1047,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroPrueba('noaprueba')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroPrueba === 'noaprueba'
-                  ? 'bg-violet-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-terra text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
             >
               Sin prueba
@@ -1060,10 +1060,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroDni('todos')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroDni === 'todos'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-olive text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
             >
               Todos
@@ -1071,10 +1071,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroDni('problemas')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroDni === 'problemas'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100'
+                  ? 'bg-savia-terra text-white'
+                  : 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand hover:bg-savia-sandSoft'
               }`}
               title="Sin DNI o DNI que no tiene exactamente 8 números"
             >
@@ -1083,10 +1083,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroDni('sin')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroDni === 'sin'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-terra text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
             >
               Sin DNI ({conteoDni.sin})
@@ -1094,10 +1094,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setFiltroDni('no-realista')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 filtroDni === 'no-realista'
-                  ? 'bg-orange-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-terra text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
               title="Tiene letras o no son exactamente 8 dígitos"
             >
@@ -1106,10 +1106,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setOrdenarPorVencimientoCercano((v) => !v)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 ${
                 ordenarPorVencimientoCercano
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-olive text-white'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
               title="Ordenar por vencimiento más cercano (los vencidos no se muestran)"
             >
@@ -1118,10 +1118,10 @@ const Alumnos = () => {
             <button
               type="button"
               onClick={() => setMostrarInactivos((v) => !v)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 mostrarInactivos
-                  ? 'bg-gray-700 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-savia-ink text-savia-cream'
+                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
               }`}
               title="Ver también alumnos inactivos (dados de baja)"
             >
@@ -1176,14 +1176,14 @@ const Alumnos = () => {
             return (
               <div
                 key={alumno.id}
-                className={`card p-4 border border-gray-200 ${alumno.aPrueba ? 'border-l-4 border-l-violet-600 bg-violet-50/50' : ''}`}
+                className={`card p-4 ${alumno.aPrueba ? 'border-l-4 border-l-savia-terra bg-savia-terraSoft/40' : ''}`}
               >
                 <div className="flex justify-between items-start gap-2 mb-3">
                   <div>
                     <h3 className="font-semibold text-gray-900 text-base flex items-center gap-2 flex-wrap">
                       {[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}
                       {alumno.aPrueba && (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-violet-800 bg-violet-200/90 px-2 py-0.5 rounded-full">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-savia-terraDeep bg-savia-terraSoft px-2 py-0.5 rounded-full">
                           <Sparkles className="w-3 h-3" />
                           A prueba
                         </span>
@@ -1233,9 +1233,9 @@ const Alumnos = () => {
                     })()}
                     <button onClick={() => handlePagarCuota(alumno)} className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title="Pagar cuota" aria-label="Pagar"><CreditCard className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
-                    <button onClick={() => setAlumnoFicha(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.fichaSalud ? 'text-rose-600 hover:bg-rose-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Ficha de salud" aria-label="Ficha de salud"><HeartPulse className="w-5 h-5" /></button>
+                    <button onClick={() => setAlumnoFicha(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.fichaSalud ? 'text-savia-terra hover:bg-savia-terraSoft' : 'text-savia-muted hover:bg-savia-sandSoft'}`} title="Ficha de salud" aria-label="Ficha de salud"><HeartPulse className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenHistorial(alumno)} className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation" title="Historial de pagos" aria-label="Historial de pagos"><History className="w-5 h-5" /></button>
-                    <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-primary-600 hover:bg-primary-50 touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
+                    <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-savia-oliveDeep hover:bg-savia-oliveSoft touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
                     {alumno.activo === false ? (
                       <button onClick={() => handleActivar(alumno.id)} className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50 touch-manipulation" title="Reactivar" aria-label="Reactivar"><Save className="w-5 h-5" /></button>
                     ) : (
@@ -1258,13 +1258,13 @@ const Alumnos = () => {
                   </div>
                   <div>
                     <span className="text-gray-500">Actividad: </span>
-                    <span className={alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-violet-800 font-medium' : 'text-gray-900'}>
+                    <span className={alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-savia-terraDeep font-medium' : 'text-savia-ink'}>
                       {getActividadNombre(alumno.actividadId, alumno.aPrueba)}
                     </span>
                     <span className="text-gray-600"> — {formatCurrency(getActividadPrecio(alumno.actividadId, alumno.aPrueba))}</span>
                     {alumno.aPrueba && alumno.activo !== false && (
-                      <div className="mt-2 pt-2 border-t border-violet-100">
-                        <label className="block text-xs font-medium text-violet-900 mb-1">Asignar plan desde acá</label>
+                      <div className="mt-2 pt-2 border-t border-savia-sandSoft">
+                        <label className="block text-xs font-medium text-savia-terraDeep mb-1">Asignar plan desde acá</label>
                         {actividades.length === 0 ? (
                           <p className="text-xs text-amber-700">No hay actividades cargadas. Creá al menos una en Actividades.</p>
                         ) : (
@@ -1307,10 +1307,10 @@ const Alumnos = () => {
                   </div>
                   <div>
                     <span className="text-gray-500">Para recuperar: </span>
-                    <span className="font-medium text-violet-700">{alumno.clasesParaRecuperar || 0}</span>
+                    <span className="font-medium text-savia-oliveDeep">{alumno.clasesParaRecuperar || 0}</span>
                   </div>
                   <div className="flex justify-between text-gray-500 text-xs pt-1 border-t border-gray-100">
-                    <span>Clases este mes: <strong className="text-primary-600">{alumno.clasesAsistidas || 0}</strong></span>
+                    <span>Clases este mes: <strong className="text-savia-oliveDeep">{alumno.clasesAsistidas || 0}</strong></span>
                     <span>Registro: {formatDate(alumno.createdAt.split('T')[0])}</span>
                   </div>
                 </div>
@@ -1322,19 +1322,19 @@ const Alumnos = () => {
         <div className="card overflow-hidden p-0 -mx-2 sm:mx-0">
           <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
             <table className="w-full min-w-[800px]">
-              <thead className="bg-primary-50">
+              <thead className="bg-savia-oliveSoft">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Alumno</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">DNI</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Contacto</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Actividad</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Vencimiento</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Clases</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Fecha Registro</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Acciones</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Alumno</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">DNI</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Contacto</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Actividad</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Vencimiento</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Clases</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Fecha Registro</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-savia-cream/50 divide-y divide-savia-sandSoft">
                 {alumnosAMostrar.map((alumno) => {
                   const tienePagos = alumnoTieneAlgunPagoRegistrado(alumno);
                   const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
@@ -1344,13 +1344,13 @@ const Alumnos = () => {
                   return (
                     <tr
                       key={alumno.id}
-                      className={`hover:bg-gray-50 ${alumno.aPrueba ? 'bg-violet-50/70 border-l-4 border-l-violet-600' : ''}`}
+                      className={`hover:bg-savia-creamDeep/80 ${alumno.aPrueba ? 'bg-savia-terraSoft/50 border-l-4 border-l-savia-terra' : ''}`}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900 flex items-center gap-2 flex-wrap">
                           {[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}
                           {alumno.aPrueba && (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-violet-800 bg-violet-200/90 px-2 py-0.5 rounded-full">
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-savia-terraDeep bg-savia-terraSoft px-2 py-0.5 rounded-full">
                               <Sparkles className="w-3 h-3" />
                               A prueba
                             </span>
@@ -1389,13 +1389,13 @@ const Alumnos = () => {
                         <div className="text-sm text-gray-500">{alumno.email}</div>
                       </td>
                       <td className="px-6 py-4 align-top min-w-[200px]">
-                        <div className={`text-sm font-medium ${alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-violet-800' : 'text-gray-900'}`}>
+                        <div className={`text-sm font-medium ${alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-savia-terraDeep' : 'text-savia-ink'}`}>
                           {getActividadNombre(alumno.actividadId, alumno.aPrueba)}
                         </div>
                         <div className="text-sm text-gray-500">{formatCurrency(getActividadPrecio(alumno.actividadId, alumno.aPrueba))}</div>
                         {alumno.aPrueba && alumno.activo !== false && (
-                          <div className="mt-2 pt-2 border-t border-violet-100">
-                            <label className="block text-xs font-medium text-violet-900 mb-1">Asignar plan</label>
+                          <div className="mt-2 pt-2 border-t border-savia-sandSoft">
+                            <label className="block text-xs font-medium text-savia-terraDeep mb-1">Asignar plan</label>
                             {actividades.length === 0 ? (
                               <p className="text-xs text-amber-700">Sin actividades en el catálogo.</p>
                             ) : (
@@ -1441,9 +1441,9 @@ const Alumnos = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-primary-600">{alumno.clasesAsistidas || 0}</div>
+                        <div className="text-sm font-semibold text-savia-oliveDeep">{alumno.clasesAsistidas || 0}</div>
                         <div className="text-xs text-gray-500">este mes</div>
-                        <div className="text-xs text-violet-600 mt-1">Recuperar: {alumno.clasesParaRecuperar || 0}</div>
+                        <div className="text-xs text-savia-oliveDeep mt-1">Recuperar: {alumno.clasesParaRecuperar || 0}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{formatDate(alumno.createdAt.split('T')[0])}</div>
@@ -1461,10 +1461,10 @@ const Alumnos = () => {
                           })()}
                           <button onClick={() => handlePagarCuota(alumno)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Pagar cuota"><CreditCard className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenDescripcion(alumno)} className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`} title="Descripción / Notas"><FileText className="w-4 h-4" /></button>
-                          <button onClick={() => setAlumnoFicha(alumno)} className={`p-1 rounded ${alumno.fichaSalud ? 'text-rose-600 hover:text-rose-800' : 'text-gray-400 hover:text-gray-600'}`} title="Ficha de salud" aria-label="Ficha de salud"><HeartPulse className="w-4 h-4" /></button>
+                          <button onClick={() => setAlumnoFicha(alumno)} className={`p-1 rounded ${alumno.fichaSalud ? 'text-savia-terra hover:text-savia-terraDeep' : 'text-savia-muted hover:text-savia-ink'}`} title="Ficha de salud" aria-label="Ficha de salud"><HeartPulse className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenHistorial(alumno)} className="p-1 rounded text-gray-600 hover:text-gray-900" title="Historial de pagos"><History className="w-4 h-4" /></button>
                          
-                          <button onClick={() => handleOpenModal(alumno)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit className="w-4 h-4" /></button>
+                          <button onClick={() => handleOpenModal(alumno)} className="text-savia-oliveDeep hover:text-savia-ink" title="Editar"><Edit className="w-4 h-4" /></button>
                           {alumno.activo === false ? (
                             <button onClick={() => handleActivar(alumno.id)} className="text-emerald-600 hover:text-emerald-900" title="Reactivar"><Save className="w-4 h-4" /></button>
                           ) : (
@@ -2215,11 +2215,11 @@ const Alumnos = () => {
       )}
 
       {alumnoFicha && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 flex-shrink-0">
-              <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2 min-w-0">
-                <HeartPulse className="w-5 h-5 text-rose-600 flex-shrink-0" />
+        <div className="fixed inset-0 bg-savia-ink/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-savia-cream rounded-t-3xl sm:rounded-3xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col border border-savia-sandSoft font-savia">
+            <div className="flex justify-between items-center p-4 border-b border-savia-sandSoft flex-shrink-0">
+              <h2 className="text-base sm:text-lg font-saviaDisplay text-savia-ink flex items-center gap-2 min-w-0">
+                <HeartPulse className="w-5 h-5 text-savia-terra flex-shrink-0" />
                 <span className="truncate">Ficha de salud — {[alumnoFicha.apellido, alumnoFicha.nombre].filter(Boolean).join(', ')}</span>
               </h2>
               <button
@@ -2235,6 +2235,7 @@ const Alumnos = () => {
               {alumnoFicha.fichaSalud ? (
                 <FichaSaludForm
                   soloLectura
+                  savia
                   ficha={normalizarFichaSalud(alumnoFicha.fichaSalud)}
                   alumno={{
                     nombre: alumnoFicha.nombre,
@@ -2244,12 +2245,12 @@ const Alumnos = () => {
                   }}
                 />
               ) : (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-savia-muted">
                   Todavía no completó la ficha. La llena desde su perfil, en Mi clase.
                 </p>
               )}
             </div>
-            <div className="flex justify-end p-4 border-t border-gray-200">
+            <div className="flex justify-end p-4 border-t border-savia-sandSoft">
               <button type="button" onClick={() => setAlumnoFicha(null)} className="btn-secondary">
                 Cerrar
               </button>

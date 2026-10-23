@@ -49,11 +49,11 @@
 
 @layer components {
   .btn-primary {
-    @apply px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium;
+    @apply px-4 py-2 bg-savia-olive text-white rounded-full hover:bg-savia-oliveDeep transition-colors font-medium;
   }
   
   .btn-secondary {
-    @apply px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors font-medium;
+    @apply px-4 py-2 bg-savia-creamDeep text-savia-ink rounded-full hover:bg-savia-sandSoft border border-savia-sandSoft transition-colors font-medium;
   }
   
   .btn-danger {
@@ -61,22 +61,22 @@
   }
   
   .input-field {
-    @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all min-h-[44px];
+    @apply w-full px-4 py-2 border border-savia-sandSoft rounded-xl bg-savia-cream/60 text-savia-ink placeholder:text-savia-muted focus:ring-2 focus:ring-savia-olive/40 focus:border-savia-olive outline-none transition-all min-h-[44px];
   }
   
   .card {
-    @apply bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-6;
+    @apply bg-savia-cream/80 backdrop-blur-sm rounded-2xl shadow-sm border border-savia-sandSoft p-6;
   }
 
   /* Título de página: legible en cualquier fondo, sin sombras raras */
   .page-title {
-    @apply text-2xl sm:text-3xl font-bold tracking-tight text-gray-800;
+    @apply text-2xl sm:text-3xl font-bold tracking-tight text-savia-ink font-saviaDisplay;
   }
   .page-title-wrap {
     @apply flex items-center gap-3 flex-wrap;
   }
   .page-title-accent {
-    @apply w-1 sm:w-1.5 h-8 sm:h-9 rounded-full bg-primary-500 flex-shrink-0;
+    @apply w-1 sm:w-1.5 h-8 sm:h-9 rounded-full bg-savia-olive flex-shrink-0;
   }
 
   .drawer-panel {

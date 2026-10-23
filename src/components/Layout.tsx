@@ -167,7 +167,7 @@ const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className="min-h-screen min-h-dvh flex flex-col">
-      <nav className="relative z-40 flex-shrink-0 bg-white/95 backdrop-blur-sm shadow-lg border-b border-primary-200 safe-top">
+      <nav className="relative z-40 flex-shrink-0 bg-savia-cream/95 backdrop-blur-sm shadow-sm border-b border-savia-sandSoft safe-top font-savia">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between min-h-16 py-3 items-center gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
@@ -175,14 +175,14 @@ const Layout = ({ children }: LayoutProps) => {
               <button
                 type="button"
                 onClick={() => setMenuOpen(true)}
-                className="sm:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation"
+                className="sm:hidden p-2 -ml-2 rounded-lg text-savia-ink hover:bg-savia-sandSoft touch-manipulation"
                 aria-label="Abrir menú"
               >
                 <Menu className="w-6 h-6" />
               </button>
               <div className="flex-shrink-0 flex items-center">
                 <Link to="/dashboard" className="flex items-center gap-3 hover:opacity-90 transition-opacity" onClick={() => setMenuOpen(false)}>
-                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/80 flex items-center justify-center border border-primary-100">
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-savia-cream flex items-center justify-center border border-savia-sand">
                     {fotoPerfil ? (
                       <img
                         src={fotoPerfil}
@@ -197,7 +197,7 @@ const Layout = ({ children }: LayoutProps) => {
                       />
                     )}
                   </div>
-                  <span className="font-semibold text-gray-800 hidden sm:block">
+                  <span className="font-saviaDisplay text-xl text-savia-ink hidden sm:block">
                     {sucursalNombre || (import.meta.env.VITE_APP_NAME || 'Sistema de Gestión')}
                   </span>
                 </Link>
@@ -213,8 +213,8 @@ const Layout = ({ children }: LayoutProps) => {
                         to={item.path}
                         className={`inline-flex items-center flex-shrink-0 px-2 py-1 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                           isActive
-                            ? 'bg-primary-50 text-primary-600'
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            ? 'bg-savia-oliveSoft text-savia-oliveDeep'
+                            : 'text-savia-muted hover:text-savia-ink hover:bg-savia-sandSoft/70'
                         }`}
                       >
                         <Icon className="w-4 h-4 mr-1.5 flex-shrink-0" />
@@ -244,12 +244,12 @@ const Layout = ({ children }: LayoutProps) => {
                       if (!next) setDropdownPosition(null);
                       setNotifOpen(next);
                     }}
-                    className="relative p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="relative p-2 rounded-lg text-savia-ink hover:bg-savia-sandSoft transition-colors"
                     aria-label="Notificaciones"
                   >
                     <Bell className="w-5 h-5" />
                     {noLeidasCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-primary-500 text-white text-xs font-medium px-1">
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-savia-terra text-white text-xs font-medium px-1">
                         {noLeidasCount > 99 ? '99+' : noLeidasCount}
                       </span>
                     )}
@@ -276,7 +276,7 @@ const Layout = ({ children }: LayoutProps) => {
                             <button
                               type="button"
                               onClick={() => { marcarTodasLeidas(); setNotifOpen(false); }}
-                              className="text-xs text-primary-600 hover:underline whitespace-nowrap touch-manipulation"
+                              className="text-xs text-savia-oliveDeep hover:underline whitespace-nowrap touch-manipulation"
                             >
                               Marcar leídas
                             </button>
@@ -284,7 +284,7 @@ const Layout = ({ children }: LayoutProps) => {
                           <Link
                             to="/notificaciones"
                             onClick={() => setNotifOpen(false)}
-                            className="text-sm font-medium text-primary-600 hover:underline touch-manipulation"
+                            className="text-sm font-medium text-savia-oliveDeep hover:underline touch-manipulation"
                           >
                             Ver todas
                           </Link>
@@ -296,7 +296,7 @@ const Layout = ({ children }: LayoutProps) => {
                       >
                         {notifLoading && (
                           <div className="flex justify-center py-6">
-                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-500 border-t-transparent" />
+                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-savia-olive border-t-transparent" />
                           </div>
                         )}
                         {!notifLoading && notificaciones.length === 0 && (
@@ -306,7 +306,7 @@ const Layout = ({ children }: LayoutProps) => {
                           notificaciones.slice(0, 10).map((n) => (
                             <div
                               key={n.id}
-                              className={`px-4 py-2.5 border-b border-gray-50 last:border-0 text-left min-w-0 ${!n.leido ? 'bg-primary-50/50' : ''}`}
+                              className={`px-4 py-2.5 border-b border-savia-sandSoft/60 last:border-0 text-left min-w-0 ${!n.leido ? 'bg-savia-oliveSoft/60' : ''}`}
                             >
                               <p className={`text-sm text-gray-800 min-w-0 break-words ${!n.leido ? 'font-medium' : ''}`}>
                                 {n.tipo === 'inscribio' ? (
@@ -333,7 +333,7 @@ const Layout = ({ children }: LayoutProps) => {
               )}
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-savia-ink hover:bg-savia-sandSoft rounded-full transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 <span className="hidden sm:inline">Salir</span>
@@ -352,12 +352,12 @@ const Layout = ({ children }: LayoutProps) => {
             aria-hidden="true"
           />
           <div
-            className="fixed inset-y-0 left-0 z-50 w-[min(280px,85vw)] bg-white shadow-xl flex flex-col sm:hidden drawer-panel"
+            className="fixed inset-y-0 left-0 z-50 w-[min(280px,85vw)] bg-savia-cream shadow-xl flex flex-col sm:hidden drawer-panel font-savia"
             role="dialog"
             aria-label="Menú de navegación"
           >
-            <div className="flex items-center justify-between pt-6 pb-4 px-5 border-b border-gray-200 safe-top">
-              <span className="text-lg font-semibold text-gray-900">
+            <div className="flex items-center justify-between pt-6 pb-4 px-5 border-b border-savia-sandSoft safe-top">
+              <span className="text-lg font-saviaDisplay text-savia-ink">
                 {sucursalNombre || (import.meta.env.VITE_APP_NAME || 'Sistema de Gestión')}
               </span>
               <button
@@ -380,11 +380,11 @@ const Layout = ({ children }: LayoutProps) => {
                     onClick={() => setMenuOpen(false)}
                     className={`flex items-center gap-4 px-4 py-3.5 mx-1 rounded-xl text-[15px] font-medium touch-manipulation ${
                       isActive
-                        ? 'bg-primary-50 text-primary-600'
-                        : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
+                        ? 'bg-savia-oliveSoft text-savia-oliveDeep'
+                        : 'text-savia-ink hover:bg-savia-sandSoft/70 active:bg-savia-sandSoft'
                     }`}
                   >
-                    <Icon className="w-6 h-6 flex-shrink-0 text-gray-500" />
+                    <Icon className="w-6 h-6 flex-shrink-0 text-savia-olive" />
                     {item.label}
                   </Link>
                 );
@@ -406,7 +406,7 @@ const Layout = ({ children }: LayoutProps) => {
         </>
       )}
 
-      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 pb-6 sm:pt-8 sm:pb-8 safe-bottom max-w-[100vw] overflow-x-hidden min-w-0 bg-white rounded-t-xl sm:rounded-xl shadow-sm border border-gray-100 border-b-0 sm:border-b">
+      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-5 pb-6 sm:pt-8 sm:pb-8 safe-bottom max-w-[100vw] overflow-x-hidden min-w-0 bg-savia-cream/85 rounded-t-3xl sm:rounded-3xl shadow-sm border border-savia-sandSoft font-savia">
         <div className="relative min-h-0 w-full min-w-0 h-full">
           {children}
         </div>

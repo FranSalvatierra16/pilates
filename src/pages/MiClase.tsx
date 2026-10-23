@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw, CheckCircle2, User, Lock } from 'lucide-react';
+import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw, CheckCircle2, User, Lock, HeartPulse, ChevronRight } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
@@ -295,6 +295,7 @@ const MiClase = () => {
   const [filtroHorario, setFiltroHorario] = useState<'todos' | 'manana' | 'tarde'>('todos');
   const [seccionActiva, setSeccionActiva] = useState<'inicio' | 'clases' | 'perfil'>('inicio');
   const [ficha, setFicha] = useState<FichaSalud>(() => fichaVacia());
+  const [fichaAbierta, setFichaAbierta] = useState(false);
   const [guardandoFicha, setGuardandoFicha] = useState(false);
   const [dniInput, setDniInput] = useState('');
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
@@ -645,6 +646,10 @@ const MiClase = () => {
     if (!data?.alumno) return;
     setFicha(normalizarFichaSalud(data.alumno.fichaSalud));
   }, [data?.alumno?.id, data?.alumno?.fichaSalud?.actualizadaEn]);
+
+  useEffect(() => {
+    if (seccionActiva !== 'perfil') setFichaAbierta(false);
+  }, [seccionActiva]);
 
   const guardarFicha = async () => {
     if (!portalAuth || !data) return;
@@ -1008,22 +1013,55 @@ const MiClase = () => {
 
   const perfilPanel = (
     <>
-      <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
-        <FichaSaludForm
-          ficha={ficha}
-          onChange={setFicha}
-          alumno={{
-            nombre: data.alumno.nombre,
-            apellido: data.alumno.apellido,
-            telefono: data.alumno.telefono,
-            fechaNacimiento: data.alumno.fechaNacimiento,
-          }}
-          savia={isSavia}
-          guardando={guardandoFicha}
-          onGuardar={() => void guardarFicha()}
-        />
-      </div>
-      {proximaClase && (
+      {fichaAbierta ? (
+        <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
+          <button
+            type="button"
+            onClick={() => setFichaAbierta(false)}
+            className={`inline-flex items-center gap-1.5 text-sm font-medium mb-4 touch-manipulation ${
+              isSavia ? 'text-savia-terra hover:text-savia-terraDeep' : 'text-primary-600'
+            }`}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Volver al perfil
+          </button>
+          <FichaSaludForm
+            ficha={ficha}
+            onChange={setFicha}
+            alumno={{
+              nombre: data.alumno.nombre,
+              apellido: data.alumno.apellido,
+              telefono: data.alumno.telefono,
+              fechaNacimiento: data.alumno.fechaNacimiento,
+            }}
+            savia={isSavia}
+            guardando={guardandoFicha}
+            onGuardar={() => void guardarFicha()}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setFichaAbierta(true)}
+          className={`${cardCls} w-full text-left p-4 mb-4 flex items-center gap-3 touch-manipulation animate-savia-fade-up`}
+        >
+          <div
+            className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl ${
+              isSavia ? 'bg-savia-olive text-white' : 'bg-rose-600 text-white'
+            }`}
+          >
+            <HeartPulse className="w-5 h-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className={`text-base font-semibold ${ink}`}>Ficha de salud</p>
+            <p className={`text-sm mt-0.5 ${muted}`}>
+              {data.alumno.fichaSalud?.aceptaDeclaracion ? 'Ya está completa. Entrá para verla o cambiarla.' : 'Entrá para completarla.'}
+            </p>
+          </div>
+          <ChevronRight className={`w-5 h-5 flex-shrink-0 ${muted}`} />
+        </button>
+      )}
+      {!fichaAbierta && proximaClase && (
         <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
           <div
             className={`rounded-2xl px-4 py-3 ${
@@ -1054,6 +1092,8 @@ const MiClase = () => {
         </div>
       )}
 
+      {!fichaAbierta && (
+      <>
       <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
         <div className="grid grid-cols-2 gap-3">
           <div
@@ -1212,6 +1252,8 @@ const MiClase = () => {
           </div>
         )}
       </div>
+      </>
+      )}
     </>
   );
 

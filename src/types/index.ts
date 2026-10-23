@@ -1,3 +1,5 @@
+import type { FichaSalud } from '../data/fichaSalud';
+
 /** Estado del PIN de finanzas (Caja / Pagos) para la sucursal en sesión */
 export interface FinanzasEstado {
   pinConfigurado: boolean;
@@ -72,6 +74,8 @@ export interface Alumno {
   linkToken?: string;
   /** Si false, el alumno está dado de baja (no se muestra en listas activas) */
   activo?: boolean;
+  /** Ficha de salud que completa el alumno desde su perfil */
+  fichaSalud?: FichaSalud | null;
   createdAt: string;
 }
 

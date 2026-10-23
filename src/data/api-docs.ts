@@ -681,6 +681,14 @@ export const API_ENDPOINTS: ApiEndpointDoc[] = [
   },
   {
     group: 'Portal alumno',
+    title: 'Guardar ficha de salud',
+    method: 'POST',
+    path: '/api/alumno-portal/ficha-salud',
+    auth: 'portal',
+    body: '{ "token": "...", "ficha": { "contactoEmergencia": "...", "antecedentes": ["ninguna"], "dolorActual": "no", "indicacionMedica": "no", "medicacion": "no", "otraActividad": "no", "objetivos": ["bienestar"], "aceptaDeclaracion": true } }',
+  },
+  {
+    group: 'Portal alumno',
     title: 'Inscribirse cupo liberado (fija)',
     method: 'POST',
     path: '/api/alumno-portal/inscribir',

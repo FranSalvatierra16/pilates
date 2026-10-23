@@ -73,6 +73,8 @@ ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS sucursal_id TEXT REFERENCES sucursa
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS clases_para_recuperar INTEGER DEFAULT 0;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS a_prueba BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS fecha_nacimiento DATE;
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS ficha_salud JSONB;
+ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS ficha_salud_en TIMESTAMPTZ;
 -- Arrastre de cupo del plan (clases_por_semana): lo no usado en semanas pasadas suma al tope de la semana vista (portal).
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS actividad_arrastre_saldo INTEGER DEFAULT 0;
 ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS actividad_arrastre_procesado_hasta TEXT;

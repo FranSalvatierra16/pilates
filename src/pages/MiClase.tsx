@@ -5,6 +5,8 @@ import { DIAS_SEMANA } from '../types';
 import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 import InstallAppHint from '../components/InstallAppHint';
+import FichaSaludForm from '../components/FichaSaludForm';
+import { FichaSalud, fichaVacia, normalizarFichaSalud } from '../data/fichaSalud';
 import { applyManifestLink, isPwaStandalone, setAlumnoPortalContext } from '../utils/pwa-role';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -45,6 +47,9 @@ type PortalData = {
     fechaVencimientoCuota?: string;
     clasesParaRecuperar: number;
     actividadNombre?: string;
+    telefono?: string;
+    fechaNacimiento?: string;
+    fichaSalud?: FichaSalud | null;
   };
   turnos: TurnoPortal[];
   clasesFijas: { id: string; diaSemana: number; hora: string; titulo: string }[];
@@ -289,6 +294,8 @@ const MiClase = () => {
   const [filtroDia, setFiltroDia] = useState<number | null>(null);
   const [filtroHorario, setFiltroHorario] = useState<'todos' | 'manana' | 'tarde'>('todos');
   const [seccionActiva, setSeccionActiva] = useState<'inicio' | 'clases' | 'perfil'>('inicio');
+  const [ficha, setFicha] = useState<FichaSalud>(() => fichaVacia());
+  const [guardandoFicha, setGuardandoFicha] = useState(false);
   const [dniInput, setDniInput] = useState('');
   const [sucursales, setSucursales] = useState<SucursalOption[]>([]);
   const [enviandoDni, setEnviandoDni] = useState(false);
@@ -634,6 +641,38 @@ const MiClase = () => {
     }
   };
 
+  useEffect(() => {
+    if (!data?.alumno) return;
+    setFicha(normalizarFichaSalud(data.alumno.fichaSalud));
+  }, [data?.alumno?.id, data?.alumno?.fichaSalud?.actualizadaEn]);
+
+  const guardarFicha = async () => {
+    if (!portalAuth || !data) return;
+    setGuardandoFicha(true);
+    try {
+      const base = getBase();
+      const auth = portalAuth.type === 'token'
+        ? { token: portalAuth.token }
+        : { dni: portalAuth.dni, sucursalId: portalAuth.sucursalId };
+      const res = await fetchWithTimeout(`${base}/api/alumno-portal/ficha-salud`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...auth, ficha }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json.error || 'No se pudo guardar la ficha.');
+        return;
+      }
+      const guardada = normalizarFichaSalud(json.fichaSalud);
+      setFicha(guardada);
+      setData((prev) => (prev ? { ...prev, alumno: { ...prev.alumno, fichaSalud: guardada } } : prev));
+      toast.success('Ficha de salud guardada.');
+    } finally {
+      setGuardandoFicha(false);
+    }
+  };
+
   if (loading) {
     return (
       <div
@@ -969,6 +1008,21 @@ const MiClase = () => {
 
   const perfilPanel = (
     <>
+      <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
+        <FichaSaludForm
+          ficha={ficha}
+          onChange={setFicha}
+          alumno={{
+            nombre: data.alumno.nombre,
+            apellido: data.alumno.apellido,
+            telefono: data.alumno.telefono,
+            fechaNacimiento: data.alumno.fechaNacimiento,
+          }}
+          savia={isSavia}
+          guardando={guardandoFicha}
+          onGuardar={() => void guardarFicha()}
+        />
+      </div>
       {proximaClase && (
         <div className={`${cardCls} p-4 mb-4 animate-savia-fade-up`}>
           <div
@@ -1331,7 +1385,9 @@ const MiClase = () => {
                     <div className="min-w-0 flex-1">
                       <p className={`text-lg font-semibold ${ink}`}>Mi perfil</p>
                       <p className={`text-sm mt-1 leading-snug ${muted}`}>
-                        Cuota, historial y datos de tu plan.
+                        {data.alumno.fichaSalud?.aceptaDeclaracion
+                          ? 'Cuota, historial y tu ficha de salud.'
+                          : 'Completá tu ficha de salud antes de empezar.'}
                       </p>
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles, Eye, ExternalLink } from 'lucide-react';
+import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles, Eye, ExternalLink, HeartPulse } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem, Turno, DIAS_SEMANA } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -9,6 +9,8 @@ import { storageHybrid } from '../utils/storage-hybrid';
 import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal, horaActualInput, formatHora24 } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 import { useToast } from '../components/ToastProvider';
+import FichaSaludForm from '../components/FichaSaludForm';
+import { normalizarFichaSalud } from '../data/fichaSalud';
 
 /** Normaliza teléfono para WhatsApp (Argentina: 54 9 área número). Devuelve null si no hay número válido. */
 function normalizePhoneForWhatsApp(telefono: string): string | null {
@@ -154,6 +156,7 @@ const Alumnos = () => {
   const [showModalConfigPortal, setShowModalConfigPortal] = useState(false);
   const [showModalPreviewRecuperar, setShowModalPreviewRecuperar] = useState(false);
   const [alumnoDescripcion, setAlumnoDescripcion] = useState<Alumno | null>(null);
+  const [alumnoFicha, setAlumnoFicha] = useState<Alumno | null>(null);
   const [textoDescripcion, setTextoDescripcion] = useState('');
   const [editingAlumno, setEditingAlumno] = useState<Alumno | null>(null);
   const [alumnoParaPagar, setAlumnoParaPagar] = useState<Alumno | null>(null);
@@ -1230,6 +1233,7 @@ const Alumnos = () => {
                     })()}
                     <button onClick={() => handlePagarCuota(alumno)} className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title="Pagar cuota" aria-label="Pagar"><CreditCard className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
+                    <button onClick={() => setAlumnoFicha(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.fichaSalud ? 'text-rose-600 hover:bg-rose-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Ficha de salud" aria-label="Ficha de salud"><HeartPulse className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenHistorial(alumno)} className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation" title="Historial de pagos" aria-label="Historial de pagos"><History className="w-5 h-5" /></button>
                     <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-primary-600 hover:bg-primary-50 touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
                     {alumno.activo === false ? (
@@ -1457,6 +1461,7 @@ const Alumnos = () => {
                           })()}
                           <button onClick={() => handlePagarCuota(alumno)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Pagar cuota"><CreditCard className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenDescripcion(alumno)} className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`} title="Descripción / Notas"><FileText className="w-4 h-4" /></button>
+                          <button onClick={() => setAlumnoFicha(alumno)} className={`p-1 rounded ${alumno.fichaSalud ? 'text-rose-600 hover:text-rose-800' : 'text-gray-400 hover:text-gray-600'}`} title="Ficha de salud" aria-label="Ficha de salud"><HeartPulse className="w-4 h-4" /></button>
                           <button onClick={() => handleOpenHistorial(alumno)} className="p-1 rounded text-gray-600 hover:text-gray-900" title="Historial de pagos"><History className="w-4 h-4" /></button>
                          
                           <button onClick={() => handleOpenModal(alumno)} className="text-primary-600 hover:text-primary-900" title="Editar"><Edit className="w-4 h-4" /></button>
@@ -2202,6 +2207,50 @@ const Alumnos = () => {
                 onClick={() => { setShowModalHistorial(false); setAlumnoHistorial(null); setHistorialPagos([]); setHistorialAsistencias([]); }}
                 className="btn-secondary w-full"
               >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {alumnoFicha && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200 flex-shrink-0">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2 min-w-0">
+                <HeartPulse className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                <span className="truncate">Ficha de salud — {[alumnoFicha.apellido, alumnoFicha.nombre].filter(Boolean).join(', ')}</span>
+              </h2>
+              <button
+                type="button"
+                onClick={() => setAlumnoFicha(null)}
+                className="p-2 -m-2 text-gray-400 hover:text-gray-600 rounded-lg touch-manipulation flex-shrink-0"
+                aria-label="Cerrar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto">
+              {alumnoFicha.fichaSalud ? (
+                <FichaSaludForm
+                  soloLectura
+                  ficha={normalizarFichaSalud(alumnoFicha.fichaSalud)}
+                  alumno={{
+                    nombre: alumnoFicha.nombre,
+                    apellido: alumnoFicha.apellido,
+                    telefono: alumnoFicha.telefono,
+                    fechaNacimiento: alumnoFicha.fechaNacimiento,
+                  }}
+                />
+              ) : (
+                <p className="text-sm text-gray-600">
+                  Todavía no completó la ficha. La llena desde su perfil, en Mi clase.
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end p-4 border-t border-gray-200">
+              <button type="button" onClick={() => setAlumnoFicha(null)} className="btn-secondary">
                 Cerrar
               </button>
             </div>

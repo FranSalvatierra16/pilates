@@ -204,9 +204,92 @@ async function migrateNotificacionesTipoRestauro(db) {
 async function migrateAlumnosFechaNacimiento(db) {
   try {
     await db.query('ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS fecha_nacimiento DATE');
+    await db.query('ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS ficha_salud JSONB');
+    await db.query('ALTER TABLE alumnos ADD COLUMN IF NOT EXISTS ficha_salud_en TIMESTAMPTZ');
   } catch (e) {
     console.warn('Migración fecha_nacimiento:', e.message);
   }
+}
+
+const FICHA_ANTECEDENTES = new Set([
+  'hipertension',
+  'hipotension_ortostatica',
+  'cardiacos_respiratorios',
+  'diabetes',
+  'osteoporosis',
+  'columna',
+  'lesiones',
+  'vertigo',
+  'embarazo',
+  'otra',
+  'ninguna',
+]);
+const FICHA_OBJETIVOS = new Set(['movilidad', 'fuerza', 'postura', 'core', 'flexibilidad', 'bienestar']);
+
+function textoFicha(v, max = 800) {
+  return String(v ?? '').trim().slice(0, max);
+}
+
+function siNoFicha(v) {
+  return v === 'si' || v === 'no' ? v : '';
+}
+
+function normalizarFichaSalud(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  let antecedentes = Array.isArray(raw.antecedentes)
+    ? [...new Set(raw.antecedentes.map((id) => String(id)).filter((id) => FICHA_ANTECEDENTES.has(id)))]
+    : [];
+  if (antecedentes.includes('ninguna')) antecedentes = ['ninguna'];
+  const objetivos = Array.isArray(raw.objetivos)
+    ? [...new Set(raw.objetivos.map((id) => String(id)).filter((id) => FICHA_OBJETIVOS.has(id)))]
+    : [];
+  return {
+    contactoEmergencia: textoFicha(raw.contactoEmergencia, 200),
+    antecedentes,
+    antecedentesDetalle: textoFicha(raw.antecedentesDetalle),
+    dolorActual: siNoFicha(raw.dolorActual),
+    dolorDetalle: textoFicha(raw.dolorDetalle),
+    indicacionMedica: siNoFicha(raw.indicacionMedica),
+    indicacionDetalle: textoFicha(raw.indicacionDetalle),
+    medicacion: siNoFicha(raw.medicacion),
+    medicacionDetalle: textoFicha(raw.medicacionDetalle),
+    otraActividad: siNoFicha(raw.otraActividad),
+    otraActividadDetalle: textoFicha(raw.otraActividadDetalle),
+    objetivos,
+    otraInformacion: textoFicha(raw.otraInformacion, 1200),
+    aceptaDeclaracion: raw.aceptaDeclaracion === true,
+  };
+}
+
+function faltantesFichaSalud(f) {
+  if (!f) return ['La ficha está vacía.'];
+  const faltan = [];
+  if (!f.contactoEmergencia) faltan.push('Completá el contacto de emergencia y su teléfono.');
+  if (!f.antecedentes.length) faltan.push('Marcá al menos un antecedente, o "Ninguna".');
+  if (f.antecedentes.includes('otra') && !f.antecedentesDetalle) faltan.push('Si marcaste "Otra condición", contá cuál es.');
+  if (!f.dolorActual) faltan.push('Respondé si tenés dolor o molestias.');
+  if (f.dolorActual === 'si' && !f.dolorDetalle) faltan.push('Contá en qué zona y con qué movimientos te molesta.');
+  if (!f.indicacionMedica) faltan.push('Respondé si tenés indicación médica de evitar o adaptar algún ejercicio.');
+  if (f.indicacionMedica === 'si' && !f.indicacionDetalle) faltan.push('Contá cuál es la indicación médica.');
+  if (!f.medicacion) faltan.push('Respondé si tomás medicación relevante para la actividad física.');
+  if (f.medicacion === 'si' && !f.medicacionDetalle) faltan.push('Contá cuál es la medicación.');
+  if (!f.otraActividad) faltan.push('Respondé si realizás otra actividad física.');
+  if (f.otraActividad === 'si' && !f.otraActividadDetalle) faltan.push('Contá cuál es la otra actividad.');
+  if (!f.objetivos.length) faltan.push('Elegí al menos un objetivo.');
+  if (!f.aceptaDeclaracion) faltan.push('Tenés que aceptar la declaración para guardar la ficha.');
+  return faltan;
+}
+
+function fichaSaludDesdeFila(r) {
+  let raw = r?.ficha_salud;
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { return null; }
+  }
+  const ficha = normalizarFichaSalud(raw);
+  if (!ficha) return null;
+  const en = r.ficha_salud_en;
+  return { ...ficha, actualizadaEn: en?.toISOString?.() ?? (en ? String(en) : null) };
 }
 
 async function migrateTurnosBloquearRecuperar(db) {
@@ -662,6 +745,7 @@ app.get('/api/alumnos', async (req, res) => {
       activo: r.activo !== false,
       aPrueba: r.a_prueba === true,
       tienePagosHistorial: r.tiene_pago_registrado === true,
+      fichaSalud: fichaSaludDesdeFila(r),
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     }));
     res.json(data);
@@ -3699,7 +3783,7 @@ async function validarTiempoPortal(db, sucursalId, { accion, semana, turno }) {
 async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
   if (token && token.trim()) {
     const { rows } = await db.query(
-      'SELECT id, nombre, apellido, dni, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota FROM alumnos WHERE link_token = $1 AND activo IS DISTINCT FROM false',
+      'SELECT id, nombre, apellido, dni, telefono, fecha_nacimiento, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota, ficha_salud, ficha_salud_en FROM alumnos WHERE link_token = $1 AND activo IS DISTINCT FROM false',
       [token.trim()]
     );
     if (rows.length === 0) return { error: 404, message: 'Link inválido o expirado' };
@@ -3709,14 +3793,14 @@ async function resolveAlumnoPortal(db, { token, dni, sucursalId }) {
   if (!dniTrim) return { error: 400, message: 'Ingresá tu DNI' };
   if (sucursalId && sucursalId.trim()) {
     const { rows } = await db.query(
-      'SELECT id, nombre, apellido, dni, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota FROM alumnos WHERE dni = $1 AND sucursal_id = $2 AND activo IS DISTINCT FROM false',
+      'SELECT id, nombre, apellido, dni, telefono, fecha_nacimiento, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota, ficha_salud, ficha_salud_en FROM alumnos WHERE dni = $1 AND sucursal_id = $2 AND activo IS DISTINCT FROM false',
       [dniTrim, sucursalId.trim()]
     );
     if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI en esta sede' };
     return { alumno: rows[0], sucursalId: rows[0].sucursal_id };
   }
   const { rows } = await db.query(
-    'SELECT id, nombre, apellido, dni, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota FROM alumnos WHERE dni = $1 AND activo IS DISTINCT FROM false',
+    'SELECT id, nombre, apellido, dni, telefono, fecha_nacimiento, sucursal_id, actividad_id, clases_para_recuperar, fecha_vencimiento_cuota, ficha_salud, ficha_salud_en FROM alumnos WHERE dni = $1 AND activo IS DISTINCT FROM false',
     [dniTrim]
   );
   if (rows.length === 0) return { error: 404, message: 'No encontramos un alumno con ese DNI' };
@@ -4365,8 +4449,11 @@ app.get('/api/alumno-portal', async (req, res) => {
         nombre: alumno.nombre,
         apellido: alumno.apellido,
         fechaVencimientoCuota: alumno.fecha_vencimiento_cuota?.toISOString?.().slice(0, 10) ?? alumno.fecha_vencimiento_cuota ?? '',
+        telefono: alumno.telefono || '',
+        fechaNacimiento: alumno.fecha_nacimiento?.toISOString?.().slice(0, 10) ?? (alumno.fecha_nacimiento ? String(alumno.fecha_nacimiento).slice(0, 10) : ''),
         clasesParaRecuperar: Math.max(0, Number(alumno.clases_para_recuperar ?? 0)),
         actividadNombre,
+        fichaSalud: fichaSaludDesdeFila(alumno),
       },
       turnos,
       clasesFijas,
@@ -4388,6 +4475,36 @@ app.get('/api/alumno-portal', async (req, res) => {
       cierresPorFecha,
     };
     res.json(payload);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/alumno-portal/ficha-salud', async (req, res) => {
+  try {
+    const db = await getPool();
+    if (!db) return res.status(503).json({ error: 'Base de datos no configurada' });
+    const { token, dni, sucursalId, ficha } = req.body || {};
+    const resolved = await resolveAlumnoPortal(db, {
+      token: (token || '').toString().trim(),
+      dni: (dni || '').toString().trim(),
+      sucursalId: (sucursalId || '').toString().trim(),
+    });
+    if (resolved.error) return res.status(resolved.error).json({ error: resolved.message });
+    const normalizada = normalizarFichaSalud(ficha);
+    const faltan = faltantesFichaSalud(normalizada);
+    if (faltan.length > 0) return res.status(400).json({ error: faltan[0] });
+    const alumno = resolved.alumno;
+    const { rows } = await db.query(
+      `UPDATE alumnos
+          SET ficha_salud = $1::jsonb, ficha_salud_en = NOW()
+        WHERE id = $2 AND sucursal_id = $3
+        RETURNING ficha_salud, ficha_salud_en`,
+      [JSON.stringify(normalizada), alumno.id, alumno.sucursal_id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Alumno no encontrado' });
+    res.json({ ok: true, fichaSalud: fichaSaludDesdeFila(rows[0]) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles, Eye, ExternalLink, HeartPulse, MoreVertical } from 'lucide-react';
+import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles, Eye, ExternalLink, HeartPulse, MoreVertical, Phone } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem, Turno, DIAS_SEMANA } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
@@ -2241,6 +2241,41 @@ const Alumnos = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
+            {(() => {
+              const crudo = fichaEdit.contactoTelefono || '';
+              const digitos = crudo.replace(/\D/g, '');
+              if (digitos.length < 6) return null;
+              const wa = normalizePhoneForWhatsApp(crudo);
+              const quien = fichaEdit.contactoNombre.trim() || 'contacto de emergencia';
+              const alumnoNombre = [alumnoFicha.nombre, alumnoFicha.apellido].filter(Boolean).join(' ');
+              const marca = (sucursalNombre || '').trim() || 'el estudio';
+              const texto = `Hola ${quien}! Te escribimos de ${marca}${alumnoNombre ? ` por ${alumnoNombre}` : ''}.`;
+              const btn = 'inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold touch-manipulation';
+              return (
+                <div className={`px-4 py-3 border-b flex-shrink-0 ${esSavia ? 'border-savia-sandSoft bg-savia-terraSoft/40' : 'border-gray-200 bg-red-50'}`}>
+                  <p className={`text-xs font-medium mb-2 truncate ${esSavia ? 'text-savia-terraDeep' : 'text-red-800'}`}>
+                    Emergencia · {quien}{crudo.trim() ? ` · ${crudo.trim()}` : ''}
+                  </p>
+                  <div className="flex gap-2">
+                    <a href={`tel:+${wa || digitos}`} className={`${btn} ${esSavia ? 'bg-savia-ink text-savia-cream' : 'bg-gray-800 text-white'}`}>
+                      <Phone className="w-4 h-4" />
+                      Llamar
+                    </a>
+                    {wa && (
+                      <a
+                        href={`https://wa.me/${wa}?text=${encodeURIComponent(texto)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${btn} bg-emerald-600 text-white`}
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        Escribir
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="p-4 flex-1 overflow-y-auto">
               {!alumnoFicha.fichaSalud?.aceptaDeclaracion && (
                 <p className={`text-sm mb-3 ${esSavia ? 'text-savia-muted' : 'text-gray-500'}`}>

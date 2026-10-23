@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles, Eye, ExternalLink, HeartPulse, MoreVertical } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem, Turno, DIAS_SEMANA } from '../types';
@@ -149,7 +150,7 @@ const Alumnos = () => {
   const [filtroDni, setFiltroDni] = useState<'todos' | 'sin' | 'no-realista' | 'problemas'>('todos');
   const [filtroFicha, setFiltroFicha] = useState<'todas' | 'sin' | 'completa'>('todas');
   const [menuAlumnoId, setMenuAlumnoId] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [fichaEdit, setFichaEdit] = useState<FichaSalud>(() => fichaVacia());
   const [guardandoFicha, setGuardandoFicha] = useState(false);
   const [ordenarPorVencimientoCercano, setOrdenarPorVencimientoCercano] = useState(false);
@@ -870,13 +871,20 @@ const Alumnos = () => {
 
   useEffect(() => {
     if (!menuAlumnoId) return;
-    const cerrar = (e: MouseEvent) => {
+    const cerrarPorFuera = (e: MouseEvent) => {
       const el = e.target as HTMLElement | null;
       if (el?.closest('[data-menu-alumno]')) return;
       setMenuAlumnoId(null);
     };
-    document.addEventListener('mousedown', cerrar);
-    return () => document.removeEventListener('mousedown', cerrar);
+    const cerrar = () => setMenuAlumnoId(null);
+    document.addEventListener('mousedown', cerrarPorFuera);
+    window.addEventListener('scroll', cerrar, true);
+    window.addEventListener('resize', cerrar);
+    return () => {
+      document.removeEventListener('mousedown', cerrarPorFuera);
+      window.removeEventListener('scroll', cerrar, true);
+      window.removeEventListener('resize', cerrar);
+    };
   }, [menuAlumnoId]);
 
   const esSavia = /savia/i.test(sucursalNombre || '');
@@ -1004,11 +1012,12 @@ const Alumnos = () => {
               return;
             }
             const r = e.currentTarget.getBoundingClientRect();
-            const abrirArriba = window.innerHeight - r.bottom < 200;
+            const ancho = 176;
+            const alto = 168;
+            const abrirArriba = r.bottom + alto > window.innerHeight - 8 && r.top > alto;
             setMenuPos({
-              top: abrirArriba ? undefined : r.bottom + 4,
-              bottom: abrirArriba ? window.innerHeight - r.top + 4 : undefined,
-              right: Math.max(8, window.innerWidth - r.right),
+              top: abrirArriba ? r.top - alto - 4 : r.bottom + 4,
+              left: Math.max(8, Math.min(r.right - ancho, window.innerWidth - ancho - 8)),
             });
             setMenuAlumnoId(alumno.id);
           }}
@@ -1016,10 +1025,11 @@ const Alumnos = () => {
         >
           <MoreVertical className="w-4 h-4" />
         </button>
-        {abierto && menuPos && (
+        {abierto && menuPos && createPortal(
           <div
-            className="fixed z-50 min-w-[11rem] rounded-xl border border-gray-200 bg-white py-1 text-sm shadow-lg"
-            style={{ top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right }}
+            data-menu-alumno={alumno.id}
+            className="fixed z-[80] w-44 rounded-xl border border-gray-200 bg-white py-1 text-sm shadow-lg"
+            style={{ top: menuPos.top, left: menuPos.left }}
           >
             {wa.url ? (
               <a href={wa.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 text-gray-800 hover:bg-gray-50" onClick={() => setMenuAlumnoId(null)}>
@@ -1045,7 +1055,8 @@ const Alumnos = () => {
                 <Trash2 className="w-4 h-4" /> Desactivar
               </button>
             )}
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     );

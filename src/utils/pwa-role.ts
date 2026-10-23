@@ -67,6 +67,7 @@ export function isEstudioAppPath(pathname?: string, search?: string): boolean {
     path.startsWith('/dashboard') ||
     path.startsWith('/calendario') ||
     path.startsWith('/alumnos') ||
+    path.startsWith('/fichas') ||
     path.startsWith('/pagos') ||
     path.startsWith('/caja') ||
     path.startsWith('/agenda') ||

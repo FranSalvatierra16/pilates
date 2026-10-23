@@ -156,3 +156,52 @@ export function faltantesFicha(f: FichaSalud): string[] {
 export function etiquetaOpcion(lista: { id: string; label: string }[], id: string): string {
   return lista.find((o) => o.id === id)?.label || id;
 }
+
+const ANTECEDENTE_CORTO: Record<string, string> = {
+  hipertension: 'Hipertensión',
+  hipotension_ortostatica: 'Hipotensión o mareos',
+  cardiacos_respiratorios: 'Problema cardíaco o respiratorio',
+  diabetes: 'Diabetes',
+  osteoporosis: 'Osteoporosis',
+  columna: 'Columna o hernia',
+  lesiones: 'Lesión o cirugía',
+  vertigo: 'Vértigo',
+  embarazo: 'Embarazo o posparto',
+  otra: 'Otra condición',
+};
+
+export type AvisoFicha = { id: string; texto: string };
+
+/** Lo que la sucursal tiene que tener a la vista: enfermedad, medicación, dolor u otra nota. */
+export function avisosFicha(f: FichaSalud | null | undefined): AvisoFicha[] {
+  if (!f?.aceptaDeclaracion) return [];
+  const avisos: AvisoFicha[] = [];
+  for (const id of f.antecedentes) {
+    if (id === 'ninguna') continue;
+    const base = ANTECEDENTE_CORTO[id] || etiquetaOpcion(ANTECEDENTES_FICHA, id);
+    const extra = id === 'otra' && f.antecedentesDetalle.trim() ? `: ${f.antecedentesDetalle.trim()}` : '';
+    avisos.push({ id: `ant-${id}`, texto: `${base}${extra}` });
+  }
+  if (f.antecedentesDetalle.trim() && !f.antecedentes.includes('otra') && !f.antecedentes.includes('ninguna')) {
+    avisos.push({ id: 'ant-detalle', texto: f.antecedentesDetalle.trim() });
+  }
+  if (f.dolorActual === 'si') {
+    avisos.push({ id: 'dolor', texto: f.dolorDetalle.trim() ? `Dolor: ${f.dolorDetalle.trim()}` : 'Dolor o molestias' });
+  }
+  if (f.indicacionMedica === 'si') {
+    avisos.push({
+      id: 'indicacion',
+      texto: f.indicacionDetalle.trim() ? `Indicación médica: ${f.indicacionDetalle.trim()}` : 'Indicación médica',
+    });
+  }
+  if (f.medicacion === 'si') {
+    avisos.push({
+      id: 'medicacion',
+      texto: f.medicacionDetalle.trim() ? `Medicación: ${f.medicacionDetalle.trim()}` : 'Toma medicación',
+    });
+  }
+  if (f.otraInformacion.trim()) {
+    avisos.push({ id: 'nota', texto: f.otraInformacion.trim() });
+  }
+  return avisos;
+}

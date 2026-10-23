@@ -93,6 +93,7 @@ import MiClase from './pages/MiClase';
 import Dashboard from './pages/Dashboard';
 import Calendario from './pages/Calendario';
 import Alumnos from './pages/Alumnos';
+import FichasSalud from './pages/FichasSalud';
 import Profesores from './pages/Profesores';
 import HorasProfes from './pages/HorasProfes';
 import Actividades from './pages/Actividades';
@@ -314,6 +315,16 @@ function App() {
               <ProtectedSucursalRoute>
                 <Layout>
                   <Alumnos />
+                </Layout>
+              </ProtectedSucursalRoute>
+            }
+          />
+          <Route
+            path="/fichas"
+            element={
+              <ProtectedSucursalRoute>
+                <Layout>
+                  <FichasSalud />
                 </Layout>
               </ProtectedSucursalRoute>
             }

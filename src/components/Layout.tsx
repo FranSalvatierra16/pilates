@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Bell,
+  HeartPulse,
 } from 'lucide-react';
 import type { NotificacionItem } from '../pages/Notificaciones';
 
@@ -158,6 +159,7 @@ const Layout = ({ children }: LayoutProps) => {
       { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { path: '/calendario', label: 'Calendario', icon: Calendar },
       { path: '/alumnos', label: 'Alumnos', icon: Users },
+      { path: '/fichas', label: 'Fichas', icon: HeartPulse },
       { path: '/profesores', label: 'Profesores', icon: GraduationCap },
       { path: '/actividades', label: 'Actividades', icon: Activity },
     ];

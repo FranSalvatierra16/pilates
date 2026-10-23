@@ -859,6 +859,14 @@ app.patch('/api/alumnos/:id', async (req, res) => {
     if (b.clasesAsistidas !== undefined) { updates.push(`clases_asistidas = $${i++}`); values.push(b.clasesAsistidas); }
     if (b.clasesParaRecuperar !== undefined) { updates.push(`clases_para_recuperar = $${i++}`); values.push(Math.max(0, Number(b.clasesParaRecuperar) || 0)); }
     if (b.descripcion !== undefined) { updates.push(`descripcion = $${i++}`); values.push(b.descripcion || null); }
+    if (b.fichaSalud !== undefined) {
+      const normalizada = normalizarFichaSalud(b.fichaSalud);
+      const faltan = faltantesFichaSalud(normalizada);
+      if (faltan.length > 0) return res.status(400).json({ error: faltan[0] });
+      updates.push(`ficha_salud = $${i++}::jsonb`);
+      values.push(JSON.stringify(normalizada));
+      updates.push('ficha_salud_en = NOW()');
+    }
     if (b.linkToken !== undefined) { updates.push(`link_token = $${i++}`); values.push(b.linkToken || null); }
     if (b.activo !== undefined) { updates.push(`activo = $${i++}`); values.push(!!b.activo); }
     if (updates.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });

@@ -1,16 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles, Eye, ExternalLink, HeartPulse } from 'lucide-react';
+import { Plus, Minus, Edit, Trash2, X, Save, CreditCard, FileText, MessageCircle, History, Link2, Calendar, Sparkles, Eye, ExternalLink, HeartPulse, MoreVertical } from 'lucide-react';
 import { Alumno, Pago, MetodoPago, Actividad, AsistenciaHistorialItem, Turno, DIAS_SEMANA } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { storage } from '../utils/storage';
 import { storageApi } from '../utils/storage-api';
 import { storageHybrid } from '../utils/storage-hybrid';
-import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal, horaActualInput, formatHora24 } from '../utils/date';
+import { formatDate, isCuotaVencida, isCuotaVenceHoy, calcularFechaVencimiento, parseFechaLocal, horaActualInput, formatHora24, hoyISO } from '../utils/date';
 import { formatCurrency } from '../utils/format';
 import { useToast } from '../components/ToastProvider';
 import FichaSaludForm from '../components/FichaSaludForm';
-import { normalizarFichaSalud } from '../data/fichaSalud';
+import { FichaSalud, fechaVisibleFicha, fichaVacia, normalizarFichaSalud } from '../data/fichaSalud';
+import { descargarFichaSaludPdf } from '../utils/fichaSaludPdf';
 
 /** Normaliza teléfono para WhatsApp (Argentina: 54 9 área número). Devuelve null si no hay número válido. */
 function normalizePhoneForWhatsApp(telefono: string): string | null {
@@ -146,6 +147,11 @@ const Alumnos = () => {
   const [filtroActividad, setFiltroActividad] = useState('todas');
   const [filtroPrueba, setFiltroPrueba] = useState<'todos' | 'aprueba' | 'noaprueba'>('todos');
   const [filtroDni, setFiltroDni] = useState<'todos' | 'sin' | 'no-realista' | 'problemas'>('todos');
+  const [filtroFicha, setFiltroFicha] = useState<'todas' | 'sin' | 'completa'>('todas');
+  const [menuAlumnoId, setMenuAlumnoId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
+  const [fichaEdit, setFichaEdit] = useState<FichaSalud>(() => fichaVacia());
+  const [guardandoFicha, setGuardandoFicha] = useState(false);
   const [ordenarPorVencimientoCercano, setOrdenarPorVencimientoCercano] = useState(false);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [actividades, setActividades] = useState<Actividad[]>([]);
@@ -295,8 +301,14 @@ const Alumnos = () => {
       filtrados = filtrados.filter((alumno) => clasificarDni(alumno.dni) !== 'ok');
     }
 
+    if (filtroFicha === 'sin') {
+      filtrados = filtrados.filter((alumno) => !alumno.fichaSalud?.aceptaDeclaracion);
+    } else if (filtroFicha === 'completa') {
+      filtrados = filtrados.filter((alumno) => !!alumno.fichaSalud?.aceptaDeclaracion);
+    }
+
     setAlumnosFiltrados(filtrados);
-  }, [filtroBusqueda, filtroVencimiento, filtroActividad, filtroPrueba, filtroDni, alumnos, mostrarInactivos]);
+  }, [filtroBusqueda, filtroVencimiento, filtroActividad, filtroPrueba, filtroDni, filtroFicha, alumnos, mostrarInactivos]);
 
   // Ordenar por apellido y luego nombre (alfabético); si "por vencimiento cercano" está activo, filtrar y ordenar por fecha
   const alumnosAMostrar = useMemo(() => {
@@ -856,11 +868,194 @@ const Alumnos = () => {
     }
   };
 
+  useEffect(() => {
+    if (!menuAlumnoId) return;
+    const cerrar = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.closest('[data-menu-alumno]')) return;
+      setMenuAlumnoId(null);
+    };
+    document.addEventListener('mousedown', cerrar);
+    return () => document.removeEventListener('mousedown', cerrar);
+  }, [menuAlumnoId]);
+
+  const esSavia = /savia/i.test(sucursalNombre || '');
+  const marca = esSavia
+    ? {
+        chip: 'bg-savia-olive text-white',
+        chipOff: 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft',
+        terra: 'bg-savia-terra text-white',
+        terraDeep: 'bg-savia-terraDeep text-white',
+        sand: 'bg-savia-sand text-savia-ink',
+        warnOff: 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand hover:bg-savia-sandSoft',
+        inkBtn: 'bg-savia-ink text-savia-cream',
+        thead: 'bg-savia-oliveSoft',
+        theadText: 'text-savia-oliveDeep',
+        prueba: 'bg-savia-terraSoft/40 border-l-4 border-l-savia-terra',
+        pruebaBadge: 'text-savia-terraDeep bg-savia-terraSoft',
+        linkBox: 'border-savia-sandSoft bg-savia-oliveSoft/70',
+        linkTitle: 'text-savia-oliveDeep',
+        fichaOk: 'bg-savia-oliveSoft text-savia-oliveDeep',
+        fichaNo: 'bg-savia-terraSoft text-savia-terraDeep',
+        accion: 'bg-savia-olive text-white',
+        accionSuave: 'bg-savia-creamDeep text-savia-ink border border-savia-sandSoft',
+        textoAcento: 'text-savia-oliveDeep',
+        textoPrueba: 'text-savia-terraDeep',
+        linea: 'border-savia-sandSoft',
+        filaHover: 'hover:bg-savia-creamDeep/80',
+        tbody: 'bg-savia-cream/50 divide-y divide-savia-sandSoft',
+      }
+    : {
+        chip: 'bg-primary-600 text-white',
+        chipOff: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+        terra: 'bg-violet-600 text-white',
+        terraDeep: 'bg-red-600 text-white',
+        sand: 'bg-amber-500 text-white',
+        warnOff: 'bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100',
+        inkBtn: 'bg-gray-700 text-white',
+        thead: 'bg-primary-50',
+        theadText: 'text-gray-700',
+        prueba: 'bg-violet-50/70 border-l-4 border-l-violet-600',
+        pruebaBadge: 'text-violet-800 bg-violet-200/90',
+        linkBox: 'border-violet-200 bg-violet-50',
+        linkTitle: 'text-violet-700',
+        fichaOk: 'bg-emerald-50 text-emerald-800',
+        fichaNo: 'bg-amber-50 text-amber-900',
+        accion: 'bg-primary-600 text-white',
+        accionSuave: 'bg-gray-100 text-gray-800 border border-gray-200',
+        textoAcento: 'text-primary-700',
+        textoPrueba: 'text-violet-800',
+        linea: 'border-gray-200',
+        filaHover: 'hover:bg-gray-50',
+        tbody: 'bg-white divide-y divide-gray-200',
+      };
+  const hayFiltros = !!(
+    filtroBusqueda || filtroVencimiento !== 'todos' || filtroActividad !== 'todas' || filtroPrueba !== 'todos'
+    || filtroDni !== 'todos' || filtroFicha !== 'todas' || ordenarPorVencimientoCercano || mostrarInactivos
+  );
+  const limpiarFiltros = () => {
+    setFiltroBusqueda('');
+    setFiltroVencimiento('todos');
+    setFiltroActividad('todas');
+    setFiltroPrueba('todos');
+    setFiltroDni('todos');
+    setFiltroFicha('todas');
+    setOrdenarPorVencimientoCercano(false);
+    setMostrarInactivos(false);
+  };
+  const abrirFicha = (alumno: Alumno) => {
+    setMenuAlumnoId(null);
+    setAlumnoFicha(alumno);
+    setFichaEdit(normalizarFichaSalud(alumno.fichaSalud));
+  };
+  const guardarFichaEstudio = async () => {
+    if (!alumnoFicha) return;
+    const fecha = fechaVisibleFicha(fichaEdit, hoyISO());
+    const payload = { ...fichaEdit, fecha };
+    setGuardandoFicha(true);
+    try {
+      await storageHybrid.alumnos.update(alumnoFicha.id, { fichaSalud: payload });
+      const guardada = { ...payload, actualizadaEn: new Date().toISOString() };
+      const aplicar = (a: Alumno) => (a.id === alumnoFicha.id ? { ...a, fichaSalud: guardada } : a);
+      setAlumnos((prev) => prev.map(aplicar));
+      setAlumnosFiltrados((prev) => prev.map(aplicar));
+      setFichaEdit(guardada);
+      setAlumnoFicha((prev) => (prev ? { ...prev, fichaSalud: guardada } : prev));
+      toast.success('Ficha guardada.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar la ficha.');
+    } finally {
+      setGuardandoFicha(false);
+    }
+  };
+
+  const badgeFicha = (alumno: Alumno) => {
+    const ok = !!alumno.fichaSalud?.aceptaDeclaracion;
+    return (
+      <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${ok ? marca.fichaOk : marca.fichaNo}`}>
+        <HeartPulse className="w-3 h-3" />
+        {ok ? 'Ficha completa' : 'Sin ficha'}
+      </span>
+    );
+  };
+
+  const renderAcciones = (alumno: Alumno) => {
+    const wa = getWhatsAppRecordatorio(alumno, sucursalNombre || '');
+    const abierto = menuAlumnoId === alumno.id;
+    const btn = 'inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold touch-manipulation';
+    return (
+      <div className="relative flex items-center gap-1 flex-wrap justify-end" data-menu-alumno={alumno.id}>
+        <button type="button" onClick={() => { setMenuAlumnoId(null); handlePagarCuota(alumno); }} className={`${btn} bg-emerald-600 text-white`}>
+          <CreditCard className="w-3.5 h-3.5" /> Pagar
+        </button>
+        <button type="button" onClick={() => abrirFicha(alumno)} className={`${btn} ${marca.accion}`}>
+          <HeartPulse className="w-3.5 h-3.5" /> Ficha
+        </button>
+        <button type="button" onClick={() => { setMenuAlumnoId(null); handleOpenModal(alumno); }} className={`${btn} ${marca.accionSuave}`}>
+          <Edit className="w-3.5 h-3.5" /> Editar
+        </button>
+        <button
+          type="button"
+          aria-label="Más acciones"
+          aria-expanded={abierto}
+          onClick={(e) => {
+            if (abierto) {
+              setMenuAlumnoId(null);
+              return;
+            }
+            const r = e.currentTarget.getBoundingClientRect();
+            const abrirArriba = window.innerHeight - r.bottom < 200;
+            setMenuPos({
+              top: abrirArriba ? undefined : r.bottom + 4,
+              bottom: abrirArriba ? window.innerHeight - r.top + 4 : undefined,
+              right: Math.max(8, window.innerWidth - r.right),
+            });
+            setMenuAlumnoId(alumno.id);
+          }}
+          className={`${btn} ${marca.accionSuave} px-2`}
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
+        {abierto && menuPos && (
+          <div
+            className="fixed z-50 min-w-[11rem] rounded-xl border border-gray-200 bg-white py-1 text-sm shadow-lg"
+            style={{ top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right }}
+          >
+            {wa.url ? (
+              <a href={wa.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 text-gray-800 hover:bg-gray-50" onClick={() => setMenuAlumnoId(null)}>
+                <MessageCircle className="w-4 h-4 text-green-600" /> WhatsApp
+              </a>
+            ) : (
+              <span className="flex items-center gap-2 px-3 py-2 text-gray-400" title={wa.tooltip}>
+                <MessageCircle className="w-4 h-4" /> Sin WhatsApp
+              </span>
+            )}
+            <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-gray-800 hover:bg-gray-50" onClick={() => { setMenuAlumnoId(null); handleOpenDescripcion(alumno); }}>
+              <FileText className="w-4 h-4 text-amber-600" /> Notas
+            </button>
+            <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-gray-800 hover:bg-gray-50" onClick={() => { setMenuAlumnoId(null); handleOpenHistorial(alumno); }}>
+              <History className="w-4 h-4" /> Historial
+            </button>
+            {alumno.activo === false ? (
+              <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-emerald-700 hover:bg-emerald-50" onClick={() => { setMenuAlumnoId(null); handleActivar(alumno.id); }}>
+                <Save className="w-4 h-4" /> Reactivar
+              </button>
+            ) : (
+              <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-700 hover:bg-red-50" onClick={() => { setMenuAlumnoId(null); handleDelete(alumno.id); }}>
+                <Trash2 className="w-4 h-4" /> Desactivar
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-savia-olive mx-auto mb-4"></div>
+          <div className={`animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4 ${esSavia ? 'border-savia-olive' : 'border-primary-600'}`}></div>
           <p className="text-gray-600">Cargando...</p>
         </div>
       </div>
@@ -895,39 +1090,26 @@ const Alumnos = () => {
       </div>
 
       {linkPortalRecuperar ? (
-        <div className="mb-4 rounded-2xl border border-savia-sandSoft bg-savia-oliveSoft/70 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-savia-oliveDeep">Link para recuperar</p>
-          <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
-            <a
-              href={linkPortalRecuperar}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="min-w-0 flex-1 break-all text-sm font-medium text-savia-ink underline underline-offset-2 hover:text-savia-oliveDeep"
+        <div className={`mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-2xl border px-4 py-3 ${marca.linkBox}`}>
+          <p className={`text-sm font-semibold ${marca.linkTitle}`}>Link para recuperar</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => handleCopiarLinkGeneralClases('recuperar')}
+              className="btn-secondary whitespace-nowrap min-h-[40px] text-sm inline-flex items-center gap-1.5"
             >
-              {linkPortalRecuperar}
-            </a>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setShowModalPreviewRecuperar(true)}
-                className="btn-secondary whitespace-nowrap min-h-[40px] text-sm inline-flex items-center gap-1.5"
-              >
-                <Eye className="w-4 h-4" />
-                Ver cómo se ve
-              </button>
-              <button
-                type="button"
-                onClick={() => handleCopiarLinkGeneralClases('recuperar')}
-                className="btn-secondary whitespace-nowrap min-h-[40px] text-sm"
-              >
-                Copiar link
-              </button>
-            </div>
+              <Link2 className="w-4 h-4" />
+              Copiar
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowModalPreviewRecuperar(true)}
+              className="btn-secondary whitespace-nowrap min-h-[40px] text-sm inline-flex items-center gap-1.5"
+            >
+              <Eye className="w-4 h-4" />
+              Ver cómo se ve
+            </button>
           </div>
-          <p className="mt-2 text-xs text-savia-muted">
-            Compartilo con los alumnos. Entran con su DNI y solo ven la semana actual para recuperar.
-            Para ocultar un horario del link (aunque haya cupo): en el calendario → editar turno → “No disponible para recuperar”.
-          </p>
         </div>
       ) : null}
 
@@ -952,9 +1134,9 @@ const Alumnos = () => {
         </div>
       </div>
 
-      {/* Búsqueda y filtros por vencimiento */}
+      {/* Búsqueda y filtros */}
       <div className="mb-6">
-        <div className="card">
+        <div className="card space-y-3">
           <div className="flex flex-wrap gap-3 items-center">
             <input
               type="text"
@@ -963,176 +1145,43 @@ const Alumnos = () => {
               placeholder="Buscar por nombre, apellido, DNI o teléfono..."
               className="input-field flex-1 min-w-0 sm:min-w-[200px]"
             />
-            {filtroBusqueda && (
-              <button
-                onClick={() => setFiltroBusqueda('')}
-                className="btn-secondary"
-              >
+            {hayFiltros && (
+              <button type="button" onClick={limpiarFiltros} className="btn-secondary">
                 Limpiar
               </button>
             )}
           </div>
-          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200 items-center">
-            <span className="text-sm text-gray-500 w-full sm:w-auto">Vencimiento:</span>
-            <button
-              type="button"
-              onClick={() => setFiltroVencimiento('todos')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroVencimiento === 'todos'
-                  ? 'bg-savia-olive text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroVencimiento('mes-vencido')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroVencimiento === 'mes-vencido'
-                  ? 'bg-savia-terraDeep text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-            >
-              Mes vencido
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroVencimiento('vence-hoy')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroVencimiento === 'vence-hoy'
-                  ? 'bg-savia-sand text-savia-ink'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-            >
-              Se vencen hoy
-            </button>
-            <div className="w-full h-px bg-gray-200 my-1" />
-            <span className="text-sm text-gray-500 w-full sm:w-auto">Actividad:</span>
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 w-14">Cuota</span>
+            <button type="button" onClick={() => setFiltroVencimiento('todos')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroVencimiento === 'todos' ? marca.chip : marca.chipOff}`}>Todas</button>
+            <button type="button" onClick={() => setFiltroVencimiento('mes-vencido')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroVencimiento === 'mes-vencido' ? marca.terraDeep : marca.chipOff}`}>Vencidas</button>
+            <button type="button" onClick={() => setFiltroVencimiento('vence-hoy')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroVencimiento === 'vence-hoy' ? marca.sand : marca.chipOff}`}>Hoy</button>
+            <button type="button" onClick={() => setOrdenarPorVencimientoCercano((v) => !v)} className={`px-3 py-1.5 rounded-full text-sm font-medium ${ordenarPorVencimientoCercano ? marca.chip : marca.chipOff}`} title="Ordenar por vencimiento más cercano (los vencidos no se muestran)">Más próximas</button>
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 w-14">Lista</span>
             <select
               value={filtroActividad}
               onChange={(e) => setFiltroActividad(e.target.value)}
-              className="input-field py-1.5 min-h-0 h-auto text-sm"
+              className="input-field py-1.5 min-h-0 h-auto text-sm max-w-[11rem]"
+              aria-label="Actividad"
             >
-              <option value="todas">Todas</option>
+              <option value="todas">Actividad</option>
               {actividades.map((act) => (
-                <option key={act.id} value={act.id}>
-                  {act.nombre}
-                </option>
+                <option key={act.id} value={act.id}>{act.nombre}</option>
               ))}
             </select>
-            <span className="text-sm text-gray-500">Prueba:</span>
-            <button
-              type="button"
-              onClick={() => setFiltroPrueba('todos')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroPrueba === 'todos'
-                  ? 'bg-savia-terra text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroPrueba('aprueba')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroPrueba === 'aprueba'
-                  ? 'bg-savia-terra text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-            >
-              A prueba
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroPrueba('noaprueba')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroPrueba === 'noaprueba'
-                  ? 'bg-savia-terra text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-            >
-              Sin prueba
-            </button>
-            <div className="w-full h-px bg-gray-200 my-1" />
-            <span className="text-sm text-gray-500 w-full sm:w-auto">DNI:</span>
-            <button
-              type="button"
-              onClick={() => setFiltroDni('todos')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroDni === 'todos'
-                  ? 'bg-savia-olive text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroDni('problemas')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroDni === 'problemas'
-                  ? 'bg-savia-terra text-white'
-                  : 'bg-savia-terraSoft text-savia-terraDeep border border-savia-sand hover:bg-savia-sandSoft'
-              }`}
-              title="Sin DNI o DNI que no tiene exactamente 8 números"
-            >
-              Problemas ({conteoDni.problemas})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroDni('sin')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroDni === 'sin'
-                  ? 'bg-savia-terra text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-            >
-              Sin DNI ({conteoDni.sin})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFiltroDni('no-realista')}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filtroDni === 'no-realista'
-                  ? 'bg-savia-terra text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-              title="Tiene letras o no son exactamente 8 dígitos"
-            >
-              No realista ({conteoDni.noRealista})
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrdenarPorVencimientoCercano((v) => !v)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                ordenarPorVencimientoCercano
-                  ? 'bg-savia-olive text-white'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-              title="Ordenar por vencimiento más cercano (los vencidos no se muestran)"
-            >
-              Por vencimiento cercano
-            </button>
-            <button
-              type="button"
-              onClick={() => setMostrarInactivos((v) => !v)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                mostrarInactivos
-                  ? 'bg-savia-ink text-savia-cream'
-                  : 'bg-savia-cream text-savia-ink border border-savia-sandSoft hover:bg-savia-sandSoft'
-              }`}
-              title="Ver también alumnos inactivos (dados de baja)"
-            >
-              {mostrarInactivos ? 'Ocultar inactivos' : 'Ver inactivos'}
-            </button>
+            <button type="button" onClick={() => setFiltroPrueba(filtroPrueba === 'aprueba' ? 'todos' : 'aprueba')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroPrueba === 'aprueba' ? marca.terra : marca.chipOff}`}>A prueba</button>
+            <button type="button" onClick={() => setFiltroPrueba(filtroPrueba === 'noaprueba' ? 'todos' : 'noaprueba')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroPrueba === 'noaprueba' ? marca.terra : marca.chipOff}`}>Sin prueba</button>
+            <button type="button" onClick={() => setFiltroFicha(filtroFicha === 'sin' ? 'todas' : 'sin')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroFicha === 'sin' ? marca.terra : marca.chipOff}`}>Sin ficha</button>
+            <button type="button" onClick={() => setFiltroFicha(filtroFicha === 'completa' ? 'todas' : 'completa')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroFicha === 'completa' ? marca.chip : marca.chipOff}`}>Con ficha</button>
+            <button type="button" onClick={() => setFiltroDni(filtroDni === 'problemas' ? 'todos' : 'problemas')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroDni === 'problemas' ? marca.terra : marca.warnOff}`} title="Sin DNI o DNI que no tiene exactamente 8 números">DNI ({conteoDni.problemas})</button>
+            <button type="button" onClick={() => setMostrarInactivos((v) => !v)} className={`px-3 py-1.5 rounded-full text-sm font-medium ${mostrarInactivos ? marca.inkBtn : marca.chipOff}`}>{mostrarInactivos ? 'Ocultar inactivos' : 'Inactivos'}</button>
           </div>
-          {(filtroBusqueda || filtroVencimiento !== 'todos' || filtroActividad !== 'todas' || filtroPrueba !== 'todos' || filtroDni !== 'todos' || ordenarPorVencimientoCercano) && (
-            <p className="text-sm text-gray-500 mt-2">
+          {hayFiltros && (
+            <p className="text-sm text-gray-500">
               Mostrando {alumnosAMostrar.length} de {alumnos.length} alumnos
               {ordenarPorVencimientoCercano && alumnosAMostrar.length < alumnosFiltrados.length && ' (sin vencidos)'}
-              {filtroDni !== 'todos' && ' · DNI realista = 8 números'}
             </p>
           )}
         </div>
@@ -1143,17 +1192,7 @@ const Alumnos = () => {
           <p className="text-gray-500 mb-4">
             No hay alumnos que coincidan con los filtros aplicados.
           </p>
-          <button
-            onClick={() => {
-              setFiltroBusqueda('');
-              setFiltroVencimiento('todos');
-              setFiltroActividad('todas');
-              setFiltroPrueba('todos');
-              setFiltroDni('todos');
-              setOrdenarPorVencimientoCercano(false);
-            }}
-            className="btn-secondary"
-          >
+          <button onClick={limpiarFiltros} className="btn-secondary">
             Ver todos
           </button>
         </div>
@@ -1176,14 +1215,15 @@ const Alumnos = () => {
             return (
               <div
                 key={alumno.id}
-                className={`card p-4 ${alumno.aPrueba ? 'border-l-4 border-l-savia-terra bg-savia-terraSoft/40' : ''}`}
+                className={`card p-4 ${alumno.aPrueba ? marca.prueba : ''}`}
               >
                 <div className="flex justify-between items-start gap-2 mb-3">
                   <div>
                     <h3 className="font-semibold text-gray-900 text-base flex items-center gap-2 flex-wrap">
                       {[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}
+                      {badgeFicha(alumno)}
                       {alumno.aPrueba && (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-savia-terraDeep bg-savia-terraSoft px-2 py-0.5 rounded-full">
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${marca.pruebaBadge}`}>
                           <Sparkles className="w-3 h-3" />
                           A prueba
                         </span>
@@ -1222,25 +1262,8 @@ const Alumnos = () => {
                       })()}
                     </div>
                   </div>
-                  <div className="flex gap-1 flex-shrink-0">
-                    {(() => {
-                      const wa = getWhatsAppRecordatorio(alumno, sucursalNombre || '');
-                      return wa.url ? (
-                        <a href={wa.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title={wa.tooltip} aria-label="Recordatorio WhatsApp"><MessageCircle className="w-5 h-5" /></a>
-                      ) : (
-                        <span className="p-2 rounded-lg text-gray-300 cursor-not-allowed" title={wa.tooltip}><MessageCircle className="w-5 h-5" /></span>
-                      );
-                    })()}
-                    <button onClick={() => handlePagarCuota(alumno)} className="p-2 rounded-lg text-green-600 hover:bg-green-50 touch-manipulation" title="Pagar cuota" aria-label="Pagar"><CreditCard className="w-5 h-5" /></button>
-                    <button onClick={() => handleOpenDescripcion(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.descripcion ? 'text-amber-600 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100'}`} title="Notas" aria-label="Notas"><FileText className="w-5 h-5" /></button>
-                    <button onClick={() => setAlumnoFicha(alumno)} className={`p-2 rounded-lg touch-manipulation ${alumno.fichaSalud ? 'text-savia-terra hover:bg-savia-terraSoft' : 'text-savia-muted hover:bg-savia-sandSoft'}`} title="Ficha de salud" aria-label="Ficha de salud"><HeartPulse className="w-5 h-5" /></button>
-                    <button onClick={() => handleOpenHistorial(alumno)} className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 touch-manipulation" title="Historial de pagos" aria-label="Historial de pagos"><History className="w-5 h-5" /></button>
-                    <button onClick={() => handleOpenModal(alumno)} className="p-2 rounded-lg text-savia-oliveDeep hover:bg-savia-oliveSoft touch-manipulation" title="Editar" aria-label="Editar"><Edit className="w-5 h-5" /></button>
-                    {alumno.activo === false ? (
-                      <button onClick={() => handleActivar(alumno.id)} className="p-2 rounded-lg text-emerald-600 hover:bg-emerald-50 touch-manipulation" title="Reactivar" aria-label="Reactivar"><Save className="w-5 h-5" /></button>
-                    ) : (
-                      <button onClick={() => handleDelete(alumno.id)} className="p-2 rounded-lg text-red-600 hover:bg-red-50 touch-manipulation" title="Desactivar" aria-label="Desactivar"><Trash2 className="w-5 h-5" /></button>
-                    )}
+                  <div className="flex-shrink-0">
+                    {renderAcciones(alumno)}
                   </div>
                 </div>
                 {alumno.activo === false && (
@@ -1258,13 +1281,13 @@ const Alumnos = () => {
                   </div>
                   <div>
                     <span className="text-gray-500">Actividad: </span>
-                    <span className={alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-savia-terraDeep font-medium' : 'text-savia-ink'}>
+                    <span className={alumno.aPrueba && !alumno.actividadId?.trim() ? `${marca.textoPrueba} font-medium` : 'text-gray-900'}>
                       {getActividadNombre(alumno.actividadId, alumno.aPrueba)}
                     </span>
                     <span className="text-gray-600"> — {formatCurrency(getActividadPrecio(alumno.actividadId, alumno.aPrueba))}</span>
                     {alumno.aPrueba && alumno.activo !== false && (
-                      <div className="mt-2 pt-2 border-t border-savia-sandSoft">
-                        <label className="block text-xs font-medium text-savia-terraDeep mb-1">Asignar plan desde acá</label>
+                      <div className={`mt-2 pt-2 border-t ${marca.linea}`}>
+                        <label className={`block text-xs font-medium mb-1 ${marca.textoPrueba}`}>Asignar plan desde acá</label>
                         {actividades.length === 0 ? (
                           <p className="text-xs text-amber-700">No hay actividades cargadas. Creá al menos una en Actividades.</p>
                         ) : (
@@ -1307,10 +1330,10 @@ const Alumnos = () => {
                   </div>
                   <div>
                     <span className="text-gray-500">Para recuperar: </span>
-                    <span className="font-medium text-savia-oliveDeep">{alumno.clasesParaRecuperar || 0}</span>
+                    <span className={`font-medium ${marca.textoAcento}`}>{alumno.clasesParaRecuperar || 0}</span>
                   </div>
                   <div className="flex justify-between text-gray-500 text-xs pt-1 border-t border-gray-100">
-                    <span>Clases este mes: <strong className="text-savia-oliveDeep">{alumno.clasesAsistidas || 0}</strong></span>
+                    <span>Clases este mes: <strong className={marca.textoAcento}>{alumno.clasesAsistidas || 0}</strong></span>
                     <span>Registro: {formatDate(alumno.createdAt.split('T')[0])}</span>
                   </div>
                 </div>
@@ -1322,19 +1345,14 @@ const Alumnos = () => {
         <div className="card overflow-hidden p-0 -mx-2 sm:mx-0">
           <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
             <table className="w-full min-w-[800px]">
-              <thead className="bg-savia-oliveSoft">
+              <thead className={marca.thead}>
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Alumno</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">DNI</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Contacto</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Actividad</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Vencimiento</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Clases</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Fecha Registro</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-savia-oliveDeep uppercase tracking-wider">Acciones</th>
+                  {['Alumno', 'DNI', 'Contacto', 'Actividad', 'Vencimiento', 'Clases', 'Fecha Registro', 'Acciones'].map((col) => (
+                    <th key={col} className={`px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider ${marca.theadText}`}>{col}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="bg-savia-cream/50 divide-y divide-savia-sandSoft">
+              <tbody className={marca.tbody}>
                 {alumnosAMostrar.map((alumno) => {
                   const tienePagos = alumnoTieneAlgunPagoRegistrado(alumno);
                   const tieneFechaVencimiento = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota !== '';
@@ -1344,13 +1362,14 @@ const Alumnos = () => {
                   return (
                     <tr
                       key={alumno.id}
-                      className={`hover:bg-savia-creamDeep/80 ${alumno.aPrueba ? 'bg-savia-terraSoft/50 border-l-4 border-l-savia-terra' : ''}`}
+                      className={`${marca.filaHover} ${alumno.aPrueba ? marca.prueba : ''}`}
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900 flex items-center gap-2 flex-wrap">
                           {[alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—'}
+                          {badgeFicha(alumno)}
                           {alumno.aPrueba && (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium text-savia-terraDeep bg-savia-terraSoft px-2 py-0.5 rounded-full">
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${marca.pruebaBadge}`}>
                               <Sparkles className="w-3 h-3" />
                               A prueba
                             </span>
@@ -1389,13 +1408,13 @@ const Alumnos = () => {
                         <div className="text-sm text-gray-500">{alumno.email}</div>
                       </td>
                       <td className="px-6 py-4 align-top min-w-[200px]">
-                        <div className={`text-sm font-medium ${alumno.aPrueba && !alumno.actividadId?.trim() ? 'text-savia-terraDeep' : 'text-savia-ink'}`}>
+                        <div className={`text-sm font-medium ${alumno.aPrueba && !alumno.actividadId?.trim() ? marca.textoPrueba : 'text-gray-900'}`}>
                           {getActividadNombre(alumno.actividadId, alumno.aPrueba)}
                         </div>
                         <div className="text-sm text-gray-500">{formatCurrency(getActividadPrecio(alumno.actividadId, alumno.aPrueba))}</div>
                         {alumno.aPrueba && alumno.activo !== false && (
-                          <div className="mt-2 pt-2 border-t border-savia-sandSoft">
-                            <label className="block text-xs font-medium text-savia-terraDeep mb-1">Asignar plan</label>
+                          <div className={`mt-2 pt-2 border-t ${marca.linea}`}>
+                            <label className={`block text-xs font-medium mb-1 ${marca.textoPrueba}`}>Asignar plan</label>
                             {actividades.length === 0 ? (
                               <p className="text-xs text-amber-700">Sin actividades en el catálogo.</p>
                             ) : (
@@ -1441,36 +1460,16 @@ const Alumnos = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-savia-oliveDeep">{alumno.clasesAsistidas || 0}</div>
+                        <div className={`text-sm font-semibold ${marca.textoAcento}`}>{alumno.clasesAsistidas || 0}</div>
                         <div className="text-xs text-gray-500">este mes</div>
-                        <div className="text-xs text-savia-oliveDeep mt-1">Recuperar: {alumno.clasesParaRecuperar || 0}</div>
+                        <div className={`text-xs mt-1 ${marca.textoAcento}`}>Recuperar: {alumno.clasesParaRecuperar || 0}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{formatDate(alumno.createdAt.split('T')[0])}</div>
                         <div className="text-xs text-gray-500">{new Date(alumno.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex gap-2 items-center">
-                          {(() => {
-                            const wa = getWhatsAppRecordatorio(alumno, sucursalNombre || '');
-                            return wa.url ? (
-                              <a href={wa.url} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-900 p-1 rounded" title={wa.tooltip}><MessageCircle className="w-4 h-4" /></a>
-                            ) : (
-                              <span className="text-gray-300 cursor-not-allowed p-1 rounded" title={wa.tooltip}><MessageCircle className="w-4 h-4" /></span>
-                            );
-                          })()}
-                          <button onClick={() => handlePagarCuota(alumno)} className="text-green-600 hover:text-green-900 p-1 rounded" title="Pagar cuota"><CreditCard className="w-4 h-4" /></button>
-                          <button onClick={() => handleOpenDescripcion(alumno)} className={`p-1 rounded ${alumno.descripcion ? 'text-amber-600 hover:text-amber-800' : 'text-gray-400 hover:text-gray-600'}`} title="Descripción / Notas"><FileText className="w-4 h-4" /></button>
-                          <button onClick={() => setAlumnoFicha(alumno)} className={`p-1 rounded ${alumno.fichaSalud ? 'text-savia-terra hover:text-savia-terraDeep' : 'text-savia-muted hover:text-savia-ink'}`} title="Ficha de salud" aria-label="Ficha de salud"><HeartPulse className="w-4 h-4" /></button>
-                          <button onClick={() => handleOpenHistorial(alumno)} className="p-1 rounded text-gray-600 hover:text-gray-900" title="Historial de pagos"><History className="w-4 h-4" /></button>
-                         
-                          <button onClick={() => handleOpenModal(alumno)} className="text-savia-oliveDeep hover:text-savia-ink" title="Editar"><Edit className="w-4 h-4" /></button>
-                          {alumno.activo === false ? (
-                            <button onClick={() => handleActivar(alumno.id)} className="text-emerald-600 hover:text-emerald-900" title="Reactivar"><Save className="w-4 h-4" /></button>
-                          ) : (
-                            <button onClick={() => handleDelete(alumno.id)} className="text-red-600 hover:text-red-900" title="Desactivar"><Trash2 className="w-4 h-4" /></button>
-                          )}
-                        </div>
+                        {renderAcciones(alumno)}
                       </td>
                     </tr>
                   );
@@ -2215,11 +2214,11 @@ const Alumnos = () => {
       )}
 
       {alumnoFicha && (
-        <div className="fixed inset-0 bg-savia-ink/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-          <div className="bg-savia-cream rounded-t-3xl sm:rounded-3xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col border border-savia-sandSoft font-savia">
-            <div className="flex justify-between items-center p-4 border-b border-savia-sandSoft flex-shrink-0">
-              <h2 className="text-base sm:text-lg font-saviaDisplay text-savia-ink flex items-center gap-2 min-w-0">
-                <HeartPulse className="w-5 h-5 text-savia-terra flex-shrink-0" />
+        <div className={`fixed inset-0 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 ${esSavia ? 'bg-savia-ink/40' : 'bg-black/50'}`}>
+          <div className={`shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col border ${esSavia ? 'bg-savia-cream rounded-t-3xl sm:rounded-3xl border-savia-sandSoft font-savia' : 'bg-white rounded-t-2xl sm:rounded-xl border-gray-200'}`}>
+            <div className={`flex justify-between items-center p-4 border-b flex-shrink-0 ${esSavia ? 'border-savia-sandSoft' : 'border-gray-200'}`}>
+              <h2 className={`text-base sm:text-lg flex items-center gap-2 min-w-0 ${esSavia ? 'font-saviaDisplay text-savia-ink' : 'font-semibold text-gray-900'}`}>
+                <HeartPulse className={`w-5 h-5 flex-shrink-0 ${esSavia ? 'text-savia-terra' : 'text-primary-600'}`} />
                 <span className="truncate">Ficha de salud — {[alumnoFicha.apellido, alumnoFicha.nombre].filter(Boolean).join(', ')}</span>
               </h2>
               <button
@@ -2232,25 +2231,42 @@ const Alumnos = () => {
               </button>
             </div>
             <div className="p-4 flex-1 overflow-y-auto">
-              {alumnoFicha.fichaSalud ? (
-                <FichaSaludForm
-                  soloLectura
-                  savia
-                  ficha={normalizarFichaSalud(alumnoFicha.fichaSalud)}
-                  alumno={{
+              {!alumnoFicha.fichaSalud?.aceptaDeclaracion && (
+                <p className={`text-sm mb-3 ${esSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
+                  Todavía no hay una ficha completa. Podés cargarla o corregirla desde acá.
+                </p>
+              )}
+              <FichaSaludForm
+                savia={esSavia}
+                ficha={fichaEdit}
+                guardando={guardandoFicha}
+                onChange={setFichaEdit}
+                onGuardar={() => { void guardarFichaEstudio(); }}
+                alumno={{
+                  nombre: alumnoFicha.nombre,
+                  apellido: alumnoFicha.apellido,
+                  telefono: alumnoFicha.telefono,
+                  fechaNacimiento: alumnoFicha.fechaNacimiento,
+                }}
+              />
+            </div>
+            <div className={`flex justify-end gap-2 p-4 border-t ${esSavia ? 'border-savia-sandSoft' : 'border-gray-200'}`}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  void descargarFichaSaludPdf({
+                    ficha: { ...fichaEdit, fecha: fechaVisibleFicha(fichaEdit, hoyISO()) },
                     nombre: alumnoFicha.nombre,
                     apellido: alumnoFicha.apellido,
                     telefono: alumnoFicha.telefono,
                     fechaNacimiento: alumnoFicha.fechaNacimiento,
-                  }}
-                />
-              ) : (
-                <p className="text-sm text-savia-muted">
-                  Todavía no completó la ficha. La llena desde su perfil, en Mi clase.
-                </p>
-              )}
-            </div>
-            <div className="flex justify-end p-4 border-t border-savia-sandSoft">
+                    estudio: sucursalNombre || undefined,
+                  });
+                }}
+              >
+                Descargar PDF
+              </button>
               <button type="button" onClick={() => setAlumnoFicha(null)} className="btn-secondary">
                 Cerrar
               </button>

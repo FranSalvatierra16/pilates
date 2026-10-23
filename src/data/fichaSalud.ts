@@ -1,7 +1,10 @@
 export type SiNo = 'si' | 'no' | '';
 
 export interface FichaSalud {
-  contactoEmergencia: string;
+  /** Fecha de la ficha (YYYY-MM-DD). Si no hay, se usa la última guardada o el día de hoy. */
+  fecha: string;
+  contactoNombre: string;
+  contactoTelefono: string;
   antecedentes: string[];
   antecedentesDetalle: string;
   dolorActual: SiNo;
@@ -53,7 +56,9 @@ const IDS_OBJETIVOS = new Set(OBJETIVOS_FICHA.map((o) => o.id));
 
 export function fichaVacia(): FichaSalud {
   return {
-    contactoEmergencia: '',
+    fecha: '',
+    contactoNombre: '',
+    contactoTelefono: '',
     antecedentes: [],
     antecedentesDetalle: '',
     dolorActual: '',
@@ -91,8 +96,12 @@ export function normalizarFichaSalud(raw: unknown): FichaSalud {
   const objetivos = Array.isArray(r.objetivos)
     ? [...new Set(r.objetivos.map((id) => String(id)).filter((id) => IDS_OBJETIVOS.has(id)))]
     : [];
+  const fecha = texto(r.fecha, 10);
+  const contactoViejo = texto(r.contactoEmergencia, 200);
   return {
-    contactoEmergencia: texto(r.contactoEmergencia, 200),
+    fecha: /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : '',
+    contactoNombre: texto(r.contactoNombre, 120) || contactoViejo,
+    contactoTelefono: texto(r.contactoTelefono, 40),
     antecedentes,
     antecedentesDetalle: texto(r.antecedentesDetalle),
     dolorActual: siNo(r.dolorActual),
@@ -110,6 +119,14 @@ export function normalizarFichaSalud(raw: unknown): FichaSalud {
   };
 }
 
+/** Fecha a mostrar: la guardada en la ficha, si no la última actualización, si no el día de hoy. */
+export function fechaVisibleFicha(f: FichaSalud, hoy: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(f.fecha)) return f.fecha;
+  const guardada = (f.actualizadaEn || '').slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(guardada)) return guardada;
+  return hoy;
+}
+
 export function toggleAntecedente(actual: string[], id: string): string[] {
   if (id === 'ninguna') return actual.includes('ninguna') ? [] : ['ninguna'];
   const sin = actual.filter((x) => x !== 'ninguna' && x !== id);
@@ -118,7 +135,8 @@ export function toggleAntecedente(actual: string[], id: string): string[] {
 
 export function faltantesFicha(f: FichaSalud): string[] {
   const faltan: string[] = [];
-  if (!f.contactoEmergencia.trim()) faltan.push('Completá el contacto de emergencia y su teléfono.');
+  if (!f.contactoNombre.trim()) faltan.push('Completá el nombre del contacto de emergencia.');
+  if (!f.contactoTelefono.trim()) faltan.push('Completá el teléfono del contacto de emergencia.');
   if (f.antecedentes.length === 0) faltan.push('Marcá al menos un antecedente, o "Ninguna".');
   if (f.antecedentes.includes('otra') && !f.antecedentesDetalle.trim()) {
     faltan.push('Si marcaste "Otra condición", contá cuál es.');
@@ -131,7 +149,6 @@ export function faltantesFicha(f: FichaSalud): string[] {
   if (f.medicacion === 'si' && !f.medicacionDetalle.trim()) faltan.push('Contá cuál es la medicación.');
   if (!f.otraActividad) faltan.push('Respondé si realizás otra actividad física.');
   if (f.otraActividad === 'si' && !f.otraActividadDetalle.trim()) faltan.push('Contá cuál es la otra actividad.');
-  if (f.objetivos.length === 0) faltan.push('Elegí al menos un objetivo.');
   if (!f.aceptaDeclaracion) faltan.push('Tenés que aceptar la declaración para guardar la ficha.');
   return faltan;
 }

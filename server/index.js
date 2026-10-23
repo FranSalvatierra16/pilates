@@ -243,8 +243,12 @@ function normalizarFichaSalud(raw) {
   const objetivos = Array.isArray(raw.objetivos)
     ? [...new Set(raw.objetivos.map((id) => String(id)).filter((id) => FICHA_OBJETIVOS.has(id)))]
     : [];
+  const fecha = textoFicha(raw.fecha, 10);
+  const contactoViejo = textoFicha(raw.contactoEmergencia, 200);
   return {
-    contactoEmergencia: textoFicha(raw.contactoEmergencia, 200),
+    fecha: /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : '',
+    contactoNombre: textoFicha(raw.contactoNombre, 120) || contactoViejo,
+    contactoTelefono: textoFicha(raw.contactoTelefono, 40),
     antecedentes,
     antecedentesDetalle: textoFicha(raw.antecedentesDetalle),
     dolorActual: siNoFicha(raw.dolorActual),
@@ -264,7 +268,8 @@ function normalizarFichaSalud(raw) {
 function faltantesFichaSalud(f) {
   if (!f) return ['La ficha está vacía.'];
   const faltan = [];
-  if (!f.contactoEmergencia) faltan.push('Completá el contacto de emergencia y su teléfono.');
+  if (!f.contactoNombre) faltan.push('Completá el nombre del contacto de emergencia.');
+  if (!f.contactoTelefono) faltan.push('Completá el teléfono del contacto de emergencia.');
   if (!f.antecedentes.length) faltan.push('Marcá al menos un antecedente, o "Ninguna".');
   if (f.antecedentes.includes('otra') && !f.antecedentesDetalle) faltan.push('Si marcaste "Otra condición", contá cuál es.');
   if (!f.dolorActual) faltan.push('Respondé si tenés dolor o molestias.');
@@ -275,7 +280,6 @@ function faltantesFichaSalud(f) {
   if (f.medicacion === 'si' && !f.medicacionDetalle) faltan.push('Contá cuál es la medicación.');
   if (!f.otraActividad) faltan.push('Respondé si realizás otra actividad física.');
   if (f.otraActividad === 'si' && !f.otraActividadDetalle) faltan.push('Contá cuál es la otra actividad.');
-  if (!f.objetivos.length) faltan.push('Elegí al menos un objetivo.');
   if (!f.aceptaDeclaracion) faltan.push('Tenés que aceptar la declaración para guardar la ficha.');
   return faltan;
 }

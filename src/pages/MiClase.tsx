@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Calendar, UserPlus, UserMinus, Loader2, History, Sparkles, LogOut, ArrowLeft, RefreshCw, CheckCircle2, User, Lock, HeartPulse, ChevronRight } from 'lucide-react';
 import { DIAS_SEMANA } from '../types';
-import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
+import { formatDate, getFechaFromSemanaYDia, getSemanaActual, getRangoSemana, hoyISO, isCuotaPorVencer, isCuotaVenceHoy, isCuotaVencida } from '../utils/date';
 import { useToast } from '../components/ToastProvider';
 import InstallAppHint from '../components/InstallAppHint';
 import FichaSaludForm from '../components/FichaSaludForm';
-import { FichaSalud, fichaVacia, normalizarFichaSalud } from '../data/fichaSalud';
+import { FichaSalud, fechaVisibleFicha, fichaVacia, normalizarFichaSalud } from '../data/fichaSalud';
 import { applyManifestLink, isPwaStandalone, setAlumnoPortalContext } from '../utils/pwa-role';
 
 const getBase = () => (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -662,7 +662,7 @@ const MiClase = () => {
       const res = await fetchWithTimeout(`${base}/api/alumno-portal/ficha-salud`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...auth, ficha }),
+        body: JSON.stringify({ ...auth, ficha: { ...ficha, fecha: fechaVisibleFicha(ficha, hoyISO()) } }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {

@@ -1,5 +1,5 @@
-import { ANTECEDENTES_FICHA, DECLARACION_FICHA, FichaSalud, OBJETIVOS_FICHA, SiNo, faltantesFicha, toggleAntecedente } from '../data/fichaSalud';
-import { formatDate } from '../utils/date';
+import { ANTECEDENTES_FICHA, DECLARACION_FICHA, FichaSalud, OBJETIVOS_FICHA, SiNo, faltantesFicha, fechaVisibleFicha, toggleAntecedente } from '../data/fichaSalud';
+import { formatDate, hoyISO } from '../utils/date';
 
 type AlumnoFicha = {
   nombre: string;
@@ -27,6 +27,7 @@ function fechaLegible(iso?: string | null): string {
 export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guardando, onChange, onGuardar }: Props) {
   const set = (parcial: Partial<FichaSalud>) => onChange?.({ ...ficha, ...parcial });
   const faltan = soloLectura ? [] : faltantesFicha(ficha);
+  const fechaFicha = fechaVisibleFicha(ficha, hoyISO());
   const nombre = [alumno.apellido, alumno.nombre].filter(Boolean).join(', ') || '—';
   const box = savia
     ? 'rounded-2xl border border-savia-sandSoft bg-white/70 p-4'
@@ -74,9 +75,19 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
         <p className={`text-xs font-semibold uppercase tracking-wide ${savia ? 'text-savia-terra' : 'text-primary-700'}`}>
           Ficha de salud · información confidencial
         </p>
-        {soloLectura && ficha.actualizadaEn && (
-          <p className={`mt-1 text-xs ${ayuda}`}>Actualizada el {fechaLegible(ficha.actualizadaEn) || '—'}</p>
-        )}
+        <label className="block mt-3">
+          <span className={`text-sm font-medium ${ink}`}>Fecha</span>
+          {soloLectura ? (
+            <p className={`mt-1 text-sm font-semibold ${ink}`}>{fechaLegible(fechaFicha)}</p>
+          ) : (
+            <input
+              type="date"
+              value={fechaFicha}
+              onChange={(e) => set({ fecha: e.target.value })}
+              className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+            />
+          )}
+        </label>
       </div>
 
       <section className={box}>
@@ -96,15 +107,29 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
           </div>
         </dl>
         <label className="block mt-3">
-          <span className={`text-sm font-medium ${ink}`}>Contacto de emergencia y teléfono</span>
+          <span className={`text-sm font-medium ${ink}`}>Contacto de emergencia</span>
           {soloLectura ? (
-            <p className={`mt-1 text-sm ${ink}`}>{ficha.contactoEmergencia || '—'}</p>
+            <p className={`mt-1 text-sm ${ink}`}>{ficha.contactoNombre || '—'}</p>
           ) : (
             <input
               type="text"
-              value={ficha.contactoEmergencia}
-              onChange={(e) => set({ contactoEmergencia: e.target.value })}
-              placeholder="Nombre y teléfono"
+              value={ficha.contactoNombre}
+              onChange={(e) => set({ contactoNombre: e.target.value })}
+              placeholder="Nombre"
+              className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
+            />
+          )}
+        </label>
+        <label className="block mt-3">
+          <span className={`text-sm font-medium ${ink}`}>Teléfono del contacto</span>
+          {soloLectura ? (
+            <p className={`mt-1 text-sm ${ink}`}>{ficha.contactoTelefono || '—'}</p>
+          ) : (
+            <input
+              type="tel"
+              value={ficha.contactoTelefono}
+              onChange={(e) => set({ contactoTelefono: e.target.value })}
+              placeholder="Teléfono"
               className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
             />
           )}
@@ -225,8 +250,8 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
       </section>
 
       <section className={box}>
-        <h3 className={titulo}>5. Objetivos</h3>
-        <p className={`mt-1 mb-3 ${ayuda}`}>¿Qué te gustaría trabajar?</p>
+        <h3 className={titulo}>5. Objetivos <span className={`font-medium ${ayuda}`}>(opcional)</span></h3>
+        <p className={`mt-1 mb-3 ${ayuda}`}>¿Qué te gustaría trabajar? Podés dejarlo sin marcar.</p>
         <div className="flex flex-wrap gap-2">
           {OBJETIVOS_FICHA.map((op) => {
             const marcado = ficha.objetivos.includes(op.id);
@@ -259,7 +284,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
               </label>
             );
           })}
-          {soloLectura && ficha.objetivos.length === 0 && <p className={`text-sm ${ayuda}`}>Sin marcar</p>}
+          {soloLectura && ficha.objetivos.length === 0 && <p className={`text-sm ${ayuda}`}>No indicó objetivo.</p>}
         </div>
         <label className="block mt-3">
           <span className={`text-sm font-medium ${ink}`}>Otra información que consideres importante</span>
@@ -281,7 +306,7 @@ export default function FichaSaludForm({ ficha, alumno, soloLectura, savia, guar
         <p className={`mt-2 text-sm leading-snug ${ink}`}>{DECLARACION_FICHA}</p>
         {soloLectura ? (
           <p className={`mt-3 text-sm font-semibold ${ink}`}>
-            {ficha.aceptaDeclaracion ? `Aceptada${fechaLegible(ficha.actualizadaEn) ? ` el ${fechaLegible(ficha.actualizadaEn)}` : ''}. Aclaración: ${nombre}.` : 'Sin aceptar.'}
+            {ficha.aceptaDeclaracion ? `Aceptada. Aclaración: ${nombre}.` : 'Sin aceptar.'}
           </p>
         ) : (
           <label className={`mt-3 flex items-start gap-2.5 text-sm font-medium cursor-pointer ${ink}`}>

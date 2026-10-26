@@ -3,7 +3,7 @@ import { HeartPulse, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { avisosFicha } from '../data/fichaSalud';
-import { formatDate, getSemanaActual } from '../utils/date';
+import { getSemanaActual } from '../utils/date';
 import type { Alumno, InscripcionTurno, LiberacionSemana, Recuperacion, Turno } from '../types';
 import { DIAS_SEMANA } from '../types';
 
@@ -131,7 +131,7 @@ export default function Hoy() {
     return lista;
   }, [alumnos, turnos, inscripciones, recuperaciones, liberaciones, dia, semana]);
 
-  const hoyLabel = formatDate(new Date().toISOString().slice(0, 10));
+  const hoyLabel = new Date().toLocaleDateString('es-AR');
   const nombreDia = DIAS_SEMANA[dia] || 'Hoy';
 
   return (

@@ -1214,6 +1214,45 @@ const Alumnos = () => {
         </div>
       </div>
 
+      {avisarFichaAbierto && (
+        <div className="card mb-6">
+          <h2 className={`text-base font-semibold mb-1 ${esSavia ? 'text-savia-ink' : 'text-gray-900'}`}>
+            Avisar a quienes no tienen ficha
+          </h2>
+          <p className={`text-sm mb-4 ${esSavia ? 'text-savia-muted' : 'text-gray-600'}`}>
+            Cada WhatsApp abre un mensaje listo, con el link para entrar con el DNI.
+          </p>
+          {sinFichaActivos.length === 0 ? (
+            <p className={`text-sm ${esSavia ? 'text-savia-muted' : 'text-gray-500'}`}>Todos los alumnos activos ya tienen la ficha completa.</p>
+          ) : (
+            <ul className="space-y-2">
+              {sinFichaActivos.map((alumno) => {
+                const wa = getWhatsAppPedirFicha(alumno, sucursalNombre || '', linkPortalRecuperar);
+                const nombre = `${alumno.nombre} ${alumno.apellido}`.trim();
+                return (
+                  <li key={alumno.id} className="flex items-center justify-between gap-3">
+                    <span className={`text-sm min-w-0 truncate ${esSavia ? 'text-savia-ink' : 'text-gray-800'}`}>{nombre}</span>
+                    {wa.url ? (
+                      <a
+                        href={wa.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white flex-shrink-0"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        WhatsApp
+                      </a>
+                    ) : (
+                      <span className="text-xs text-amber-800 flex-shrink-0">{alumno.telefono?.trim() ? 'Sin link de la sede' : 'Sin teléfono'}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
       {alumnosAMostrar.length === 0 && alumnos.length > 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500 mb-4">

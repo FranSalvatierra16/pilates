@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Activity, DollarSign, AlertTriangle, Loader2 } from 'lucide-react';
+import { Users, Activity, DollarSign, AlertTriangle, Loader2, Cake, MessageCircle, ListChecks } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import DashboardGuiaUso from '../components/DashboardGuiaUso';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { formatCurrency } from '../utils/format';
-import { isCuotaVencida } from '../utils/date';
+import { esCumpleanosEnFecha, fechasSemanaActual, formatDate, hoyISO, isCuotaVencida } from '../utils/date';
+import { urlWhatsApp } from '../utils/whatsapp';
 import type { FinanzasEstado, CierreCaja } from '../types';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -25,6 +26,7 @@ const Dashboard = () => {
   const [errorSinConexion, setErrorSinConexion] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [retryToken, setRetryToken] = useState(0);
+  const [cumples, setCumples] = useState<Array<{ id: string; nombre: string; telefono: string; fecha: string; esHoy: boolean }>>([]);
 
   const cargarDashboard = useCallback(async (opts?: { maxReintentos?: number }) => {
     const maxReintentos = opts?.maxReintentos ?? 3;
@@ -86,6 +88,20 @@ const Dashboard = () => {
       setErrorSinConexion(sinDatosUtiles);
 
       const cuotasVencidas = alumnos.filter((a) => isCuotaVencida(a.fechaVencimientoCuota));
+      const hoy = hoyISO();
+      setCumples(
+        fechasSemanaActual().flatMap((fecha) =>
+          alumnos
+            .filter((a) => a.activo !== false && esCumpleanosEnFecha(a.fechaNacimiento, fecha))
+            .map((a) => ({
+              id: `${a.id}-${fecha}`,
+              nombre: `${a.nombre} ${a.apellido}`.trim(),
+              telefono: a.telefono || '',
+              fecha,
+              esHoy: fecha === hoy,
+            }))
+        )
+      );
 
       const totalEfectivo = pagos
         .filter((p) => p.metodoPago === 'efectivo')
@@ -257,10 +273,63 @@ const Dashboard = () => {
         })}
       </div>
 
+      <div className="card mb-8">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <Cake className="w-5 h-5 text-pink-600" />
+          Cumpleaños de esta semana
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">De lunes a domingo. El WhatsApp abre un saludo listo.</p>
+        {dashboardLoading ? (
+          <Loader2 className="w-5 h-5 animate-spin text-primary-500" aria-label="Cargando" />
+        ) : cumples.length === 0 ? (
+          <p className="text-sm text-gray-500">Esta semana no hay cumpleaños.</p>
+        ) : (
+          <ul className="space-y-2">
+            {cumples.map((c) => {
+              const url = urlWhatsApp(
+                c.telefono,
+                `Hola ${c.nombre}! Te escribimos de ${nombreSucursal}. ¡Feliz cumpleaños! Que lo pases muy bien.`
+              );
+              return (
+                <li key={c.id} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-gray-800 min-w-0">
+                    <span className="font-medium">{c.nombre}</span>
+                    <span className="text-gray-500"> · {c.esHoy ? 'Hoy' : formatDate(c.fecha)}</span>
+                  </span>
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white flex-shrink-0"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      WhatsApp
+                    </a>
+                  ) : (
+                    <span className="text-xs text-amber-800 flex-shrink-0">Sin teléfono</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Accesos Rápidos</h2>
           <div className="space-y-3">
+            <Link
+              to="/hoy"
+              className="block p-4 bg-rose-50 rounded-lg hover:bg-rose-100 transition-colors"
+            >
+              <h3 className="font-semibold text-rose-900 flex items-center gap-2">
+                <ListChecks className="w-4 h-4" />
+                Clase de hoy
+              </h3>
+              <p className="text-sm text-rose-800">Quién viene y si la ficha tiene algo para cuidar</p>
+            </Link>
             <Link
               to="/calendario"
               className="block p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"

@@ -70,6 +70,18 @@ export function getFechaFromSemanaYDia(semana: string, diaSemana: number): strin
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Lunes a domingo de esta semana, en YYYY-MM-DD (hora local). */
+export function fechasSemanaActual(): string[] {
+  const hoy = new Date();
+  const js = hoy.getDay();
+  const offsetLunes = js === 0 ? -6 : 1 - js;
+  const lunes = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + offsetLunes);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(lunes.getFullYear(), lunes.getMonth(), lunes.getDate() + i);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+}
+
 /** Hoy en YYYY-MM-DD (medianoche local). */
 export function hoyISO(): string {
   const d = new Date();

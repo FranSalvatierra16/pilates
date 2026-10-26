@@ -13,17 +13,11 @@ import { useToast } from '../components/ToastProvider';
 import FichaSaludForm from '../components/FichaSaludForm';
 import { FichaSalud, fechaVisibleFicha, fichaVacia, normalizarFichaSalud } from '../data/fichaSalud';
 import { descargarFichaSaludPdf } from '../utils/fichaSaludPdf';
+import { telefonoWhatsApp } from '../utils/whatsapp';
 
 /** Normaliza teléfono para WhatsApp (Argentina: 54 9 área número). Devuelve null si no hay número válido. */
 function normalizePhoneForWhatsApp(telefono: string): string | null {
-  if (!telefono || !telefono.trim()) return null;
-  let digits = telefono.replace(/\D/g, '');
-  if (digits.startsWith('15') && digits.length === 12) digits = digits.slice(2);
-  if (digits.length < 8) return null;
-  let num = digits;
-  if (!num.startsWith('54')) num = '54' + num;
-  if (num.startsWith('54') && num.length >= 11 && num[2] !== '9') num = '549' + num.slice(2);
-  return num.length >= 12 ? num : null;
+  return telefonoWhatsApp(telefono);
 }
 
 /** Saca tildes/acentos y pasa a minúsculas para buscar sin importar cómo se escriba. */
@@ -70,6 +64,19 @@ function getWhatsAppPedirDni(alumno: Alumno, nombreLugar: string = ''): { url: s
     url: `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
     tooltip: 'Pedir DNI por WhatsApp',
   };
+}
+
+function getWhatsAppPedirFicha(alumno: Alumno, nombreLugar: string, link: string): { url: string | null; tooltip: string } {
+  const nombre = [alumno.nombre, alumno.apellido].filter(Boolean).join(' ') || 'Hola';
+  const phone = normalizePhoneForWhatsApp(alumno.telefono || '');
+  const marca = nombreLugar.trim() || 'Savia';
+  const text =
+    `Hola ${nombre}! Te escribimos de ${marca}. Necesitamos que completes tu ficha de salud antes de la clase.\n` +
+    `Entrá con tu DNI desde este link:\n${link}\n` +
+    `Es confidencial y tarda un minuto. Gracias!`;
+  if (!phone) return { url: null, tooltip: 'Agregá teléfono para avisar por WhatsApp' };
+  if (!link) return { url: null, tooltip: 'Falta el link de la sede' };
+  return { url: `https://wa.me/${phone}?text=${encodeURIComponent(text)}`, tooltip: 'Avisar que complete la ficha' };
 }
 
 const MAX_CREDITOS_RECUPERAR = 999;
@@ -149,6 +156,7 @@ const Alumnos = () => {
   const [filtroPrueba, setFiltroPrueba] = useState<'todos' | 'aprueba' | 'noaprueba'>('todos');
   const [filtroDni, setFiltroDni] = useState<'todos' | 'sin' | 'no-realista' | 'problemas'>('todos');
   const [filtroFicha, setFiltroFicha] = useState<'todas' | 'sin' | 'completa'>('todas');
+  const [avisarFichaAbierto, setAvisarFichaAbierto] = useState(false);
   const [menuAlumnoId, setMenuAlumnoId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [fichaEdit, setFichaEdit] = useState<FichaSalud>(() => fichaVacia());
@@ -941,6 +949,10 @@ const Alumnos = () => {
     filtroBusqueda || filtroVencimiento !== 'todos' || filtroActividad !== 'todas' || filtroPrueba !== 'todos'
     || filtroDni !== 'todos' || filtroFicha !== 'todas' || ordenarPorVencimientoCercano || mostrarInactivos
   );
+  const sinFichaActivos = useMemo(
+    () => alumnos.filter((a) => a.activo !== false && !a.fichaSalud?.aceptaDeclaracion),
+    [alumnos]
+  );
   const limpiarFiltros = () => {
     setFiltroBusqueda('');
     setFiltroVencimiento('todos');
@@ -1185,6 +1197,10 @@ const Alumnos = () => {
             <button type="button" onClick={() => setFiltroPrueba(filtroPrueba === 'aprueba' ? 'todos' : 'aprueba')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroPrueba === 'aprueba' ? marca.terra : marca.chipOff}`}>A prueba</button>
             <button type="button" onClick={() => setFiltroPrueba(filtroPrueba === 'noaprueba' ? 'todos' : 'noaprueba')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroPrueba === 'noaprueba' ? marca.terra : marca.chipOff}`}>Sin prueba</button>
             <button type="button" onClick={() => setFiltroFicha(filtroFicha === 'sin' ? 'todas' : 'sin')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroFicha === 'sin' ? marca.terra : marca.chipOff}`}>Sin ficha</button>
+            <button type="button" onClick={() => setAvisarFichaAbierto((v) => !v)} className={`px-3 py-1.5 rounded-full text-sm font-medium inline-flex items-center gap-1.5 ${avisarFichaAbierto ? marca.chip : marca.chipOff}`}>
+              <MessageCircle className="w-3.5 h-3.5" />
+              Avisar sin ficha ({sinFichaActivos.length})
+            </button>
             <button type="button" onClick={() => setFiltroFicha(filtroFicha === 'completa' ? 'todas' : 'completa')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroFicha === 'completa' ? marca.chip : marca.chipOff}`}>Con ficha</button>
             <button type="button" onClick={() => setFiltroDni(filtroDni === 'problemas' ? 'todos' : 'problemas')} className={`px-3 py-1.5 rounded-full text-sm font-medium ${filtroDni === 'problemas' ? marca.terra : marca.warnOff}`} title="Sin DNI o DNI que no tiene exactamente 8 números">DNI ({conteoDni.problemas})</button>
             <button type="button" onClick={() => setMostrarInactivos((v) => !v)} className={`px-3 py-1.5 rounded-full text-sm font-medium ${mostrarInactivos ? marca.inkBtn : marca.chipOff}`}>{mostrarInactivos ? 'Ocultar inactivos' : 'Inactivos'}</button>

@@ -24,12 +24,14 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 
 export interface NotificacionItem {
   id: string | number;
-  tipo: 'inscribio' | 'liberar' | 'restauro' | 'cumple';
+  tipo: 'inscribio' | 'liberar' | 'restauro' | 'cumple' | 'ficha';
   leido?: boolean;
   alumnoNombre: string;
   turnoDia: string;
   turnoHora: string;
   turnoTitulo: string;
+  /** Resumen de la ficha cuando tipo es ficha y hay algo para cuidar. */
+  detalle?: string;
   createdAt: string;
 }
 
@@ -109,6 +111,12 @@ export default function Notificaciones() {
   const texto = (n: NotificacionItem) => {
     if (n.tipo === 'cumple') {
       return `${n.alumnoNombre} cumple años hoy`;
+    }
+    if (n.tipo === 'ficha') {
+      const extra = (n.detalle || '').trim();
+      return extra
+        ? `${n.alumnoNombre} cargó la ficha. ${extra}`
+        : `${n.alumnoNombre} cargó la ficha de salud`;
     }
     if (n.tipo === 'inscribio') {
       return `${n.alumnoNombre} se anotó en ${n.turnoDia} ${n.turnoHora} - ${n.turnoTitulo}`;
@@ -360,6 +368,8 @@ export default function Notificaciones() {
                         <span className="text-blue-600 font-medium">Volvió a tomar:</span>
                       ) : n.tipo === 'cumple' ? (
                         <span className="text-pink-600 font-medium">Cumpleaños:</span>
+                      ) : n.tipo === 'ficha' ? (
+                        <span className="text-rose-700 font-medium">Ficha:</span>
                       ) : (
                         <span className="text-amber-600 font-medium">Liberó cupo:</span>
                       )}{' '}

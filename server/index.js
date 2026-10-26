@@ -193,7 +193,7 @@ async function migrateNotificacionesTipoRestauro(db) {
   try {
     await db.query('ALTER TABLE notificaciones DROP CONSTRAINT IF EXISTS notificaciones_tipo_check');
     await db.query(
-      `ALTER TABLE notificaciones ADD CONSTRAINT notificaciones_tipo_check CHECK (tipo IN ('inscribio', 'liberar', 'restauro', 'cumple'))`
+      `ALTER TABLE notificaciones ADD CONSTRAINT notificaciones_tipo_check CHECK (tipo IN ('inscribio', 'liberar', 'restauro', 'cumple', 'ficha'))`
     );
     await db.query('ALTER TABLE notificaciones ALTER COLUMN turno_id DROP NOT NULL');
   } catch (e) {
@@ -282,6 +282,38 @@ function faltantesFichaSalud(f) {
   if (f.otraActividad === 'si' && !f.otraActividadDetalle) faltan.push('Contá cuál es la otra actividad.');
   if (!f.aceptaDeclaracion) faltan.push('Tenés que aceptar la declaración para guardar la ficha.');
   return faltan;
+}
+
+const ANTECEDENTE_CORTO = {
+  hipertension: 'Hipertensión',
+  hipotension_ortostatica: 'Hipotensión o mareos',
+  cardiacos_respiratorios: 'Problema cardíaco o respiratorio',
+  diabetes: 'Diabetes',
+  osteoporosis: 'Osteoporosis',
+  columna: 'Columna o hernia',
+  lesiones: 'Lesión o cirugía',
+  vertigo: 'Vértigo',
+  embarazo: 'Embarazo o posparto',
+  otra: 'Otra condición',
+};
+
+function textosAvisosFicha(f) {
+  if (!f?.aceptaDeclaracion) return [];
+  const out = [];
+  for (const id of f.antecedentes || []) {
+    if (id === 'ninguna') continue;
+    const base = ANTECEDENTE_CORTO[id] || id;
+    const extra = id === 'otra' && f.antecedentesDetalle ? `: ${f.antecedentesDetalle}` : '';
+    out.push(`${base}${extra}`);
+  }
+  if (f.antecedentesDetalle && !f.antecedentes.includes('otra') && !f.antecedentes.includes('ninguna')) {
+    out.push(f.antecedentesDetalle);
+  }
+  if (f.dolorActual === 'si') out.push(f.dolorDetalle ? `Dolor: ${f.dolorDetalle}` : 'Dolor o molestias');
+  if (f.indicacionMedica === 'si') out.push(f.indicacionDetalle ? `Indicación médica: ${f.indicacionDetalle}` : 'Indicación médica');
+  if (f.medicacion === 'si') out.push(f.medicacionDetalle ? `Medicación: ${f.medicacionDetalle}` : 'Toma medicación');
+  if (f.otraInformacion) out.push(f.otraInformacion);
+  return out;
 }
 
 function fichaSaludDesdeFila(r) {
@@ -4516,7 +4548,25 @@ app.post('/api/alumno-portal/ficha-salud', async (req, res) => {
       [JSON.stringify(normalizada), alumno.id, alumno.sucursal_id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Alumno no encontrado' });
-    res.json({ ok: true, fichaSalud: fichaSaludDesdeFila(rows[0]) });
+    const guardada = fichaSaludDesdeFila(rows[0]);
+    try {
+      await db.query(
+        'INSERT INTO notificaciones (id, sucursal_id, tipo, alumno_id, turno_id) VALUES ($1, $2, $3, $4, NULL)',
+        [crypto.randomUUID(), alumno.sucursal_id, 'ficha', alumno.id]
+      );
+      const avisos = textosAvisosFicha(guardada);
+      const nombre = [alumno.apellido, alumno.nombre].filter(Boolean).join(', ');
+      queuePushToSucursal(db, alumno.sucursal_id, {
+        title: avisos.length ? 'Ficha para revisar' : 'Ficha de salud cargada',
+        body: avisos.length
+          ? `${nombre} cargó la ficha. ${avisos.slice(0, 3).join(' · ')}`
+          : `${nombre} cargó la ficha de salud.`,
+        url: '/fichas',
+      });
+    } catch (err) {
+      console.error('Aviso de ficha:', err.message);
+    }
+    res.json({ ok: true, fichaSalud: guardada });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -5092,6 +5142,7 @@ app.get('/api/notificaciones', async (req, res) => {
     const { rows } = await db.query(
       `SELECT n.id, n.tipo, n.created_at, n.leido,
         a.nombre AS alumno_nombre, a.apellido AS alumno_apellido,
+        a.ficha_salud, a.ficha_salud_en,
         t.dia_semana, t.hora, t.titulo AS turno_titulo
        FROM notificaciones n
        JOIN alumnos a ON n.alumno_id = a.id
@@ -5108,7 +5159,8 @@ app.get('/api/notificaciones', async (req, res) => {
       alumnoNombre: [r.alumno_apellido, r.alumno_nombre].filter(Boolean).join(', '),
       turnoDia: r.dia_semana != null ? (DIAS_SEMANA_ES[r.dia_semana] ?? `Día ${r.dia_semana}`) : '',
       turnoHora: r.hora || '',
-      turnoTitulo: r.turno_titulo || (r.tipo === 'cumple' ? 'Cumpleaños' : 'Clase'),
+      turnoTitulo: r.turno_titulo || (r.tipo === 'cumple' ? 'Cumpleaños' : r.tipo === 'ficha' ? 'Ficha de salud' : 'Clase'),
+      detalle: r.tipo === 'ficha' ? textosAvisosFicha(fichaSaludDesdeFila(r)).join(' · ') : '',
       createdAt: r.created_at?.toISOString?.() ?? r.created_at,
     })));
   } catch (e) {

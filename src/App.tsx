@@ -94,6 +94,7 @@ import Dashboard from './pages/Dashboard';
 import Calendario from './pages/Calendario';
 import Alumnos from './pages/Alumnos';
 import FichasSalud from './pages/FichasSalud';
+import Hoy from './pages/Hoy';
 import Profesores from './pages/Profesores';
 import HorasProfes from './pages/HorasProfes';
 import Actividades from './pages/Actividades';
@@ -315,6 +316,16 @@ function App() {
               <ProtectedSucursalRoute>
                 <Layout>
                   <Alumnos />
+                </Layout>
+              </ProtectedSucursalRoute>
+            }
+          />
+          <Route
+            path="/hoy"
+            element={
+              <ProtectedSucursalRoute>
+                <Layout>
+                  <Hoy />
                 </Layout>
               </ProtectedSucursalRoute>
             }

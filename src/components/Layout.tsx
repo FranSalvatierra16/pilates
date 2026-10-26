@@ -18,6 +18,7 @@ import {
   X,
   Bell,
   HeartPulse,
+  ListChecks,
 } from 'lucide-react';
 import type { NotificacionItem } from '../pages/Notificaciones';
 
@@ -158,6 +159,7 @@ const Layout = ({ children }: LayoutProps) => {
     const base: Array<{ path: string; label: string; icon: typeof LayoutDashboard }> = [
       { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { path: '/calendario', label: 'Calendario', icon: Calendar },
+      { path: '/hoy', label: 'Hoy', icon: ListChecks },
       { path: '/alumnos', label: 'Alumnos', icon: Users },
       { path: '/fichas', label: 'Fichas', icon: HeartPulse },
       { path: '/profesores', label: 'Profesores', icon: GraduationCap },
@@ -323,12 +325,16 @@ const Layout = ({ children }: LayoutProps) => {
                                   <span className="text-blue-600 font-medium">Volvió a tomar:</span>
                                 ) : n.tipo === 'cumple' ? (
                                   <span className="text-pink-600 font-medium">Cumpleaños:</span>
+                                ) : n.tipo === 'ficha' ? (
+                                  <span className="text-rose-700 font-medium">Ficha:</span>
                                 ) : (
                                   <span className="text-amber-600 font-medium">Liberó cupo:</span>
                                 )}{' '}
                                 {n.tipo === 'cumple'
                                   ? `${n.alumnoNombre} — cumple años hoy`
-                                  : `${n.alumnoNombre} — ${n.turnoDia} ${n.turnoHora} ${n.turnoTitulo}`}
+                                  : n.tipo === 'ficha'
+                                    ? `${n.alumnoNombre} — ${n.detalle?.trim() ? `cargó la ficha. ${n.detalle}` : 'cargó la ficha de salud'}`
+                                    : `${n.alumnoNombre} — ${n.turnoDia} ${n.turnoHora} ${n.turnoTitulo}`}
                               </p>
                               <p className="text-xs text-gray-500 mt-0.5">{formatNotifFecha(n.createdAt)}</p>
                             </div>

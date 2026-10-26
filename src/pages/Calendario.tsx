@@ -1,10 +1,11 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical, Cake, Ban, Lock } from 'lucide-react';
+import { Plus, X, UserPlus, Search, Check, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Trash2, Move, Save, GraduationCap, Users, Settings, RefreshCw, Star, MessageCircle, FileText, Mail, Share2, StickyNote, Sparkles, MoreVertical, Cake, Ban, Lock, HeartPulse } from 'lucide-react';
 import { Turno, Alumno, Actividad, DIAS_SEMANA, Asistencia, EstadisticasAsistencia, Profesor, Recuperacion, LiberacionSemana, InscripcionTurno, ReemplazoProfeFecha } from '../types';
 import { storage } from '../utils/storage';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { storageApi } from '../utils/storage-api';
 import { formatDate, isCuotaVencida, isCuotaPorVencer, isCuotaVenceHoy, getFechaFromSemanaYDia, esCumpleanosEnFecha, hoyISO } from '../utils/date';
+import { avisosFicha } from '../data/fichaSalud';
 import { useToast } from '../components/ToastProvider';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -2055,6 +2056,8 @@ const Calendario = () => {
     const esCumple = esCumpleanosEnFecha(alumno.fechaNacimiento, fechaDia);
 
     const estadoAsistencia = getEstadoAsistencia(turnoRefId, alumno.id);
+    const avisos = avisosFicha(alumno.fichaSalud);
+    const avisoTitle = avisos.map((a) => a.texto).join(' · ');
     const tieneFecha = alumno.fechaVencimientoCuota && alumno.fechaVencimientoCuota.trim() !== '';
     const vencido = tieneFecha && isCuotaVencida(alumno.fechaVencimientoCuota);
     const porVencer = tieneFecha && !vencido && (isCuotaVenceHoy(alumno.fechaVencimientoCuota) || isCuotaPorVencer(alumno.fechaVencimientoCuota, 3));
@@ -2072,6 +2075,9 @@ const Calendario = () => {
         className={`${bgColor} px-2 py-1 rounded text-xs flex items-center gap-1 group/item hover:opacity-90 transition-colors cursor-pointer`}
         onClick={(e) => handleAbrirPopupAlumno(e, item, turno, diaSemana, hora)}
       >
+        {avisos.length > 0 && (
+          <HeartPulse className="w-3.5 h-3.5 flex-shrink-0 text-rose-700" aria-label="Ficha con aviso" />
+        )}
         {esCumple && <Cake className="w-3.5 h-3.5 flex-shrink-0 text-pink-600" aria-label="Cumpleaños" />}
         {isRecuperacion && <RefreshCw className="w-3.5 h-3.5 flex-shrink-0 text-amber-700" aria-label="Recuperación" />}
         {!isRecuperacion && aPrueba && (
@@ -2079,7 +2085,7 @@ const Calendario = () => {
         )}
         <span
           className="truncate flex-1"
-          title={`${alumno.nombre} ${alumno.apellido}${esCumple ? ' 🎂 Cumpleaños' : ''}${isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : aPrueba ? ' (a prueba)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}
+          title={`${alumno.nombre} ${alumno.apellido}${avisoTitle ? ` — Ficha: ${avisoTitle}` : ''}${esCumple ? ' 🎂 Cumpleaños' : ''}${isRecuperacion ? ' (recuperación)' : liberadaSemana ? ' (liberó esta semana)' : aPrueba ? ' (a prueba)' : ''}${tieneFecha ? ` — Vence: ${formatDate(alumno.fechaVencimientoCuota)}` : ' — Sin fecha de vencimiento'}`}
         >
           {alumno.nombre} {alumno.apellido}
         </span>
@@ -2232,6 +2238,7 @@ const Calendario = () => {
             </summary>
             <p className="px-4 pb-4 pt-0 text-sm text-blue-800 sm:pt-0">
               Los turnos se repiten cada semana. Usá ✓ para asistencia (verde) o ✗ para inasistencia (rojo).
+              El corazón al lado del nombre es alguien con dolor, medicación o algo para cuidar en la ficha. Tocá el nombre para leerlo.
             </p>
           </details>
         </div>
@@ -4218,6 +4225,25 @@ const Calendario = () => {
                 <span className="text-gray-500">Sin fecha / pendiente de pago</span>
               )}
             </p>
+            {(() => {
+              const avisosPopup = avisosFicha(showPopupAlumno.alumno.fichaSalud);
+              if (avisosPopup.length === 0) return null;
+              return (
+              <div className="mt-2 pt-2 border-t border-rose-100">
+                <p className="text-xs font-medium text-rose-800 mb-1 flex items-center gap-1">
+                  <HeartPulse className="w-3.5 h-3.5" />
+                  Ficha de salud
+                </p>
+                <ul className="space-y-0.5">
+                  {avisosPopup.map((aviso) => (
+                    <li key={aviso.id} className="text-sm text-rose-950 leading-snug">
+                      {aviso.texto}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              );
+            })()}
             {(showPopupAlumno.alumno.descripcion ?? '').trim() ? (
               <div className="mt-2 pt-2 border-t border-gray-100">
                 <p className="text-xs font-medium text-gray-500 mb-0.5">Notas</p>

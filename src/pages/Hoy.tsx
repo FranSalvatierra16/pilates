@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { HeartPulse, Loader2, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Check, HeartPulse, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { storageHybrid } from '../utils/storage-hybrid';
 import { avisosFicha } from '../data/fichaSalud';
 import { getSemanaActual } from '../utils/date';
-import type { Alumno, InscripcionTurno, LiberacionSemana, Recuperacion, Turno } from '../types';
+import type { Alumno, Asistencia, InscripcionTurno, LiberacionSemana, Recuperacion, Turno } from '../types';
 import { DIAS_SEMANA } from '../types';
 
 function diaHoyIndex() {
@@ -14,62 +14,56 @@ function diaHoyIndex() {
 
 type Persona = {
   id: string;
+  turnoId: string;
   nombre: string;
   recuperacion: boolean;
   avisos: string[];
 };
 
-type Bloque = {
-  hora: string;
-  titulo: string;
-  vienen: Persona[];
-  noVienen: string[];
-};
-
 export default function Hoy() {
   const { sucursalNombre } = useAuth();
   const esSavia = /savia/i.test(sucursalNombre || '');
+  const semana = getSemanaActual();
+  const dia = diaHoyIndex();
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [guardandoKey, setGuardandoKey] = useState<string | null>(null);
   const [alumnos, setAlumnos] = useState<Alumno[]>([]);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [inscripciones, setInscripciones] = useState<InscripcionTurno[]>([]);
   const [recuperaciones, setRecuperaciones] = useState<Recuperacion[]>([]);
   const [liberaciones, setLiberaciones] = useState<LiberacionSemana[]>([]);
+  const [asistencias, setAsistencias] = useState<Asistencia[]>([]);
 
-  useEffect(() => {
-    let vivo = true;
-    const semana = getSemanaActual();
+  const cargar = useCallback(async () => {
     setCargando(true);
     setError('');
-    Promise.all([
-      storageHybrid.alumnos.getAll(),
-      storageHybrid.turnos.getAll(),
-      storageHybrid.inscripcionesTurno.getAll(),
-      storageHybrid.recuperaciones.getBySemana(semana),
-      storageHybrid.liberacionesSemana.getBySemana(semana),
-    ])
-      .then(([als, ts, ins, recs, libs]) => {
-        if (!vivo) return;
-        setAlumnos(als);
-        setTurnos(ts);
-        setInscripciones(ins);
-        setRecuperaciones(recs);
-        setLiberaciones(libs);
-      })
-      .catch(() => {
-        if (vivo) setError('No se pudo cargar la clase de hoy.');
-      })
-      .finally(() => {
-        if (vivo) setCargando(false);
-      });
-    return () => {
-      vivo = false;
-    };
-  }, []);
+    try {
+      const [als, ts, ins, recs, libs, asis] = await Promise.all([
+        storageHybrid.alumnos.getAll(),
+        storageHybrid.turnos.getAll(),
+        storageHybrid.inscripcionesTurno.getAll(),
+        storageHybrid.recuperaciones.getBySemana(semana),
+        storageHybrid.liberacionesSemana.getBySemana(semana),
+        storageHybrid.asistencias.getBySemana(semana),
+      ]);
+      setAlumnos(als);
+      setTurnos(ts);
+      setInscripciones(ins);
+      setRecuperaciones(recs);
+      setLiberaciones(libs);
+      setAsistencias(asis);
+    } catch {
+      setError('No se pudo cargar la clase de hoy.');
+    } finally {
+      setCargando(false);
+    }
+  }, [semana]);
 
-  const dia = diaHoyIndex();
-  const semana = getSemanaActual();
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
+
   const bloques = useMemo(() => {
     const porHora = new Map<string, { titulo: string; vienen: Map<string, Persona>; noVienen: Map<string, string> }>();
     const alumnoDe = (id: string) => alumnos.find((a) => a.id === id && a.activo !== false);
@@ -98,6 +92,7 @@ export default function Hoy() {
         bucket.noVienen.delete(id);
         bucket.vienen.set(id, {
           id,
+          turnoId: turno.id,
           nombre,
           recuperacion: false,
           avisos: avisosFicha(alumno.fichaSalud).map((a) => a.texto),
@@ -112,6 +107,7 @@ export default function Hoy() {
         bucket.noVienen.delete(alumno.id);
         bucket.vienen.set(alumno.id, {
           id: alumno.id,
+          turnoId: turno.id,
           nombre,
           recuperacion: true,
           avisos: avisosFicha(alumno.fichaSalud).map((a) => a.texto),
@@ -119,7 +115,7 @@ export default function Hoy() {
       }
     }
 
-    const lista: Bloque[] = [...porHora.entries()]
+    return [...porHora.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([hora, bucket]) => ({
         hora,
@@ -128,8 +124,65 @@ export default function Hoy() {
         noVienen: [...bucket.noVienen.values()].sort((a, b) => a.localeCompare(b, 'es')),
       }))
       .filter((b) => b.vienen.length > 0 || b.noVienen.length > 0);
-    return lista;
   }, [alumnos, turnos, inscripciones, recuperaciones, liberaciones, dia, semana]);
+
+  const estadoDe = (turnoId: string, alumnoId: string): 'asistio' | 'no_asistio' | null => {
+    const a = asistencias.find((x) => x.turnoId === turnoId && x.alumnoId === alumnoId && x.semana === semana);
+    return a?.estado || null;
+  };
+
+  const marcar = async (persona: Persona, estado: 'asistio' | 'no_asistio') => {
+    const key = `${persona.turnoId}-${persona.id}-${estado}`;
+    if (guardandoKey) return;
+    setGuardandoKey(key);
+    try {
+      const existente = asistencias.find(
+        (x) => x.turnoId === persona.turnoId && x.alumnoId === persona.id && x.semana === semana
+      );
+      const alumno = alumnos.find((a) => a.id === persona.id);
+      const eraNoAsistio = existente?.estado === 'no_asistio';
+      const siguienteEstado = existente ? (existente.estado === estado ? null : estado) : estado;
+      const seraNoAsistio = siguienteEstado === 'no_asistio';
+      const teniaCredito = existente?.creditoOtorgado === true;
+
+      if (existente) {
+        const updates: Partial<Asistencia> =
+          existente.estado === estado
+            ? { estado: null, creditoOtorgado: false }
+            : { estado, creditoOtorgado: false };
+        await storageHybrid.asistencias.update(existente.id, updates);
+        setAsistencias((prev) =>
+          prev.map((a) => (a.id === existente.id ? { ...a, ...updates } : a))
+        );
+      } else {
+        const nueva: Asistencia = {
+          id: `${Date.now()}-${persona.id}`,
+          turnoId: persona.turnoId,
+          alumnoId: persona.id,
+          estado,
+          creditoOtorgado: false,
+          semana,
+          createdAt: new Date().toISOString(),
+        };
+        await storageHybrid.asistencias.add(nueva);
+        setAsistencias((prev) => [...prev, nueva]);
+      }
+
+      if (alumno && eraNoAsistio && !seraNoAsistio && teniaCredito) {
+        const nuevoCredito = Math.max(0, (alumno.clasesParaRecuperar || 0) - 1);
+        await storageHybrid.alumnos.update(persona.id, { clasesParaRecuperar: nuevoCredito });
+        setAlumnos((prev) =>
+          prev.map((a) => (a.id === persona.id ? { ...a, clasesParaRecuperar: nuevoCredito } : a))
+        );
+      }
+    } catch {
+      setError('No se pudo guardar la asistencia. Probá de nuevo.');
+      const asis = await storageHybrid.asistencias.getBySemana(semana).catch(() => null);
+      if (asis) setAsistencias(asis);
+    } finally {
+      setGuardandoKey(null);
+    }
+  };
 
   const hoyLabel = new Date().toLocaleDateString('es-AR');
   const nombreDia = DIAS_SEMANA[dia] || 'Hoy';
@@ -141,7 +194,7 @@ export default function Hoy() {
         <h1 className="page-title">Hoy</h1>
       </div>
       <p className={`mb-6 text-sm ${esSavia ? 'text-savia-muted' : 'text-gray-600'}`}>
-        {nombreDia} {hoyLabel}. Quién viene, y si la ficha tiene algo para cuidar.
+        {nombreDia} {hoyLabel}. Marcá ✓ o ✗. Si hay algo en la ficha, se ve al lado del nombre.
       </p>
 
       {cargando && (
@@ -151,7 +204,7 @@ export default function Hoy() {
         </div>
       )}
 
-      {error && <div className="card text-sm text-red-800">{error}</div>}
+      {error && <div className="card text-sm text-red-800 mb-4">{error}</div>}
 
       {!cargando && !error && bloques.length === 0 && (
         <div className="card text-sm text-gray-600">Hoy no hay clases con gente anotada.</div>
@@ -167,35 +220,73 @@ export default function Hoy() {
               <p className={`text-sm ${esSavia ? 'text-savia-muted' : 'text-gray-500'}`}>{bloque.titulo}</p>
             </div>
             <ul className="space-y-3">
-              {bloque.vienen.map((persona) => (
-                <li key={persona.id}>
-                  <div className="flex items-start gap-2">
-                    {persona.avisos.length > 0 && (
-                      <HeartPulse className="w-4 h-4 mt-0.5 flex-shrink-0 text-rose-700" aria-label="Ficha con aviso" />
-                    )}
-                    <div className="min-w-0">
-                      <p className={`text-sm font-semibold ${esSavia ? 'text-savia-ink' : 'text-gray-900'}`}>
-                        {persona.nombre}
-                        {persona.recuperacion && (
-                          <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900">
-                            <RefreshCw className="w-3 h-3" />
-                            Recuperación
-                          </span>
-                        )}
-                      </p>
+              {bloque.vienen.map((persona) => {
+                const estado = estadoDe(persona.turnoId, persona.id);
+                const busy = guardandoKey?.startsWith(`${persona.turnoId}-${persona.id}-`);
+                return (
+                  <li key={`${persona.turnoId}-${persona.id}`}>
+                    <div className="flex items-start gap-2">
                       {persona.avisos.length > 0 && (
-                        <ul className="mt-1 space-y-0.5">
-                          {persona.avisos.map((texto) => (
-                            <li key={texto} className="text-sm text-rose-900 leading-snug">
-                              {texto}
-                            </li>
-                          ))}
-                        </ul>
+                        <HeartPulse className="w-4 h-4 mt-1.5 flex-shrink-0 text-rose-700" aria-label="Ficha con aviso" />
                       )}
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-semibold ${esSavia ? 'text-savia-ink' : 'text-gray-900'}`}>
+                          {persona.nombre}
+                          {persona.recuperacion && (
+                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                              <RefreshCw className="w-3 h-3" />
+                              Recuperación
+                            </span>
+                          )}
+                        </p>
+                        {persona.avisos.length > 0 && (
+                          <ul className="mt-1 space-y-0.5">
+                            {persona.avisos.map((texto) => (
+                              <li key={texto} className="text-sm text-rose-900 leading-snug">
+                                {texto}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          type="button"
+                          disabled={!!busy}
+                          onClick={() => void marcar(persona, 'asistio')}
+                          className={`min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center touch-manipulation disabled:opacity-50 ${
+                            estado === 'asistio'
+                              ? 'bg-green-600 text-white'
+                              : esSavia
+                                ? 'bg-savia-creamDeep text-savia-muted'
+                                : 'bg-gray-200 text-gray-600'
+                          }`}
+                          title="Asistió"
+                          aria-label="Asistió"
+                        >
+                          <Check className="w-5 h-5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!!busy}
+                          onClick={() => void marcar(persona, 'no_asistio')}
+                          className={`min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center touch-manipulation disabled:opacity-50 ${
+                            estado === 'no_asistio'
+                              ? 'bg-red-600 text-white'
+                              : esSavia
+                                ? 'bg-savia-creamDeep text-savia-muted'
+                                : 'bg-gray-200 text-gray-600'
+                          }`}
+                          title="No asistió"
+                          aria-label="No asistió"
+                        >
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
             {bloque.noVienen.length > 0 && (
               <p className={`mt-3 text-xs ${esSavia ? 'text-savia-muted' : 'text-gray-500'}`}>
